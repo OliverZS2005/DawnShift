@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Skin&nbsp;→&nbsp;3D Print</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22><rect width=%2216%22 height=%2216%22 fill=%22%23f2a33e%22/><rect x=%223%22 y=%223%22 width=%224%22 height=%224%22 fill=%22%2316181d%22/><rect x=%229%22 y=%229%22 width=%224%22 height=%224%22 fill=%22%2316181d%22/></svg>" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <h1>Skin&nbsp;→&nbsp;3D&nbsp;Print</h1>
+    </div>
+    <p class="tagline">Turn a Minecraft skin into a printable figure</p>
+  </header>
+
+  <aside class="panel">
+    <section class="panel-section">
+      <h2>1. Skin</h2>
+      <label class="dropzone" id="dropzone" for="fileInput" tabindex="0">
+        <input type="file" id="fileInput" accept="image/png" hidden />
+        <div class="dropzone-body">
+          <svg class="dropzone-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="13" width="6" height="6"/>
+            <rect x="9" y="7" width="6" height="6"/>
+            <rect x="15" y="13" width="6" height="6"/>
+          </svg>
+          <span class="dropzone-text">Drop a skin PNG here<br><span class="muted">or click to browse</span></span>
+        </div>
+      </label>
+      <p class="hint">64×64 (or legacy 64×32) Minecraft skin texture. Nothing leaves your browser.</p>
+      <button id="sampleBtn" class="btn btn-ghost btn-small" type="button">Load sample skin</button>
+    </section>
+
+    <section class="panel-section" id="controls" hidden>
+      <h2>2. Model</h2>
+      <fieldset class="field">
+        <legend>Arm shape</legend>
+        <div class="segmented" id="modelType">
+          <button type="button" class="seg active" data-value="classic">Classic</button>
+          <button type="button" class="seg" data-value="slim">Slim</button>
+        </div>
+      </fieldset>
+
+      <label class="field checkbox-field">
+        <input type="checkbox" id="overlayToggle" checked />
+        <span>Include hat / jacket / sleeve / pants layer</span>
+      </label>
+
+      <label class="field">
+        <span class="field-label">Overlay depth <output id="overlayThicknessOut">1.0</output> mm-equiv</span>
+        <input type="range" id="overlayThickness" min="0.3" max="2.5" step="0.1" value="1.0" />
+      </label>
+
+      <h2>3. Print size</h2>
+      <label class="field">
+        <span class="field-label">Total figure height</span>
+        <div class="input-suffix">
+          <input type="number" id="printHeight" min="20" max="500" step="1" value="100" />
+          <span>mm</span>
+        </div>
+      </label>
+
+      <dl class="stats" id="stats"></dl>
+    </section>
+
+    <section class="panel-section" id="exportSection" hidden>
+      <h2>4. Export</h2>
+      <button id="downloadStl" class="btn btn-primary" type="button">Download STL</button>
+      <button id="downloadObj" class="btn btn-secondary" type="button">Download OBJ + texture (.zip)</button>
+      <p class="hint">STL is geometry-only for single/multi-color FDM printing. The OBJ bundle carries the full-color texture for services that print in color.</p>
+    </section>
+  </aside>
+
+  <main class="viewport">
+    <div id="canvasHost" class="canvas-host"></div>
+    <div class="viewport-empty" id="viewportEmpty">
+      <p>Load a skin to see the 3D model</p>
+    </div>
+    <div class="viewport-hint" id="viewportHint" hidden>drag to orbit · scroll to zoom</div>
+  </main>
+</div>
+
+<script src="lib/jszip.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./lib/three/three.module.min.js",
+    "three/addons/controls/OrbitControls.js": "./lib/three/addons/OrbitControls.js"
+  }
+}
+</script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
