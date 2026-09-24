@@ -42,6 +42,13 @@ export const PRESETS = {
     env: 'GEMINI_API_KEY',
     keyUrl: 'https://aistudio.google.com/apikey',
   },
+  groq: {
+    label: 'Groq (free tier)',
+    kind: 'openai',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    env: 'GROQ_API_KEY',
+    keyUrl: 'https://console.groq.com/keys',
+  },
   openrouter: {
     label: 'OpenRouter (many models)',
     kind: 'openai',

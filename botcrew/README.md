@@ -2,7 +2,7 @@
 
 A team of AI coworkers that runs on your own computer. It's inspired by
 SpaceXAI's Grok Bot, but it isn't tied to one AI. **Each bot can use Claude,
-ChatGPT, Grok, Gemini, OpenRouter, or a local model** running in Ollama or
+ChatGPT, Grok, Gemini, Groq, OpenRouter, or a local model** running in Ollama or
 LM Studio. You can mix them, for example Claude for the team lead and a free
 local model for the writer.
 
@@ -52,6 +52,7 @@ connecting an AI and hiring your team.
 | ChatGPT (OpenAI) | An API key from platform.openai.com |
 | Grok (xAI) | An API key from console.x.ai |
 | Gemini (Google) | An API key from aistudio.google.com |
+| Groq | A free API key from console.groq.com (fast, with a free tier) |
 | OpenRouter | One key that gives access to hundreds of models |
 | Ollama (local) | Ollama running, and a model that supports tools |
 | LM Studio (local) | LM Studio's local server running with a model loaded |
@@ -60,7 +61,10 @@ connecting an AI and hiring your team.
 After entering a key, click **Load models** to choose from the models that
 provider offers. You can also set keys as environment variables before
 starting BotCrew: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `XAI_API_KEY`,
-`GEMINI_API_KEY` or `OPENROUTER_API_KEY`.
+`GEMINI_API_KEY`, `GROQ_API_KEY` or `OPENROUTER_API_KEY`.
+
+**No budget?** Gemini and Groq both have free API keys (no credit card
+needed as of 2026), and Ollama or LM Studio are completely free.
 
 Local models are free and private, but small ones are less reliable with
 tools. If a local model can't use tools at all, BotCrew still works with it
