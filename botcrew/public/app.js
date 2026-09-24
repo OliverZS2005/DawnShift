@@ -1,4 +1,8 @@
 // BotCrew's web interface. Plain JavaScript, no build step.
+import { createMascot } from './mascot.js';
+
+const buddy = createMascot();
+document.body.append(buddy.el);
 
 // ---------- helpers ----------
 
@@ -50,6 +54,7 @@ async function attempt(fn, button) {
     return await fn();
   } catch (err) {
     toast(err.message, true);
+    buddy.shake();
   } finally {
     if (button) button.disabled = false;
   }
@@ -77,13 +82,15 @@ const ACTIVE = new Set(['queued', 'running', 'needs_you', 'waiting']);
 // ---------- state ----------
 
 let S = null; // server state
-const ui = { view: 'team', botId: 'all', taskId: null, task: null, needsYouOnly: false };
+const ui = { view: 'team', botId: 'all', taskId: null, task: null, needsYouOnly: false, newIds: new Set(), changedIds: new Set() };
 let mounted = null; // which view's skeleton is on screen
 
 async function refresh(force = false) {
   const data = await api('GET', `/api/state${S && !force ? `?since=${S.version}` : ''}`);
   if (data.unchanged) return;
+  const before = S;
   S = data;
+  react(before);
   if (ui.botId !== 'all' && !S.bots.some((b) => b.id === ui.botId)) ui.botId = 'all';
   if (ui.taskId) {
     const summary = S.tasks.find((t) => t.id === ui.taskId);
@@ -98,6 +105,30 @@ async function refresh(force = false) {
   render();
 }
 
+// Crewbot reacts to changes in the team's work.
+function react(before) {
+  const tasks = S.tasks;
+  buddy.setMood(
+    tasks.some((t) => t.status === 'needs_you') ? 'alert'
+      : tasks.some((t) => ['running', 'queued', 'waiting'].includes(t.status)) ? 'working' : 'idle');
+  if (!before) {
+    if (!S.connections.length) buddy.nod("Hi, I'm Crewbot! Let's set up your AI team.");
+    return;
+  }
+  const old = new Map(before.tasks.map((t) => [t.id, t.status]));
+  const short = (title) => (title.length > 40 ? `${title.slice(0, 40)}…` : title);
+  for (const t of tasks) {
+    const was = old.get(t.id);
+    if (was === t.status) continue;
+    (was ? ui.changedIds : ui.newIds).add(t.id);
+    if (t.status === 'needs_you') buddy.nod(`${t.botName} needs you${t.pending?.kind === 'approval' ? ' to approve something' : ' to answer a question'}.`);
+    else if (t.status === 'done' && !t.parentId) buddy.cheer(`${t.botName} finished "${short(t.title)}"!`);
+    else if (t.status === 'done') buddy.say(`${t.botName} handed back "${short(t.title)}".`);
+    else if (t.status === 'failed') buddy.shake(`${t.botName} ran into a problem with "${short(t.title)}".`);
+    else if (!was && t.from === 'Routine') buddy.nod(`${t.botName} started a routine: ${short(t.title)}.`);
+  }
+}
+
 async function poll() {
   try {
     await refresh();
@@ -110,6 +141,7 @@ async function poll() {
 function go(view) {
   ui.view = view;
   mounted = null;
+  ui.lastRendered = null;
   render();
   document.getElementById('main').scrollTop = 0;
 }
@@ -137,12 +169,24 @@ function render() {
   const main = document.getElementById('main');
   const view = !S.connections.length || !S.bots.length ? (ui.view === 'settings' ? 'settings' : 'welcome') : ui.view;
   if (mounted !== view) {
+    document.body.append(buddy.el);
     fill(main);
     mounted = view;
     ui.taskChanged = true;
     ({ welcome: mountWelcome, team: mountTeam, board: mountBoard, files: mountFiles, settings: mountSettings })[view](main);
+    main.firstElementChild?.classList.add('view-enter');
   }
+  const fresh = mounted !== ui.lastRendered;
+  ui.lastRendered = mounted;
   ({ welcome: renderWelcome, team: renderTeam, board: renderBoard, files: () => {}, settings: renderSettings })[view]();
+  if (fresh) stagger(main);
+}
+
+// Lets lists fade in one item after another the first time they show up.
+function stagger(root) {
+  root.classList.add('entering');
+  setTimeout(() => root.classList.remove('entering'), 900);
+  root.querySelectorAll('.member, .ticket, .steps li, .providers button').forEach((el, i) => el.style.setProperty('--i', Math.min(i, 12)));
 }
 
 // ---------- welcome / first run ----------
@@ -178,6 +222,7 @@ function renderWelcome() {
                 await api('POST', '/api/bots/starter-team', { connectionId: S.connections[0].id });
                 await refresh(true);
                 go('team');
+                buddy.cheer('Your team is ready! Give them a job.');
               }, e.currentTarget),
             }, 'Hire the starter team'),
             h('button', { disabled: !hasConn, onclick: () => editBot() }, 'Hire one bot')))),
@@ -208,6 +253,7 @@ function mountTeam(main) {
       attempt(async () => {
         const t = await api('POST', '/api/tasks', { botId, instructions: text });
         composerInput.value = '';
+        buddy.nod(`On it! ${t.botName} has the task.`);
         await refresh(true);
         openTask(t.id);
       }, assign);
@@ -225,7 +271,7 @@ function mountTeam(main) {
 
   main.append(
     h('div', { class: 'team' },
-      h('section', { class: 'roster', 'aria-label': 'Team' }),
+      h('section', { class: 'roster', 'aria-label': 'Team' }, h('div', { id: 'roster-list' }), buddy.el),
       h('section', { class: 'work', 'aria-label': 'Work' }, h('div', { id: 'bot-head' }), composer, h('div', { id: 'tickets' })),
       h('section', { class: 'detail', 'aria-label': 'Task' })));
 }
@@ -246,7 +292,7 @@ function modelLabel(bot) {
 
 function renderTeam() {
   // Roster
-  const roster = document.querySelector('.roster');
+  const roster = document.getElementById('roster-list');
   const active = S.tasks.filter((t) => ACTIVE.has(t.status)).length;
   fill(roster, 
     h('div', { class: 'roster-head' }, h('span', { class: 'eyebrow' }, `Team · ${S.bots.length}`), h('button', { class: 'quiet', onclick: () => editBot() }, '+ Hire')),
@@ -304,19 +350,25 @@ function renderTeam() {
       : h('p', { class: 'empty' }, bot ? `${bot.name} has no tasks yet.` : ui.needsYouOnly ? 'Nothing is waiting on you.' : 'No tasks yet. Assign one above.'));
 
   renderDetail();
+  // Each change animates once, not again on the next unrelated re-render.
+  ui.newIds.clear();
+  ui.changedIds.clear();
 }
 
 function ticket(t, depth) {
+  // New tasks slide in and status changes get a little pop (see react()).
+  const isNew = ui.newIds.has(t.id);
+  const changed = ui.changedIds.has(t.id);
   const who = ui.botId === 'all' ? `${t.botName} · ` : '';
   const pending = t.status === 'needs_you' ? (t.pending?.kind === 'approval' ? ' · approval' : ' · question') : t.status === 'waiting' && t.pending?.coworker ? ` · on ${t.pending.coworker}` : '';
   return h('button', {
-    class: `ticket${depth ? ' child' : ''}`,
+    class: `ticket${depth ? ' child' : ''}${isNew ? ' is-new' : ''}`,
     style: depth ? `padding-left:${0.25 + depth * 1.25}rem` : null,
     'aria-current': String(ui.taskId === t.id),
     onclick: () => attempt(() => openTask(t.id)),
   },
   h('span', { class: 'title' }, t.title),
-  h('span', { class: `tag ${t.status}` }, STATUS_LABEL[t.status] + pending),
+  h('span', { class: `tag ${t.status}${changed ? ' pop' : ''}` }, STATUS_LABEL[t.status] + pending),
   h('span', { class: 'meta' }, `${who}from ${t.from} · ${ago(t.updatedAt)}`));
 }
 
@@ -339,6 +391,10 @@ function renderDetail() {
     return;
   }
   ui.taskChanged = false;
+  if (pane.dataset.taskId !== t.id) {
+    pane.classList.add('fresh');
+    setTimeout(() => pane.classList.remove('fresh'), 700);
+  }
   pane.dataset.taskId = t.id;
 
   const parent = t.parentId && S.tasks.find((x) => x.id === t.parentId);
@@ -373,8 +429,8 @@ function actionBox(t) {
         ? h('details', { class: 'call', style: 'margin-bottom:0.75rem' }, h('summary', {}, 'Show file contents'), h('pre', {}, t.pending.args.content))
         : t.pending.args?.body ? h('details', { class: 'call', style: 'margin-bottom:0.75rem' }, h('summary', {}, 'Show request body'), h('pre', {}, t.pending.args.body)) : null,
       h('div', { class: 'row' },
-        h('button', { class: 'primary', onclick: (e) => attempt(async () => { await api('POST', `/api/tasks/${t.id}/decide`, { approved: true }); await refresh(); }, e.currentTarget) }, 'Allow'),
-        h('button', { onclick: (e) => attempt(async () => { await api('POST', `/api/tasks/${t.id}/decide`, { approved: false, note: note.value }); await refresh(); }, e.currentTarget) }, 'Don\'t allow'),
+        h('button', { class: 'primary', onclick: (e) => attempt(async () => { await api('POST', `/api/tasks/${t.id}/decide`, { approved: true }); buddy.nod('Approved. Back to work!'); await refresh(); }, e.currentTarget) }, 'Allow'),
+        h('button', { onclick: (e) => attempt(async () => { await api('POST', `/api/tasks/${t.id}/decide`, { approved: false, note: note.value }); buddy.nod("Okay, we'll skip that."); await refresh(); }, e.currentTarget) }, 'Don\'t allow'),
         h('div', { class: 'grow' }, note)));
   }
   if (t.status === 'needs_you' && t.pending?.kind === 'input') {
@@ -385,7 +441,7 @@ function actionBox(t) {
       onsubmit: (e) => {
         e.preventDefault();
         if (!answer.value.trim()) return answer.focus();
-        attempt(async () => { await api('POST', `/api/tasks/${t.id}/answer`, { text: answer.value }); await refresh(); }, send);
+        attempt(async () => { await api('POST', `/api/tasks/${t.id}/answer`, { text: answer.value }); buddy.nod('Got it, thanks!'); await refresh(); }, send);
       },
     }, h('h3', {}, `${t.botName} asks:`), h('p', { class: 'text' }, t.pending.question), answer, h('div', { class: 'row', style: 'margin-top:0.5rem' }, send));
   }
@@ -435,6 +491,7 @@ function followUp(t) {
       e.preventDefault();
       attempt(async () => {
         await api('POST', `/api/tasks/${t.id}/reply`, { text: text.value.trim() || 'Please try again.' });
+        buddy.nod('Sending it back to work.');
         await refresh();
       }, send);
     },
@@ -525,7 +582,8 @@ function editBot(bot) {
         await refresh(true);
         if (ui.view === 'team' || !bot) selectBot(saved.id);
         if (mounted === 'welcome') go('team');
-        toast(bot ? 'Saved.' : `${saved.name} joined the team.`);
+        if (bot) toast('Saved.');
+        else buddy.cheer(`${saved.name} joined the team!`);
       }, save);
     },
   },
@@ -602,7 +660,7 @@ function editConnection(conn) {
         await api(isNew ? 'POST' : 'PUT', isNew ? '/api/connections' : `/api/connections/${conn.id}`, body());
         dlg.close();
         await refresh(true);
-        toast(`${f.name.value} is connected.`);
+        buddy.nod(`${f.name.value} is connected. Nice!`);
       }, save);
     },
   },

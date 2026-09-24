@@ -28,6 +28,10 @@ local model for the writer.
   `{{KEY_NAME}}`. The AI never sees the key itself.
 - **Run routines.** Recurring jobs like "every morning, check new orders and
   post a summary" run on their own while BotCrew is running.
+- **Meet Crewbot.** A little robot in the corner watches your cursor, nods
+  when you hand out work, scans while the team is busy, waves when someone
+  needs you and cheers when a task is done. Click it to say hi. All
+  animations switch off if your system is set to reduce motion.
 - **Share files.** Bots read and write files in a shared workspace folder.
   You can browse it in the *Files* tab.
 

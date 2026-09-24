@@ -330,10 +330,194 @@ dialog legend { font-weight: 600; font-size: 0.875rem; margin-bottom: 0.4rem; pa
   .team { height: auto; }
 }
 @media (max-width: 700px) {
-  .topbar { gap: 0.75rem; padding: 0 1rem; overflow-x: auto; }
+  .topbar { gap: 0.25rem 0.75rem; padding: 0.5rem 1rem; height: auto; flex-wrap: wrap; }
+  .needs-you { padding: 0.45rem 0.7rem; }
   .tabs button { padding: 0.5rem; }
   .team { grid-template-columns: 1fr; }
   .roster { border-right: none; border-bottom: 1px solid var(--line); }
   .work { border-right: none; }
   .work, .detail { padding: 1rem; }
+}
+
+/* ---------- Crewbot, the mascot ---------- */
+
+:root {
+  --bot-body: #e0662c;
+  --bot-edge: #9c3d12;
+  --bot-screen: #1d1b22;
+  --bot-eye: #ffe6d6;
+  --bot-glow: #ffb98f;
+  --bot-cheek: #ff9b86;
+}
+
+.buddy {
+  position: fixed;
+  left: 1rem;
+  bottom: 1rem;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+.buddy-bot {
+  pointer-events: auto;
+  width: 84px;
+  height: 92px;
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: 12px;
+}
+.buddy-bot:hover { border: none; }
+.buddy-bot svg { width: 100%; height: 100%; overflow: visible; animation: cb-float 3.2s ease-in-out infinite; }
+
+.cb-shell { fill: var(--bot-body); stroke: var(--bot-edge); stroke-width: 2.5; }
+.cb-screen { fill: var(--bot-screen); }
+.cb-chest { fill: var(--bot-glow); opacity: 0.8; animation: cb-breathe 2.4s ease-in-out infinite; }
+.cb-stalk { stroke: var(--bot-edge); stroke-width: 3; stroke-linecap: round; }
+.cb-tip { fill: var(--bot-glow); }
+.cb-halo { animation: cb-breathe 2.4s ease-in-out infinite; }
+.cb-eye { fill: var(--bot-eye); transform-box: fill-box; transform-origin: center; transition: transform 0.12s; }
+.cb-line { fill: none; stroke: var(--bot-eye); stroke-width: 3.5; stroke-linecap: round; }
+.cb-cheek { fill: var(--bot-cheek); opacity: 0.55; }
+.cb-happy { opacity: 0; }
+.cb-face { transition: transform 0.25s ease-out; }
+.cb-shadow { fill: var(--ink); opacity: 0.12; transform-box: fill-box; transform-origin: center; animation: cb-shadow 3.2s ease-in-out infinite; }
+.cb-head { transform-box: view-box; transform-origin: 60px 92px; }
+.cb-arm { transform-box: fill-box; transform-origin: 50% 10%; }
+
+/* blink */
+.buddy-bot.blink .cb-eye { transform: scaleY(0.1); }
+
+/* nod: "yes, got it" */
+.buddy-bot.nod .cb-head { animation: cb-nod 0.9s ease-in-out; }
+.buddy-bot.nod .cb-eye { transform: scaleY(0.55); }
+
+/* cheer: jump, arms up, happy eyes */
+.buddy-bot.cheer svg { animation: cb-jump 0.8s cubic-bezier(0.3, 0.7, 0.4, 1) 2; }
+.buddy-bot.cheer .cb-eyes { opacity: 0; }
+.buddy-bot.cheer .cb-happy { opacity: 1; }
+.buddy-bot.cheer .cb-arm-l { animation: cb-arm-up-l 0.8s ease-in-out 2; }
+.buddy-bot.cheer .cb-arm-r { animation: cb-arm-up-r 0.8s ease-in-out 2; }
+
+/* shake: something went wrong */
+.buddy-bot.shake .cb-head { animation: cb-shake 0.7s ease-in-out; }
+
+/* working: eyes scan back and forth, antenna blinks fast */
+.buddy-bot.mood-working .cb-eyes { animation: cb-scan 1.8s ease-in-out infinite; }
+.buddy-bot.mood-working .cb-tip, .buddy-bot.mood-working .cb-halo { animation: cb-breathe 0.7s ease-in-out infinite; }
+
+/* alert: someone needs you, so it tilts its head and waves */
+.buddy-bot.mood-alert .cb-tip { fill: #ff5a3c; }
+.buddy-bot.mood-alert .cb-halo { animation: cb-breathe 0.5s ease-in-out infinite; }
+.buddy-bot.mood-alert:not(.nod):not(.shake) .cb-head { animation: cb-tilt 2.4s ease-in-out infinite; }
+.buddy-bot.mood-alert:not(.cheer) .cb-arm-r { animation: cb-wave 1.2s ease-in-out infinite; }
+
+.buddy-bubble {
+  position: relative;
+  margin-bottom: 3.6rem;
+  max-width: 15rem;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 0.875rem;
+  line-height: 1.35;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px 10px 10px 2px;
+  opacity: 0;
+  transform: translateY(6px) scale(0.92);
+  transform-origin: bottom left;
+  transition: opacity 0.2s, transform 0.25s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+.buddy-bubble.show { opacity: 1; transform: none; }
+
+@keyframes cb-float { 50% { transform: translateY(-4px); } }
+@keyframes cb-shadow { 50% { transform: scaleX(0.85); opacity: 0.08; } }
+@keyframes cb-breathe { 50% { opacity: 0.45; } }
+@keyframes cb-nod {
+  0%, 100% { transform: none; }
+  20% { transform: translateY(6px) scaleY(0.95); }
+  42% { transform: translateY(-1px); }
+  62% { transform: translateY(5px) scaleY(0.96); }
+  82% { transform: translateY(0); }
+}
+@keyframes cb-jump {
+  0%, 100% { transform: translateY(0); }
+  15% { transform: translateY(2px) scale(1.04, 0.95); }
+  45% { transform: translateY(-16px) scale(0.97, 1.03); }
+  75% { transform: translateY(0) scale(1.03, 0.97); }
+}
+@keyframes cb-arm-up-l { 50% { transform: rotate(140deg); } }
+@keyframes cb-arm-up-r { 50% { transform: rotate(-140deg); } }
+@keyframes cb-shake {
+  20% { transform: rotate(-7deg); }
+  40% { transform: rotate(6deg); }
+  60% { transform: rotate(-4deg); }
+  80% { transform: rotate(2deg); }
+}
+@keyframes cb-scan { 0%, 100% { transform: translateX(-6px); } 50% { transform: translateX(6px); } }
+@keyframes cb-tilt { 0%, 100% { transform: rotate(0); } 30%, 60% { transform: rotate(7deg); } }
+@keyframes cb-wave { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-150deg); } }
+
+/* On the team view Crewbot lives at the bottom of the team column. */
+.roster { display: flex; flex-direction: column; padding-bottom: 0; }
+.roster .buddy {
+  position: sticky;
+  left: auto;
+  bottom: 0;
+  margin-top: auto;
+  padding: 1.5rem 0.25rem 0.75rem;
+  flex-direction: column-reverse;
+  align-items: flex-start;
+  gap: 0.25rem;
+  background: linear-gradient(to bottom, transparent, var(--paper) 1.5rem);
+}
+.roster .buddy-bubble { margin: 0 0 0 1.5rem; max-width: 100%; border-radius: 10px 10px 10px 2px; }
+.roster .buddy-bubble:not(.show) { display: none; }
+.roster .buddy-bubble.show { animation: rise 0.25s ease-out; }
+
+@media (max-width: 700px) {
+  .roster .buddy { position: fixed; bottom: 0.75rem; padding: 0; background: none; margin: 0; flex-direction: row-reverse; align-items: flex-end; }
+  .roster .buddy-bubble { margin: 0 0 2.6rem; max-width: 12rem; border-radius: 10px 10px 2px 10px; }
+  .buddy { left: auto; right: 0.75rem; bottom: 0.75rem; flex-direction: row-reverse; }
+  .buddy-bot { width: 60px; height: 66px; }
+  .buddy-bubble { margin-bottom: 2.6rem; border-radius: 10px 10px 2px 10px; transform-origin: bottom right; max-width: 12rem; }
+}
+
+/* ---------- app animations ---------- */
+
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+@keyframes slide-in { from { opacity: 0; transform: translateX(-14px); background: var(--accent-soft); } }
+@keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
+@keyframes glow-ring { 0%, 100% { box-shadow: 0 0 0 0 rgb(224 102 44 / 0.5); } 60% { box-shadow: 0 0 0 7px rgb(224 102 44 / 0); } }
+@keyframes dialog-in { from { opacity: 0; transform: translateY(12px) scale(0.97); } }
+@keyframes fade { from { opacity: 0; } }
+
+.view-enter { animation: rise 0.35s ease-out both; }
+.entering .member, .entering .ticket, .view-enter .steps li, .view-enter .providers button {
+  animation: rise 0.4s ease-out both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+.ticket.is-new { animation: slide-in 0.5s ease-out both; }
+.tag.pop { animation: pop 0.45s ease-out; }
+.needs-you { animation: glow-ring 2s ease-out infinite; }
+dialog[open] { animation: dialog-in 0.22s ease-out; }
+dialog[open]::backdrop { animation: fade 0.22s ease-out; }
+.detail.fresh > * { animation: rise 0.3s ease-out both; }
+.detail.fresh > :nth-child(2) { animation-delay: 30ms; }
+.detail.fresh > :nth-child(3) { animation-delay: 60ms; }
+.detail.fresh > :nth-child(n + 4) { animation-delay: 90ms; }
+.callout.result { animation: rise 0.4s ease-out both; }
+
+button { transition: transform 0.08s, background-color 0.15s, border-color 0.15s, filter 0.15s; }
+button:active:not(:disabled) { transform: scale(0.97); }
+.member { transition: background-color 0.15s, transform 0.15s; }
+.member:hover { transform: translateX(2px); }
+.tabs button { transition: color 0.15s, box-shadow 0.2s; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after, .buddy-bot svg, .buddy-bot * {
+    animation: none !important;
+    transition: none !important;
+  }
 }
