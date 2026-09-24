@@ -27,7 +27,19 @@ function fill(el, ...children) {
   el.replaceChildren(...children.flat(Infinity).filter((c) => c != null && c !== false));
 }
 
+// The web version runs Dawnshift's engine inside this page and hands us its API
+// directly (see web/main.js). Otherwise we talk to the local server.
+const local = globalThis.dawnshiftLocal;
+
 async function api(method, url, body) {
+  if (local) {
+    try {
+      // A copy, so the interface never holds the engine's live objects.
+      return JSON.parse(JSON.stringify(await local(method, url, body ?? {})));
+    } catch (err) {
+      throw new Error(err.message);
+    }
+  }
   const res = await fetch(url, {
     method,
     headers: body === undefined ? {} : { 'content-type': 'application/json' },
@@ -203,6 +215,9 @@ function renderWelcome() {
     h('p', { class: 'lede' },
       'Dawnshift gives you a team of AI coworkers. Each one has a job, remembers what it learns, and can hand work to the others. ',
       'You choose which AI powers each bot: Claude, ChatGPT, Grok, Gemini, or a model running on your own machine.'),
+    local
+      ? h('p', { class: 'hint' }, 'Everything, including your keys, is saved only in this browser on this device. Bots work while Dawnshift is open.')
+      : null,
     h('ol', { class: 'steps' },
       h('li', { class: hasConn ? 'done' : '' },
         h('div', {},
@@ -715,25 +730,50 @@ function renderBoard() {
 function mountFiles(main) {
   const list = h('div', { class: 'list' });
   const view = h('div');
+  const picker = h('input', {
+    type: 'file',
+    multiple: true,
+    hidden: true,
+    onchange: () => attempt(async () => {
+      for (const file of picker.files) {
+        if (file.size > 2_000_000) throw new Error(`${file.name} is too big. Files can be up to 2 MB.`);
+        await api('POST', '/api/files', { path: file.name, content: await file.text() });
+      }
+      toast(`Added ${picker.files.length} file${picker.files.length === 1 ? '' : 's'}.`);
+      picker.value = '';
+      await load();
+    }),
+  });
   main.append(h('div', { class: 'page' },
     h('h1', {}, 'Workspace files'),
-    h('p', { class: 'lede', id: 'files-lede' }, 'Files your bots have written. Bots with file abilities can read anything you put in this folder.'),
-    h('div', { class: 'row', style: 'margin-bottom:1rem' }, h('button', { onclick: () => load() }, 'Refresh')),
+    h('p', { class: 'lede', id: 'files-lede' }, 'Files your bots have written, and files you add for them to read.'),
+    h('div', { class: 'row', style: 'margin-bottom:1rem' },
+      h('button', { class: 'primary', onclick: () => picker.click() }, 'Add files'),
+      h('button', { onclick: () => load() }, 'Refresh'),
+      picker),
     list, view));
+
+  const read = async (f) => (await api('GET', `/api/files?path=${encodeURIComponent(f.path)}`)).content;
   async function load() {
     await attempt(async () => {
       const { root, files } = await api('GET', '/api/files');
-      fill(document.getElementById('files-lede'), 'Files your bots have written. Bots with file abilities can also read anything you put in ', h('code', {}, root), '.');
+      fill(document.getElementById('files-lede'), 'Files your bots have written, and text files you add for them to read (notes, price lists, CSV spreadsheets). Saved in ', h('code', {}, root), '.');
       fill(list, ...(files.length
         ? files.map((f) => h('div', { class: 'list-item' },
             h('div', { class: 'grow' }, h('div', {}, f.path), h('div', { class: 'meta' }, `${f.size.toLocaleString()} bytes · ${ago(f.modified)}`)),
             h('button', {
               onclick: (e) => attempt(async () => {
-                const { content } = await api('GET', `/api/files?path=${encodeURIComponent(f.path)}`);
-                fill(view, h('h2', { style: 'margin-top:2rem' }, f.path), h('div', { class: 'file-view' }, content));
+                fill(view, h('h2', { style: 'margin-top:2rem' }, f.path), h('div', { class: 'file-view' }, await read(f)));
                 view.scrollIntoView({ behavior: 'instant' });
               }, e.currentTarget),
-            }, 'Open')))
+            }, 'Open'),
+            h('button', {
+              onclick: (e) => attempt(async () => {
+                const link = h('a', { href: URL.createObjectURL(new Blob([await read(f)], { type: 'text/plain' })), download: f.path.split('/').pop() });
+                link.click();
+                setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+              }, e.currentTarget),
+            }, 'Download')))
         : [h('p', { class: 'empty' }, 'No files yet.')]));
     });
   }

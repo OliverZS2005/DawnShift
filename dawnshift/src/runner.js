@@ -7,7 +7,7 @@
 //                    \-> waiting   (waiting on a coworker's task)
 // Everything is saved after each step, so a task picks up where it left off
 // even if Dawnshift is restarted.
-import { newId } from './store.js';
+import { newId } from './store-common.js';
 import { TOOLS_BY_NAME, toolsFor, needsApproval, describeCall } from './tools.js';
 
 const MAX_STEPS = 40;
@@ -69,10 +69,10 @@ export function createRunner({ store, callModel, maxConcurrent = 3, onChange = (
   function kick() {
     if (pumpScheduled) return;
     pumpScheduled = true;
-    setImmediate(() => {
+    setTimeout(() => {
       pumpScheduled = false;
       pump();
-    });
+    }, 0);
   }
 
   function pump() {
@@ -308,7 +308,7 @@ export function createRunner({ store, callModel, maxConcurrent = 3, onChange = (
       kick();
       if (routineIntervalMs) {
         const timer = setInterval(api.runDueRoutines, routineIntervalMs);
-        timer.unref();
+        timer.unref?.(); // Node only: don't keep the process alive just for this.
       }
     },
 

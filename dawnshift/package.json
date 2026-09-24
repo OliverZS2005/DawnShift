@@ -9,7 +9,8 @@
     "start": "node server.js",
     "test": "node --test",
     "notices": "node scripts/notices.mjs",
-    "package": "node scripts/package.mjs"
+    "package": "node scripts/package.mjs",
+    "build:web": "node scripts/build-web.mjs"
   },
   "engines": {
     "node": ">=20"
@@ -18,5 +19,8 @@
     "@anthropic-ai/sdk": "^0.128.0",
     "openai": "^7.23.0"
   },
-  "license": "SEE LICENSE IN LICENSE"
+  "license": "SEE LICENSE IN LICENSE",
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
 }

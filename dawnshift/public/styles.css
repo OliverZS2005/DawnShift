@@ -116,7 +116,9 @@ label { display: block; font-weight: 600; font-size: 0.875rem; margin: 0 0 0.3re
   align-items: center;
   gap: 1.5rem;
   padding: 0 1.25rem;
-  height: 3.5rem;
+  min-height: 3.5rem;
+  /* Room for the notch and status bar when installed on a phone. */
+  padding-top: env(safe-area-inset-top);
   border-bottom: 1px solid var(--line);
   background: var(--surface);
   flex-shrink: 0;
@@ -334,7 +336,18 @@ dialog legend { font-weight: 600; font-size: 0.875rem; margin-bottom: 0.4rem; pa
   .needs-you { padding: 0.45rem 0.7rem; }
   .tabs button { padding: 0.5rem; }
   .team { grid-template-columns: 1fr; }
-  .roster { border-right: none; border-bottom: 1px solid var(--line); }
+  .roster { border-right: none; border-bottom: 1px solid var(--line); padding: 0.6rem 0 0.6rem 1rem; }
+  /* On phones the team becomes one row of chips you can swipe through. */
+  #roster-list { display: flex; gap: 0.4rem; overflow-x: auto; padding: 0.1rem 1rem 0.2rem 0; scrollbar-width: none; }
+  #roster-list::-webkit-scrollbar { display: none; }
+  #roster-list .member { display: flex; align-items: center; gap: 0.45rem; width: auto; flex-shrink: 0; white-space: nowrap; margin: 0; padding: 0.45rem 0.7rem; border-color: var(--line); background: var(--surface); }
+  #roster-list .member:hover { transform: none; }
+  #roster-list .member[aria-current='true'] { border-color: var(--ink); }
+  #roster-list .member .sub, #roster-list .member .meta { display: none; }
+  #roster-list .dot { margin-top: 0; }
+  #roster-list .roster-head { order: 99; padding: 0; flex-shrink: 0; }
+  #roster-list .roster-head .eyebrow { display: none; }
+  #roster-list .roster-head button { border: 1px dashed var(--line); padding: 0.45rem 0.7rem; white-space: nowrap; }
   .work { border-right: none; }
   .work, .detail { padding: 1rem; }
 }
@@ -479,7 +492,7 @@ dialog legend { font-weight: 600; font-size: 0.875rem; margin-bottom: 0.4rem; pa
 @media (max-width: 700px) {
   .roster .buddy { position: fixed; bottom: 0.75rem; padding: 0; background: none; margin: 0; flex-direction: row-reverse; align-items: flex-end; }
   .roster .buddy-bubble { margin: 0 0 2.6rem; max-width: 12rem; border-radius: 10px 10px 2px 10px; }
-  .buddy { left: auto; right: 0.75rem; bottom: 0.75rem; flex-direction: row-reverse; }
+  .buddy { left: auto; right: 0.75rem; bottom: calc(0.75rem + env(safe-area-inset-bottom)); flex-direction: row-reverse; }
   .buddy-bot { width: 60px; height: 66px; }
   .buddy-bubble { margin-bottom: 2.6rem; border-radius: 10px 10px 2px 10px; transform-origin: bottom right; max-width: 12rem; }
 }
@@ -535,3 +548,6 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .legal pre { font: 0.8125rem/1.5 var(--mono); white-space: pre-wrap; background: var(--surface); border: 1px solid var(--line); padding: 1rem; margin: 0.75rem 0 0; }
 .legal-links { font-size: 0.875rem; color: var(--ink-3); }
 .legal-links a { color: var(--ink-2); }
+
+/* Touch screens have no Ctrl+Enter. */
+@media (hover: none) { .composer .hint { display: none; } }

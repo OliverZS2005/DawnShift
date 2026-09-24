@@ -35,6 +35,28 @@ local model for the writer.
 - **Share files.** Bots read and write files in a shared workspace folder.
   You can browse it in the *Files* tab.
 
+## Web version (phones, tablets and computers)
+
+Dawnshift also runs entirely in the browser, with no Node.js needed. On a
+phone, open it and choose **Add to Home Screen** (Safari: Share button;
+Chrome: menu), and it opens like a normal app.
+
+- Build it with `npm run build:web`. That creates `web-dist/` and
+  `dist/Dawnshift-web-<version>.zip`.
+- Upload the ZIP's *contents* to any web host, for example the root of your
+  subdomain. It's plain static files; no server code is needed.
+- Everything, including API keys, is saved in the visitor's own browser
+  (IndexedDB). Nothing is sent to your website.
+
+Differences from the downloadable version:
+- Bots only work while Dawnshift is open. Phones pause pages in the
+  background.
+- Browsers only let a page read websites that allow it, so the "Read web
+  pages" and "web APIs" abilities work with fewer sites.
+- Ollama and LM Studio only work if they're set to allow web pages
+  (`OLLAMA_ORIGINS=*`, or CORS turned on in LM Studio).
+- Dawnshift can only be open in one tab at a time.
+
 ## Download (for people who just want to use it)
 
 Download the Dawnshift ZIP, unzip it, install [Node.js](https://nodejs.org)
@@ -127,14 +149,19 @@ belong to their owners.
 ## How it works
 
 ```
-server.js          web server + API for the page
-src/runner.js      runs tasks: the loop of "ask the AI -> run its tool calls"
-src/providers.js   talks to Anthropic (official SDK) and OpenAI-compatible APIs
-src/tools.js       what bots can do: ask you, remember, delegate, web, files
-src/templates.js   the ready-made roles
-src/store.js       saves everything to data/state.json
+server.js              web server for the downloadable version
+src/api.js             everything the interface can ask for or change
+src/runner.js          runs tasks: the loop of "ask the AI -> run its tool calls"
+src/providers.js       talks to Anthropic (official SDK) and OpenAI-compatible APIs
+src/tools.js           what bots can do: ask you, remember, delegate, web, files
+src/templates.js       the ready-made roles
+src/store.js           saves everything to data/ (downloadable version)
+src/browser-store.js   saves everything in the browser (web version)
+web/                   starts the engine inside the page, plus the service worker
 public/            the web page (plain HTML/CSS/JS, no build step) and legal pages
-scripts/notices.mjs  builds THIRD_PARTY_NOTICES.md and public/licenses.html
+scripts/notices.mjs    builds THIRD_PARTY_NOTICES.md and public/licenses.html
+scripts/package.mjs    builds the downloadable ZIP
+scripts/build-web.mjs  builds the web version
 ```
 
 Conversations are stored in one provider-neutral format, so you can switch a

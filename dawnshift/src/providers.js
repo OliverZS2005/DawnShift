@@ -10,7 +10,6 @@
 //   { role: 'tool', callId, name, content, isError }
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
-import crypto from 'node:crypto';
 
 export const PRESETS = {
   anthropic: {
@@ -87,22 +86,27 @@ const FALLBACK_MODELS = new Set([
 
 const MAX_TOKENS = 16000;
 
+// In the web version the page talks to the AI services directly. That's safe
+// here because each person only ever uses their own key on their own device.
+const IN_BROWSER = typeof window !== 'undefined';
+
 export function apiKeyFor(conn) {
   if (conn.apiKey) return conn.apiKey;
   const env = PRESETS[conn.preset]?.env;
-  return (env && process.env[env]) || '';
+  return (env && globalThis.process?.env?.[env]) || '';
 }
 
 function anthropicClient(conn) {
   return new Anthropic({
     apiKey: apiKeyFor(conn),
+    dangerouslyAllowBrowser: IN_BROWSER,
     ...(conn.baseUrl ? { baseURL: conn.baseUrl } : {}),
   });
 }
 
 function openaiClient(conn) {
   // Local servers don't check the key, but the SDK insists on having one.
-  return new OpenAI({ apiKey: apiKeyFor(conn) || 'not-needed', baseURL: conn.baseUrl });
+  return new OpenAI({ apiKey: apiKeyFor(conn) || 'not-needed', baseURL: conn.baseUrl, dangerouslyAllowBrowser: IN_BROWSER });
 }
 
 export function toAnthropicMessages(messages) {
@@ -244,7 +248,7 @@ async function callOpenAI(conn, { model, system, messages, tools }) {
   const toolCalls = (msg.tool_calls ?? [])
     .filter((c) => c.type === 'function' || c.function)
     .map((c) => ({
-      id: c.id || `call_${crypto.randomBytes(6).toString('hex')}`,
+      id: c.id || `call_${globalThis.crypto.randomUUID()}`,
       name: c.function.name,
       args: parseArgs(c.function.arguments),
     }));
@@ -290,9 +294,13 @@ function friendlyError(conn, err) {
   if (err instanceof Anthropic.AuthenticationError || err instanceof OpenAI.AuthenticationError) {
     message = `${conn.name}: the API key was rejected. Check it in Settings.`;
   } else if (err instanceof Anthropic.APIConnectionError || err instanceof OpenAI.APIConnectionError) {
+    const name = PRESETS[conn.preset]?.label.replace(' (local)', '');
+    const webHint = conn.preset === 'ollama' ? 'set OLLAMA_ORIGINS=* before starting Ollama' : 'turn on CORS in its server settings';
     message = PRESETS[conn.preset]?.local
-      ? `Couldn't reach ${where}. Is ${PRESETS[conn.preset].label.replace(' (local)', '')} running?`
-      : `Couldn't reach ${where}. Check your internet connection and the server address.`;
+      ? `Couldn't reach ${where}. Is ${name} running?${IN_BROWSER ? ` The web version also needs it to allow web pages: ${webHint}.` : ''}`
+      : IN_BROWSER
+        ? `Couldn't reach ${where}. Check your internet connection. If it keeps happening, this AI service may not allow connections from a web page; try another one or the downloadable version.`
+        : `Couldn't reach ${where}. Check your internet connection and the server address.`;
   } else if (err instanceof Anthropic.RateLimitError || err instanceof OpenAI.RateLimitError) {
     message = `${conn.name} is rate limiting requests right now. Try again in a minute.`;
   } else if (err instanceof Anthropic.NotFoundError || err instanceof OpenAI.NotFoundError) {

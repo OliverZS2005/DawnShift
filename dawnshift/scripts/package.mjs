@@ -13,7 +13,7 @@ const stage = path.join(dist, 'Dawnshift');
 const zipName = `Dawnshift-${version}.zip`;
 
 // What goes in the download. Tests, scripts and saved data stay out.
-const INCLUDE = ['server.js', 'src', 'public', 'node_modules', 'package.json', 'package-lock.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'README.md'];
+const INCLUDE = ['server.js', 'src', 'public', 'package.json', 'package-lock.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'README.md'];
 
 // Refresh the license list first, so the download always matches its libraries.
 execFileSync(process.execPath, [path.join(root, 'scripts', 'notices.mjs')], { stdio: 'inherit' });
@@ -22,6 +22,13 @@ fs.rmSync(dist, { recursive: true, force: true });
 fs.mkdirSync(stage, { recursive: true });
 for (const item of INCLUDE) {
   fs.cpSync(path.join(root, item), path.join(stage, item), { recursive: true });
+}
+// Only the libraries Dawnshift runs with, not the build tools.
+const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
+for (const [dir, info] of Object.entries(lock.packages)) {
+  if (dir.startsWith('node_modules/') && !info.dev) {
+    fs.cpSync(path.join(root, dir), path.join(stage, dir), { recursive: true });
+  }
 }
 for (const file of fs.readdirSync(path.join(root, 'launchers'))) {
   fs.cpSync(path.join(root, 'launchers', file), path.join(stage, file));

@@ -81,7 +81,7 @@ test('approved actions run', async () => {
   runner.decide(task.id, true);
   const t = await settled(store, task.id);
   assert.equal(t.status, 'done');
-  assert.equal(fs.readFileSync(path.join(store.workspaceDir, 'notes/a.txt'), 'utf8'), 'hi');
+  assert.equal(await store.files.read('notes/a.txt'), 'hi');
 });
 
 test('ask_human pauses until the human answers', async () => {

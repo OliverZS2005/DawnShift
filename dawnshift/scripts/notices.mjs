@@ -83,7 +83,7 @@ const html = `<!doctype html>
 </head>
 <body>
   <main class="legal">
-    <p><a href="/">← Back to Dawnshift</a></p>
+    <p><a href="./">← Back to Dawnshift</a></p>
     <h1>Open-source licenses</h1>
     <p>${esc(intro)}</p>
     <h2>Fonts</h2>

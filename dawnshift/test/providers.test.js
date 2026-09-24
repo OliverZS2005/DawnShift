@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import { toAnthropicMessages, toOpenAIMessages } from '../src/providers.js';
-import { resolveInWorkspace, fillSecrets, htmlToText } from '../src/tools.js';
+import { fillSecrets, htmlToText } from '../src/tools.js';
+import { normalizePath } from '../src/store-common.js';
 
 const convo = [
   { role: 'user', content: 'Do it' },
@@ -39,12 +39,13 @@ test('OpenAI: tool calls and results use the chat-completions shape', () => {
 });
 
 test('workspace paths cannot escape the workspace', () => {
-  const root = path.resolve('/tmp/ws');
-  assert.equal(resolveInWorkspace(root, 'a/b.txt'), path.join(root, 'a/b.txt'));
-  assert.equal(resolveInWorkspace(root, '/a.txt'), path.join(root, 'a.txt'));
-  assert.throws(() => resolveInWorkspace(root, '../secret'));
-  assert.throws(() => resolveInWorkspace(root, 'a/../../x'));
-  assert.throws(() => resolveInWorkspace('/tmp/ws', '../ws-other/x'));
+  assert.equal(normalizePath('a/b.txt'), 'a/b.txt');
+  assert.equal(normalizePath('/a.txt'), 'a.txt');
+  assert.equal(normalizePath('a\\b/./c.txt'), 'a/b/c.txt');
+  assert.equal(normalizePath('a/../b.txt'), 'b.txt');
+  assert.equal(normalizePath('.'), '');
+  assert.throws(() => normalizePath('../secret'));
+  assert.throws(() => normalizePath('a/../../x'));
 });
 
 test('app keys are filled in by name', () => {

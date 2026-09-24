@@ -2,23 +2,12 @@
 // ({ store, bot, task, pending, runner }) and returns either
 //   { content, isError? }  - the result the bot sees, or
 //   { pause: {...} }       - stop the task until a human or teammate responds.
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { newId } from './store.js';
+import { newId } from './store-common.js';
 
 const MAX_FETCH_CHARS = 20000;
 const MAX_FILE_CHARS = 50000;
 const MAX_MEMORY = 60;
 const MAX_DELEGATION_DEPTH = 3;
-
-// Keeps every file path inside the workspace folder.
-export function resolveInWorkspace(root, p = '.') {
-  const full = path.resolve(root, String(p).replace(/^[/\\]+/, ''));
-  if (full !== root && !full.startsWith(root + path.sep)) {
-    throw new Error(`"${p}" is outside the workspace folder.`);
-  }
-  return full;
-}
 
 // Dawnshift's own address. Bots may not call it: a web page could otherwise
 // trick a bot into changing its own settings.
@@ -32,6 +21,19 @@ function checkUrl(u) {
   const local = ['localhost', '127.0.0.1', '[::1]', '0.0.0.0'].includes(u.hostname);
   if (local && ownPort && (u.port || (u.protocol === 'https:' ? '443' : '80')) === ownPort) {
     throw new Error("Bots can't call Dawnshift itself.");
+  }
+}
+
+// Like fetch, but explains the most common failure in the web version:
+// browsers only let a page read other websites that explicitly allow it.
+async function request(url, options) {
+  try {
+    return await fetch(url, options);
+  } catch (err) {
+    if (typeof window !== 'undefined' && err instanceof TypeError) {
+      throw new Error(`Couldn't read ${url.host} from the web version. Many websites block that for browser security. The downloadable version of Dawnshift can read them.`);
+    }
+    throw err;
   }
 }
 
@@ -190,7 +192,7 @@ export const TOOLS = [
     async run({ url }) {
       const u = new URL(String(url));
       checkUrl(u);
-      const res = await fetch(u, { redirect: 'follow', signal: AbortSignal.timeout(20000), headers: { 'user-agent': 'Dawnshift/0.1' } });
+      const res = await request(u, { redirect: 'follow', signal: AbortSignal.timeout(20000), headers: { 'user-agent': 'Dawnshift/0.1' } });
       const type = res.headers.get('content-type') || '';
       let body = await res.text();
       if (type.includes('html')) body = htmlToText(body);
@@ -219,7 +221,7 @@ export const TOOLS = [
       checkUrl(u);
       const h = {};
       for (const [k, v] of Object.entries(headers ?? {})) h[k] = fillSecrets(v, secrets);
-      const res = await fetch(u, {
+      const res = await request(u, {
         method: String(method).toUpperCase(),
         headers: h,
         body: body == null || method === 'GET' ? undefined : fillSecrets(body, secrets),
@@ -236,15 +238,10 @@ export const TOOLS = [
     parameters: schema({ folder: str('Folder inside the workspace. Use "." for the top.') }, []),
     group: 'files',
     async run({ folder = '.' }, { store }) {
-      const dir = resolveInWorkspace(store.workspaceDir, folder);
-      await fs.mkdir(store.workspaceDir, { recursive: true });
-      const entries = await fs.readdir(dir, { withFileTypes: true }).catch((err) => {
-        if (err.code === 'ENOENT') return null;
-        throw err;
-      });
-      if (!entries) return { content: `No folder called "${folder}".`, isError: true };
-      if (!entries.length) return { content: 'The folder is empty.' };
-      return { content: entries.map((e) => (e.isDirectory() ? `${e.name}/` : e.name)).sort().join('\n') };
+      const names = await store.files.list(folder);
+      if (!names) return { content: `No folder called "${folder}".`, isError: true };
+      if (!names.length) return { content: 'The folder is empty.' };
+      return { content: names.join('\n') };
     },
   },
   {
@@ -254,8 +251,7 @@ export const TOOLS = [
     parameters: schema({ path: str('File path inside the workspace.') }),
     group: 'files',
     async run({ path: p }, { store }) {
-      const text = await fs.readFile(resolveInWorkspace(store.workspaceDir, p), 'utf8');
-      return { content: clip(text, MAX_FILE_CHARS) };
+      return { content: clip(await store.files.read(p), MAX_FILE_CHARS) };
     },
   },
   {
@@ -265,9 +261,7 @@ export const TOOLS = [
     parameters: schema({ path: str('File path inside the workspace.'), content: str('The full file contents.') }),
     risky: () => true,
     async run({ path: p, content }, { store }) {
-      const full = resolveInWorkspace(store.workspaceDir, p);
-      await fs.mkdir(path.dirname(full), { recursive: true });
-      await fs.writeFile(full, String(content ?? ''));
+      await store.files.write(p, String(content ?? ''));
       return { content: `Wrote ${String(content ?? '').length} characters to ${p}.` };
     },
   },
