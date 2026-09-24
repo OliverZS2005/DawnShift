@@ -1,7 +1,7 @@
-# BotCrew
+# Dawnshift
 
-A team of AI coworkers that runs on your own computer. It's inspired by
-SpaceXAI's Grok Bot, but it isn't tied to one AI. **Each bot can use Claude,
+A team of AI coworkers that runs on your own computer. It isn't tied to one
+AI company: **each bot can use Claude,
 ChatGPT, Grok, Gemini, Groq, OpenRouter, or a local model** running in Ollama or
 LM Studio. You can mix them, for example Claude for the team lead and a free
 local model for the writer.
@@ -12,7 +12,7 @@ local model for the writer.
   There are ready-made roles to start from: Chief of Staff, Researcher, Writer,
   Operations and Customer Support.
 - **Work in the background.** Give a bot a task and it keeps working on its
-  own. Tasks survive restarts: if BotCrew stops, it continues where it left off.
+  own. Tasks survive restarts: if Dawnshift stops, it continues where it left off.
 - **Work as a team.** A bot with the "team lead" ability splits a big job into
   pieces, hands each piece to the right coworker, and combines their results.
   Bots also share a **team board** for notes and context.
@@ -27,8 +27,8 @@ local model for the writer.
   *Settings → App keys*. Bots call those apps' web APIs by writing
   `{{KEY_NAME}}`. The AI never sees the key itself.
 - **Run routines.** Recurring jobs like "every morning, check new orders and
-  post a summary" run on their own while BotCrew is running.
-- **Meet Crewbot.** A little robot in the corner watches your cursor, nods
+  post a summary" run on their own while Dawnshift is running.
+- **Meet Sunny.** A little robot in the corner watches your cursor, nods
   when you hand out work, scans while the team is busy, waves when someone
   needs you and cheers when a task is done. Click it to say hi. All
   animations switch off if your system is set to reduce motion.
@@ -40,7 +40,7 @@ local model for the writer.
 You need [Node.js](https://nodejs.org) 20 or newer.
 
 ```bash
-cd botcrew
+cd dawnshift
 npm install
 npm start
 ```
@@ -64,14 +64,14 @@ connecting an AI and hiring your team.
 
 After entering a key, click **Load models** to choose from the models that
 provider offers. You can also set keys as environment variables before
-starting BotCrew: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `XAI_API_KEY`,
+starting Dawnshift: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `XAI_API_KEY`,
 `GEMINI_API_KEY`, `GROQ_API_KEY` or `OPENROUTER_API_KEY`.
 
 **No budget?** Gemini and Groq both have free API keys (no credit card
 needed as of 2026), and Ollama or LM Studio are completely free.
 
 Local models are free and private, but small ones are less reliable with
-tools. If a local model can't use tools at all, BotCrew still works with it
+tools. If a local model can't use tools at all, Dawnshift still works with it
 as a plain chat bot.
 
 ### Options
@@ -80,21 +80,35 @@ as a plain chat bot.
 |---|---|---|
 | `PORT` | `3777` | Port for the web page |
 | `HOST` | `127.0.0.1` | Only change this if you know you want other devices to connect. There's no login. |
-| `BOTCREW_DATA` | `./data` | Where the team, tasks, memory, keys and workspace are stored |
+| `DAWNSHIFT_DATA` | `./data` | Where the team, tasks, memory, keys and workspace are stored |
 
 ## Privacy and safety
 
 - Everything is stored in the `data/` folder on your computer, including API
   keys and app keys (in `data/state.json`, readable only by your user).
   Nothing is sent anywhere except to the AI providers and apps you connect.
-- BotCrew only accepts connections from your own computer by default. It
+- Dawnshift only accepts connections from your own computer by default. It
   blocks requests from other websites open in your browser, and bots can't
-  call BotCrew's own controls.
+  call Dawnshift's own controls.
 - File tools stay inside `data/workspace/`.
 - With the default approval setting, bots ask before writing files or sending
   anything other than a read (GET) request to an app. Bots can still *read*
   web pages and APIs on their own, including ones on your local network.
   Choose "Ask me before every action" for a bot if that matters to you.
+
+## Legal
+
+- [LICENSE](LICENSE): Dawnshift itself. All rights reserved by the owner.
+- [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md): the licenses of the
+  open-source packages and fonts Dawnshift uses. Run `npm run notices` to
+  regenerate it (and the in-app licenses page) after changing dependencies.
+- In the app, *Settings → About* links to the
+  [Terms of Service](public/terms.html),
+  [Privacy Policy](public/privacy.html) and open-source licenses.
+
+Dawnshift works with AI services from Anthropic, OpenAI, xAI, Google, Groq
+and OpenRouter but isn't made by or affiliated with any of them. Their names
+belong to their owners.
 
 ## How it works
 
@@ -105,12 +119,13 @@ src/providers.js   talks to Anthropic (official SDK) and OpenAI-compatible APIs
 src/tools.js       what bots can do: ask you, remember, delegate, web, files
 src/templates.js   the ready-made roles
 src/store.js       saves everything to data/state.json
-public/            the web page (plain HTML/CSS/JS, no build step)
+public/            the web page (plain HTML/CSS/JS, no build step) and legal pages
+scripts/notices.mjs  builds THIRD_PARTY_NOTICES.md and public/licenses.html
 ```
 
 Conversations are stored in one provider-neutral format, so you can switch a
 bot to a different AI at any time, even halfway through a task. With Claude
-Opus 5 and newer, BotCrew turns on Anthropic's server-side fallbacks: if the
+Opus 5 and newer, Dawnshift turns on Anthropic's server-side fallbacks: if the
 model's safety classifier declines a request, it's retried on the model
 Anthropic recommends instead of failing.
 

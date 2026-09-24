@@ -6,7 +6,7 @@
 //                    \-> needs_you (waiting on an approval or an answer)
 //                    \-> waiting   (waiting on a coworker's task)
 // Everything is saved after each step, so a task picks up where it left off
-// even if BotCrew is restarted.
+// even if Dawnshift is restarted.
 import { newId } from './store.js';
 import { TOOLS_BY_NAME, toolsFor, needsApproval, describeCall } from './tools.js';
 
@@ -298,7 +298,7 @@ export function createRunner({ store, callModel, maxConcurrent = 3, onChange = (
       }
     },
 
-    // Called once at startup: anything that was mid-step when BotCrew stopped
+    // Called once at startup: anything that was mid-step when Dawnshift stopped
     // is picked up again, and due routines are scheduled.
     start({ routineIntervalMs = 30000 } = {}) {
       for (const task of store.state.tasks) {

@@ -8,7 +8,7 @@ import { createRunner } from '../src/runner.js';
 
 // A pretend AI: each bot gets a script of replies, played in order.
 function setup(scripts, botOverrides = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'botcrew-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dawnshift-'));
   const store = createStore(dir, { persist: false });
   store.state.connections.push({ id: 'c1', name: 'Fake', kind: 'openai', model: 'fake' });
   const bot = (id, name, extra = {}) => ({ id, name, job: `${name} things`, connectionId: 'c1', abilities: [], approvals: 'risky', memory: [], routines: [], ...extra });

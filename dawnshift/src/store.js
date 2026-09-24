@@ -1,4 +1,4 @@
-// Everything BotCrew knows lives in one JSON file (data/state.json), so the
+// Everything Dawnshift knows lives in one JSON file (data/state.json), so the
 // team, its tasks and its memory survive restarts.
 import fs from 'node:fs';
 import path from 'node:path';

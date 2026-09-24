@@ -57,9 +57,9 @@ test('web pages are turned into readable text', () => {
   assert.equal(text, 'Title\n A & B');
 });
 
-test('bots cannot call BotCrew itself', async () => {
+test('bots cannot call Dawnshift itself', async () => {
   const { TOOLS_BY_NAME, setOwnPort } = await import('../src/tools.js');
   setOwnPort(3777);
-  await assert.rejects(TOOLS_BY_NAME.web_fetch.run({ url: 'http://localhost:3777/api/state' }), /BotCrew itself/);
+  await assert.rejects(TOOLS_BY_NAME.web_fetch.run({ url: 'http://localhost:3777/api/state' }), /Dawnshift itself/);
   await assert.rejects(TOOLS_BY_NAME.web_fetch.run({ url: 'file:///etc/passwd' }), /http/);
 });

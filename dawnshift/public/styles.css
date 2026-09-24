@@ -1,4 +1,4 @@
-/* BotCrew: calm, operational, precise.
+/* Dawnshift: calm, operational, precise.
    Warm paper and ink, one signal-orange accent for actions and "needs you",
    sharp 3px corners everywhere, and no motion except the "working" pulse. */
 
@@ -187,7 +187,7 @@ main { flex: 1; min-height: 0; overflow: auto; }
 .composer textarea { border: none; padding: 0.4rem; min-height: 4.5rem; background: transparent; }
 .composer .row { justify-content: space-between; padding: 0 0.25rem; }
 
-/* The ticket row: BotCrew's one repeated layout primitive. */
+/* The ticket row: Dawnshift's one repeated layout primitive. */
 .ticket {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -339,7 +339,7 @@ dialog legend { font-weight: 600; font-size: 0.875rem; margin-bottom: 0.4rem; pa
   .work, .detail { padding: 1rem; }
 }
 
-/* ---------- Crewbot, the mascot ---------- */
+/* ---------- Sunny, the mascot ---------- */
 
 :root {
   --bot-body: #e0662c;
@@ -459,7 +459,7 @@ dialog legend { font-weight: 600; font-size: 0.875rem; margin-bottom: 0.4rem; pa
 @keyframes cb-tilt { 0%, 100% { transform: rotate(0); } 30%, 60% { transform: rotate(7deg); } }
 @keyframes cb-wave { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-150deg); } }
 
-/* On the team view Crewbot lives at the bottom of the team column. */
+/* On the team view Sunny lives at the bottom of the team column. */
 .roster { display: flex; flex-direction: column; padding-bottom: 0; }
 .roster .buddy {
   position: sticky;
@@ -521,3 +521,17 @@ button:active:not(:disabled) { transform: scale(0.97); }
     transition: none !important;
   }
 }
+
+/* ---------- legal pages (terms, privacy, licenses) ---------- */
+
+.legal { max-width: 44rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; overflow-wrap: break-word; }
+.legal h1 { margin: 1rem 0 0.25rem; }
+.legal h2 { font-size: 1.15rem; margin: 2rem 0 0.5rem; }
+.legal .updated { color: var(--ink-3); font: 0.875rem/1.4 var(--mono); margin-bottom: 1.5rem; }
+.legal ul { padding-left: 1.25rem; margin: 0 0 0.75rem; }
+.legal li { margin-bottom: 0.35rem; }
+.legal details { border-top: 1px solid var(--line); padding: 0.6rem 0; }
+.legal summary { cursor: pointer; }
+.legal pre { font: 0.8125rem/1.5 var(--mono); white-space: pre-wrap; background: var(--surface); border: 1px solid var(--line); padding: 1rem; margin: 0.75rem 0 0; }
+.legal-links { font-size: 0.875rem; color: var(--ink-3); }
+.legal-links a { color: var(--ink-2); }

@@ -1,4 +1,4 @@
-// BotCrew's web interface. Plain JavaScript, no build step.
+// Dawnshift's web interface. Plain JavaScript, no build step.
 import { createMascot } from './mascot.js';
 
 const buddy = createMascot();
@@ -105,14 +105,14 @@ async function refresh(force = false) {
   render();
 }
 
-// Crewbot reacts to changes in the team's work.
+// Sunny reacts to changes in the team's work.
 function react(before) {
   const tasks = S.tasks;
   buddy.setMood(
     tasks.some((t) => t.status === 'needs_you') ? 'alert'
       : tasks.some((t) => ['running', 'queued', 'waiting'].includes(t.status)) ? 'working' : 'idle');
   if (!before) {
-    if (!S.connections.length) buddy.nod("Hi, I'm Crewbot! Let's set up your AI team.");
+    if (!S.connections.length) buddy.nod("Hi, I'm Sunny! Let's set up your AI team.");
     return;
   }
   const old = new Map(before.tasks.map((t) => [t.id, t.status]));
@@ -164,7 +164,7 @@ function render() {
   const badge = document.getElementById('needs-you');
   badge.hidden = !waiting.length;
   badge.textContent = `Needs you · ${waiting.length}`;
-  document.title = waiting.length ? `(${waiting.length}) BotCrew` : 'BotCrew';
+  document.title = waiting.length ? `(${waiting.length}) Dawnshift` : 'Dawnshift';
 
   const main = document.getElementById('main');
   const view = !S.connections.length || !S.bots.length ? (ui.view === 'settings' ? 'settings' : 'welcome') : ui.view;
@@ -201,7 +201,7 @@ function renderWelcome() {
   fill(page, 
     h('h1', {}, 'Your AI team, on your computer'),
     h('p', { class: 'lede' },
-      'BotCrew gives you a team of AI coworkers. Each one has a job, remembers what it learns, and can hand work to the others. ',
+      'Dawnshift gives you a team of AI coworkers. Each one has a job, remembers what it learns, and can hand work to the others. ',
       'You choose which AI powers each bot: Claude, ChatGPT, Grok, Gemini, or a model running on your own machine.'),
     h('ol', { class: 'steps' },
       h('li', { class: hasConn ? 'done' : '' },
@@ -209,7 +209,7 @@ function renderWelcome() {
           h('h2', {}, 'Connect an AI'),
           hasConn
             ? h('p', { class: 'hint' }, `Connected: ${S.connections.map((c) => c.name).join(', ')}`)
-            : [h('p', { class: 'hint' }, 'Paste an API key, or point BotCrew at a local model. You can add more later.'), providerPicker()])),
+            : [h('p', { class: 'hint' }, 'Paste an API key, or point Dawnshift at a local model. You can add more later.'), providerPicker()])),
       h('li', {},
         h('div', {},
           h('h2', {}, 'Hire your team'),
@@ -227,6 +227,8 @@ function renderWelcome() {
             }, 'Hire the starter team'),
             h('button', { disabled: !hasConn, onclick: () => editBot() }, 'Hire one bot')))),
     ),
+    h('p', { class: 'legal-links' }, 'By using Dawnshift you agree to the ', h('a', { href: 'terms.html' }, 'Terms of Service'),
+      ' and ', h('a', { href: 'privacy.html' }, 'Privacy Policy'), '.'),
   );
 }
 
@@ -606,7 +608,7 @@ function editBot(bot) {
     h('div', { class: 'hint' }, 'Leave the model empty to use the connection\'s default. Different bots can use different AIs.')),
   h('fieldset', {}, h('legend', {}, 'Abilities'), abilities),
   h('fieldset', {}, h('legend', {}, 'Approvals'), approvals),
-  h('fieldset', {}, h('legend', {}, 'Routines'), h('p', { class: 'hint', style: 'margin-top:0' }, 'Recurring jobs the bot does on its own while BotCrew is running.'), routineBox),
+  h('fieldset', {}, h('legend', {}, 'Routines'), h('p', { class: 'hint', style: 'margin-top:0' }, 'Recurring jobs the bot does on its own while Dawnshift is running.'), routineBox),
   memoryBox,
   h('div', { class: 'dialog-foot' },
     bot
@@ -669,7 +671,7 @@ function editConnection(conn) {
   h('div', { class: 'field' },
     h('label', { for: 'c-key' }, 'API key'),
     f.key,
-    preset.keyUrl ? h('div', { class: 'hint' }, 'Get one at ', h('a', { href: preset.keyUrl, target: '_blank', rel: 'noopener' }, new URL(preset.keyUrl).host), preset.env ? `, or set ${preset.env} before starting BotCrew.` : '.') : null,
+    preset.keyUrl ? h('div', { class: 'hint' }, 'Get one at ', h('a', { href: preset.keyUrl, target: '_blank', rel: 'noopener' }, new URL(preset.keyUrl).host), preset.env ? `, or set ${preset.env} before starting Dawnshift.` : '.') : null,
     conn.keyFromEnv ? h('div', { class: 'hint' }, `Using the key from ${preset.env}.`) : null),
   preset.kind === 'openai'
     ? h('div', { class: 'field' }, h('label', { for: 'c-base' }, 'Server address'), f.base,
@@ -746,7 +748,7 @@ function mountSettings(main) {
   const add = h('button', { type: 'submit' }, 'Add key');
   main.append(h('div', { class: 'page' },
     h('h1', {}, 'Settings'),
-    h('p', { class: 'lede' }, 'Everything is stored on this computer, in BotCrew\'s data folder. Keys are never sent anywhere except the service they belong to.'),
+    h('p', { class: 'lede' }, 'Everything is stored on this computer, in Dawnshift\'s data folder. Keys are never sent anywhere except the service they belong to.'),
     h('section', { class: 'block' },
       h('h2', {}, 'AI connections'),
       h('p', { class: 'hint' }, 'Add as many as you like. Each bot picks one in its settings.'),
@@ -765,6 +767,13 @@ function mountSettings(main) {
           attempt(async () => { await api('POST', '/api/secrets', { name: name.value, value: value.value }); name.value = ''; value.value = ''; await refresh(); }, add);
         },
       }, h('div', { class: 'grow' }, name), h('div', { class: 'grow' }, value), add)),
+    h('section', { class: 'block' },
+      h('h2', {}, 'About'),
+      h('p', { class: 'hint' }, 'Dawnshift works with AI services from other companies but isn\'t made by or affiliated with any of them.'),
+      h('div', { class: 'row' },
+        h('a', { class: 'button', href: 'terms.html' }, 'Terms of Service'),
+        h('a', { class: 'button', href: 'privacy.html' }, 'Privacy Policy'),
+        h('a', { class: 'button', href: 'licenses.html' }, 'Open-source licenses'))),
     h('section', { class: 'block' },
       h('h2', {}, 'Housekeeping'),
       h('p', { class: 'hint' }, 'Remove finished, failed and stopped tasks from the list. Bots keep their memory.'),

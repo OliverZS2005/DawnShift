@@ -20,7 +20,7 @@ export function resolveInWorkspace(root, p = '.') {
   return full;
 }
 
-// BotCrew's own address. Bots may not call it: a web page could otherwise
+// Dawnshift's own address. Bots may not call it: a web page could otherwise
 // trick a bot into changing its own settings.
 let ownPort = null;
 export function setOwnPort(port) {
@@ -31,7 +31,7 @@ function checkUrl(u) {
   if (!/^https?:$/.test(u.protocol)) throw new Error('Only http and https URLs are allowed.');
   const local = ['localhost', '127.0.0.1', '[::1]', '0.0.0.0'].includes(u.hostname);
   if (local && ownPort && (u.port || (u.protocol === 'https:' ? '443' : '80')) === ownPort) {
-    throw new Error("Bots can't call BotCrew itself.");
+    throw new Error("Bots can't call Dawnshift itself.");
   }
 }
 
@@ -190,7 +190,7 @@ export const TOOLS = [
     async run({ url }) {
       const u = new URL(String(url));
       checkUrl(u);
-      const res = await fetch(u, { redirect: 'follow', signal: AbortSignal.timeout(20000), headers: { 'user-agent': 'BotCrew/0.1' } });
+      const res = await fetch(u, { redirect: 'follow', signal: AbortSignal.timeout(20000), headers: { 'user-agent': 'Dawnshift/0.1' } });
       const type = res.headers.get('content-type') || '';
       let body = await res.text();
       if (type.includes('html')) body = htmlToText(body);

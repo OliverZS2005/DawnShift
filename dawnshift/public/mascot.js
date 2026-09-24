@@ -1,4 +1,4 @@
-// Crewbot: BotCrew's little robot. It watches your cursor, blinks, nods when
+// Sunny: Dawnshift's little robot. It watches your cursor, blinks, nods when
 // you give it work, scans while the team is busy, and cheers when a task is done.
 
 const SVG = `
@@ -52,7 +52,7 @@ export function createMascot() {
   const root = document.createElement('div');
   root.className = 'buddy';
   root.innerHTML = `
-    <button class="buddy-bot" type="button" aria-label="Crewbot. Click to say hi.">${SVG}</button>
+    <button class="buddy-bot" type="button" aria-label="Sunny. Click to say hi.">${SVG}</button>
     <div class="buddy-bubble" role="status" aria-live="polite"></div>`;
   const bot = root.querySelector('.buddy-bot');
   const face = root.querySelector('.cb-face');

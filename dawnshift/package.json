@@ -1,5 +1,5 @@
 {
-  "name": "botcrew",
+  "name": "dawnshift",
   "version": "0.1.0",
   "description": "A team of AI coworkers you run yourself. Each bot can use Claude, ChatGPT, Grok, Gemini, or a local model.",
   "private": true,
@@ -7,7 +7,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "notices": "node scripts/notices.mjs"
   },
   "engines": {
     "node": ">=20"
@@ -15,5 +16,6 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
     "openai": "^7.23.0"
-  }
+  },
+  "license": "SEE LICENSE IN LICENSE"
 }

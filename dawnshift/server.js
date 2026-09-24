@@ -1,4 +1,4 @@
-// BotCrew: a team of AI coworkers that runs on your own computer.
+// Dawnshift: a team of AI coworkers that runs on your own computer.
 // Start it with `npm start`, then open http://localhost:3777
 import http from 'node:http';
 import fs from 'node:fs/promises';
@@ -13,7 +13,7 @@ import { TEMPLATES, STARTER_TEAM } from './src/templates.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3777);
 const HOST = process.env.HOST || '127.0.0.1';
-const DATA_DIR = path.resolve(process.env.BOTCREW_DATA || path.join(here, 'data'));
+const DATA_DIR = path.resolve(process.env.DAWNSHIFT_DATA || path.join(here, 'data'));
 const PUBLIC_DIR = path.join(here, 'public');
 
 class HttpError extends Error {
@@ -183,7 +183,7 @@ function createApi(store, runner) {
     const c = getConn(params.id);
     const reply = await callModel(c, {
       model: c.model,
-      system: 'You are being connected to BotCrew. Reply with one short, friendly sentence.',
+      system: 'You are being connected to Dawnshift. Reply with one short, friendly sentence.',
       messages: [{ role: 'user', content: 'Hi! Are you there?' }],
       tools: [],
     });
@@ -349,12 +349,12 @@ async function serveStatic(res, pathname) {
 
 // ---------- server ----------
 
-// Blocks other websites open in your browser from using BotCrew's API.
+// Blocks other websites open in your browser from using Dawnshift's API.
 function isTrustedRequest(req) {
   const host = req.headers.host ?? '';
   if (req.headers.origin && req.headers.origin !== `http://${host}`) return false;
   if (req.method !== 'GET' && !String(req.headers['content-type'] ?? '').startsWith('application/json')) return false;
-  // Guards against DNS rebinding while BotCrew is only listening locally.
+  // Guards against DNS rebinding while Dawnshift is only listening locally.
   if (['127.0.0.1', 'localhost', '::1'].includes(HOST) && !/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host)) return false;
   return true;
 }
@@ -389,7 +389,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   runner.start();
   const server = createServer(store, runner);
   server.listen(PORT, HOST, () => {
-    console.log(`BotCrew is running: http://${HOST === '127.0.0.1' ? 'localhost' : HOST}:${PORT}`);
+    console.log(`Dawnshift is running: http://${HOST === '127.0.0.1' ? 'localhost' : HOST}:${PORT}`);
     console.log(`Data is saved in ${DATA_DIR}`);
   });
   const stop = () => {
