@@ -96,6 +96,10 @@ as a plain chat bot.
   web pages and APIs on their own, including ones on your local network.
   Choose "Ask me before every action" for a bot if that matters to you.
 
+## Credits
+
+Made by OliverZS2005, built with help from Claude, an AI by Anthropic.
+
 ## Legal
 
 - [LICENSE](LICENSE): Dawnshift itself. All rights reserved by the owner.
@@ -107,7 +111,7 @@ as a plain chat bot.
   [Privacy Policy](public/privacy.html) and open-source licenses.
 
 Dawnshift works with AI services from Anthropic, OpenAI, xAI, Google, Groq
-and OpenRouter but isn't made by or affiliated with any of them. Their names
+and OpenRouter but isn't made, endorsed or sponsored by any of them. Their names
 belong to their owners.
 
 ## How it works
