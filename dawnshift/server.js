@@ -1,6 +1,7 @@
 // Dawnshift: a team of AI coworkers that runs on your own computer.
 // Start it with `npm start`, then open http://localhost:3777
 import http from 'node:http';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -382,15 +383,34 @@ export function createServer(store, runner) {
   });
 }
 
+function openBrowser(url) {
+  const [cmd, args] =
+    process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]]
+      : process.platform === 'darwin' ? ['open', [url]]
+        : ['xdg-open', [url]];
+  spawn(cmd, args, { stdio: 'ignore', detached: true }).on('error', () => {}).unref();
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   setOwnPort(PORT);
   const store = createStore(DATA_DIR);
   const runner = createRunner({ store, callModel });
   runner.start();
   const server = createServer(store, runner);
+  const url = `http://${HOST === '127.0.0.1' ? 'localhost' : HOST}:${PORT}`;
+  // The double-click launchers pass --open so the app appears by itself.
+  const open = process.argv.includes('--open') ? () => openBrowser(url) : () => {};
+  server.on('error', (err) => {
+    if (err.code !== 'EADDRINUSE') throw err;
+    console.log(`Dawnshift is already running (or port ${PORT} is busy). Opening ${url}`);
+    open();
+    setTimeout(() => process.exit(0), 1000);
+  });
   server.listen(PORT, HOST, () => {
-    console.log(`Dawnshift is running: http://${HOST === '127.0.0.1' ? 'localhost' : HOST}:${PORT}`);
+    console.log(`Dawnshift is running: ${url}`);
     console.log(`Data is saved in ${DATA_DIR}`);
+    console.log('Keep this window open while you use Dawnshift. Close it (or press Ctrl+C) to stop.');
+    open();
   });
   const stop = () => {
     store.flush();

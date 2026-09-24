@@ -8,7 +8,8 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test",
-    "notices": "node scripts/notices.mjs"
+    "notices": "node scripts/notices.mjs",
+    "package": "node scripts/package.mjs"
   },
   "engines": {
     "node": ">=20"

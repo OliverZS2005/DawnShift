@@ -1,0 +1,48 @@
+DAWNSHIFT: your AI team, on your computer
+==========================================
+
+HOW TO START
+
+1. Install Node.js (one time only)
+   Go to https://nodejs.org, download the "LTS" version and install it.
+
+2. Start Dawnshift
+   Windows: double-click "Start Dawnshift (Windows).bat"
+   Mac:     double-click "Start Dawnshift (Mac).command"
+            The first time, macOS may say it can't check the file. If so,
+            right-click the file, choose "Open", then click "Open" again.
+   Linux:   run ./start-linux.sh
+
+   A small window opens, and Dawnshift opens in your web browser by itself.
+   If it doesn't, go to http://localhost:3777
+
+3. Keep the small window open while you use Dawnshift. Your bots only work
+   while it's open. Close it to stop Dawnshift.
+
+
+CONNECTING AN AI (FREE OPTIONS)
+
+- Gemini: get a free key at https://aistudio.google.com/apikey
+- Groq: get a free key at https://console.groq.com/keys
+- Ollama or LM Studio: free AI models that run on your own computer
+
+You can also use paid keys from Anthropic (Claude), OpenAI (ChatGPT) or
+xAI (Grok).
+
+
+YOUR DATA
+
+Everything, including your API keys, is saved in the "data" folder next to
+this file. It never gets sent to us. To move Dawnshift to another computer,
+copy the whole folder. To delete everything, delete the whole folder.
+
+
+LEGAL
+
+By using Dawnshift you agree to the Terms of Service and Privacy Policy
+(Settings > About in the app, or public/terms.html and public/privacy.html).
+Open-source licenses: THIRD_PARTY_NOTICES.md
+
+Dawnshift works with AI services from Anthropic, OpenAI, xAI, Google, Groq
+and OpenRouter but isn't made, endorsed or sponsored by any of them.
+Made by OliverZS2005, built with help from Claude, an AI by Anthropic.

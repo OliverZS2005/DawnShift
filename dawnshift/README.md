@@ -35,7 +35,17 @@ local model for the writer.
 - **Share files.** Bots read and write files in a shared workspace folder.
   You can browse it in the *Files* tab.
 
-## Running it
+## Download (for people who just want to use it)
+
+Download the Dawnshift ZIP, unzip it, install [Node.js](https://nodejs.org)
+(LTS), then double-click **Start Dawnshift (Windows).bat** or
+**Start Dawnshift (Mac).command**. Dawnshift opens in your browser. The
+"READ ME FIRST" file inside the ZIP explains everything.
+
+To build the ZIP yourself, run `npm run package`. It writes
+`dist/Dawnshift-<version>.zip` with the app, its libraries and the launchers.
+
+## Running it from the source code
 
 You need [Node.js](https://nodejs.org) 20 or newer.
 
