@@ -68,6 +68,11 @@ const zip = path.join(root, 'dist', `Dawnshift-web-${version}.zip`);
 fs.rmSync(zip, { force: true });
 execFileSync('zip', ['-r', '-q', '-X', zip, '.'], { cwd: out, stdio: 'inherit' });
 
+// A copy with a fixed name in the repo, so a server can always fetch the
+// latest build from the same address (see "Hosting on your own server" in the README).
+fs.mkdirSync(path.join(root, 'release'), { recursive: true });
+fs.copyFileSync(zip, path.join(root, 'release', 'dawnshift-web.zip'));
+
 const kb = (fs.statSync(path.join(out, 'dawnshift.js')).size / 1024).toFixed(0);
 const mb = (fs.statSync(zip).size / 1024 / 1024).toFixed(1);
 console.log(`Built web-dist/ (app bundle ${kb} KB) and dist/${path.basename(zip)} (${mb} MB)`);

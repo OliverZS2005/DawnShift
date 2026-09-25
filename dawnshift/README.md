@@ -57,6 +57,14 @@ Differences from the downloadable version:
   (`OLLAMA_ORIGINS=*`, or CORS turned on in LM Studio).
 - Dawnshift can only be open in one tab at a time.
 
+### Hosting on your own server
+
+`release/dawnshift-web.zip` is always the latest web build (`npm run
+build:web` refreshes it). A server can fetch it straight from GitHub with
+[deploy/dawnshift-update.sh](deploy/dawnshift-update.sh), which needs a
+read-only GitHub token in `/root/.dawnshift-token`. Serve `/var/www/dawnshift`
+as static files over HTTPS (for example with Nginx and Certbot).
+
 ## Download (for people who just want to use it)
 
 Download the Dawnshift ZIP, unzip it, install [Node.js](https://nodejs.org)
