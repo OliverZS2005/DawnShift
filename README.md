@@ -1,15 +1,13 @@
 # ClaudeCodeIsTuff
 
-## [minecraft-skin-3d-converter](minecraft-skin-3d-converter/)
-
-Turns a Minecraft skin texture into a 3D-printable model (STL, or OBJ+MTL
-with the full-color texture) right in the browser. See its
-[README](minecraft-skin-3d-converter/README.md) for details.
-
 ## [dawnshift](dawnshift/)
 
-Dawnshift is a team of AI coworkers that runs on your own computer. Each bot
+Dawnshift is a team of AI coworkers that runs in any browser (phones too) or on
+your own computer. Each bot
 can use Claude, ChatGPT, Grok, Gemini, Groq, OpenRouter or a local model
 (Ollama, LM Studio). Bots have jobs, remember things, hand work to each other,
 ask before risky actions, and run recurring routines. See its
 [README](dawnshift/README.md) to get started.
+
+The Minecraft skin to 3D-print converter that used to live here moved to its
+own repo: [OliverZS2005/MinecraftSkinTo3D](https://github.com/OliverZS2005/MinecraftSkinTo3D).
