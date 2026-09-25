@@ -7,6 +7,9 @@ import { createApi } from '../src/api.js';
 import { callModel } from '../src/providers.js';
 import { createSync } from './sync.js';
 
+// index.html already explained that this browser is too old.
+if (globalThis.dawnshiftUnsupported) await new Promise(() => {});
+
 // Only one tab may run the bots at a time, or two tabs would overwrite each
 // other's work. A second tab just says so.
 const isOnlyTab = await new Promise((resolve) => {

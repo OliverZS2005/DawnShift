@@ -164,7 +164,7 @@ async function openTask(id) {
   ui.taskChanged = true;
   if (ui.view !== 'team') go('team');
   else render();
-  document.querySelector('.detail')?.scrollIntoView({ block: 'start', behavior: 'instant' });
+  document.querySelector('.detail')?.scrollIntoView({ block: 'start', behavior: 'auto' });
 }
 
 // ---------- rendering ----------
@@ -216,6 +216,7 @@ function renderWelcome() {
     h('p', { class: 'lede' },
       'Dawnshift gives you a team of AI coworkers. Each one has a job, remembers what it learns, and can hand work to the others. ',
       'You choose which AI powers each bot: Claude, ChatGPT, Grok, Gemini, or a model running on your own machine.'),
+    iosInstallHint(),
     local
       ? h('p', { class: 'hint' }, 'Everything, including your keys, is saved in this browser on this device. Sign up to sync it to your other devices, encrypted. Bots work while Dawnshift is open.')
       : null,
@@ -252,6 +253,34 @@ function renderWelcome() {
     h('p', { class: 'legal-links' }, 'By using Dawnshift you agree to the ', h('a', { href: 'terms.html' }, 'Terms of Service'),
       ' and ', h('a', { href: 'privacy.html' }, 'Privacy Policy'), '.'),
   );
+}
+
+// Safari on iPhone and iPad never offers to install web apps by itself, and it
+// may clear a website's data after about a week without a visit. Apps added to
+// the Home Screen are kept, so iPhone users get a nudge to add it.
+const isIos = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isInstalled = () => navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+
+function iosInstallHint() {
+  if (!local || !isIos || isInstalled()) return null;
+  try {
+    if (localStorage.getItem('dawnshift-hide-ios-hint')) return null;
+  } catch {
+    // Private browsing can block storage; just show the hint.
+  }
+  const box = h('div', { class: 'install-hint' },
+    h('h3', {}, 'Add Dawnshift to your Home Screen'),
+    h('p', {}, 'Tap the ', h('strong', {}, 'Share'), ' button (the square with an arrow) in Safari, then ', h('strong', {}, 'Add to Home Screen'),
+      '. Dawnshift then opens like an app, and Safari won\'t clear your data if you don\'t visit for a while.'),
+    h('button', { class: 'quiet', onclick: () => {
+      try {
+        localStorage.setItem('dawnshift-hide-ios-hint', '1');
+      } catch {
+        // Nothing to remember it in; hiding it for now is enough.
+      }
+      box.remove();
+    } }, 'Got it'));
+  return box;
 }
 
 function providerPicker() {
@@ -771,7 +800,7 @@ function mountFiles(main) {
             h('button', {
               onclick: (e) => attempt(async () => {
                 fill(view, h('h2', { style: 'margin-top:2rem' }, f.path), h('div', { class: 'file-view' }, await read(f)));
-                view.scrollIntoView({ behavior: 'instant' });
+                view.scrollIntoView({ behavior: 'auto' });
               }, e.currentTarget),
             }, 'Open'),
             h('button', {

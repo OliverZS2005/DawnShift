@@ -41,6 +41,12 @@ Dawnshift also runs entirely in the browser, with no Node.js needed. On a
 phone, open it and choose **Add to Home Screen** (Safari: Share button;
 Chrome: menu), and it opens like a normal app.
 
+On iPhone and iPad it needs iOS 16.4 or newer (older versions get a message
+asking to update). Safari never offers to install web apps by itself, so
+iPhone users see a short "Add to Home Screen" tip. It matters: Safari can
+clear a website's data after about a week without a visit, but not the data
+of apps added to the Home Screen.
+
 - Build it with `npm run build:web`. That creates `web-dist/` and
   `dist/Dawnshift-web-<version>.zip`.
 - Upload the ZIP's *contents* to any web host, for example the root of your

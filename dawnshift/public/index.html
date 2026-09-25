@@ -9,6 +9,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Dawnshift">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <title>Dawnshift</title>
@@ -31,6 +32,21 @@
   </header>
   <main id="main"></main>
   <div id="toast" role="status" aria-live="polite"></div>
+  <script>
+    // Plain old JavaScript on purpose: this must run even on browsers too old
+    // for the app, to explain why instead of showing a blank page.
+    (function () {
+      var ok = window.structuredClone && window.CompressionStream && window.crypto && crypto.subtle &&
+        window.indexedDB && window.HTMLDialogElement && AbortSignal.timeout && HTMLFormElement.prototype.requestSubmit;
+      if (ok) return;
+      window.dawnshiftUnsupported = true;
+      var ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+      document.getElementById('main').innerHTML = '<div class="page"><h1>Your browser is too old for Dawnshift</h1>' +
+        '<p class="lede">' + (ios
+          ? 'Dawnshift needs iOS 16.4 or newer. Update your iPhone in Settings &rarr; General &rarr; Software Update, then open this page again.'
+          : 'Update your browser (Chrome, Edge, Firefox or Safari) to the latest version, then open this page again.') + '</p></div>';
+    })();
+  </script>
   <dialog id="dialog"></dialog>
   <script type="module" src="app.js"></script>
 </body>
