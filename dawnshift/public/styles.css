@@ -551,3 +551,27 @@ button:active:not(:disabled) { transform: scale(0.97); }
 
 /* Touch screens have no Ctrl+Enter. */
 @media (hover: none) { .composer .hint { display: none; } }
+
+/* ---------- account ---------- */
+
+.account-btn { margin-left: auto; font-weight: 500; }
+.account-btn + .needs-you { margin-left: 0; }
+.sync-dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--ok); display: inline-block; }
+.sync-dot.syncing { background: var(--wait); animation: pulse 1.2s ease-in-out infinite; }
+.sync-dot.offline, .sync-dot.error { background: var(--bad); }
+.account-form { max-width: 26rem; margin-bottom: 1rem; }
+.account-links { font-size: 0.9375rem; }
+.account .block form { max-width: 26rem; }
+.recovery-code {
+  font: 500 1.35rem/1.5 var(--mono);
+  letter-spacing: 0.04em;
+  padding: 1rem 1.25rem;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+  word-break: break-all;
+  user-select: all;
+}
+@media (max-width: 700px) {
+  .account-btn { padding: 0.45rem 0.7rem; }
+}

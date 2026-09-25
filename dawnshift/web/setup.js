@@ -5,6 +5,7 @@ import { createBrowserStore } from '../src/browser-store.js';
 import { createRunner } from '../src/runner.js';
 import { createApi } from '../src/api.js';
 import { callModel } from '../src/providers.js';
+import { createSync } from './sync.js';
 
 // Only one tab may run the bots at a time, or two tabs would overwrite each
 // other's work. A second tab just says so.
@@ -29,6 +30,11 @@ const store = await createBrowserStore();
 const runner = createRunner({ store, callModel });
 runner.start();
 globalThis.dawnshiftLocal = createApi(store, runner);
+
+// Accounts: only switched on if the website also runs the sync server.
+const sync = createSync({ store, runner });
+globalThis.dawnshiftSync = sync;
+sync.start();
 
 // Lets the app open offline and be installed to the home screen.
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {

@@ -57,9 +57,29 @@ Differences from the downloadable version:
   (`OLLAMA_ORIGINS=*`, or CORS turned on in LM Studio).
 - Dawnshift can only be open in one tab at a time.
 
+### Accounts and sync
+
+When the website also runs the sync server (`sync-server/`), people can create
+an account and use the same team on every device they log in on.
+
+- **End-to-end encrypted.** Data is encrypted on the device with a key that
+  only the user's password (or recovery code) unlocks
+  ([src/sync-crypto.js](src/sync-crypto.js)). The server stores a username, a
+  double-hashed login check and encrypted data. It can't read API keys, tasks
+  or files.
+- **No email, no password reset.** At signup everyone gets a recovery code;
+  it's the only way back in after a forgotten password.
+- **Merging.** Changes from several devices are combined item by item, the
+  newer edit wins, and deletions stick ([src/sync-merge.js](src/sync-merge.js)).
+  Bots run on whichever device has Dawnshift open.
+- The server is one file with no dependencies: `node sync-server/server.js`
+  (settings: `PORT`, `HOST`, `DATA_DIR`, and `STATIC_DIR` to also serve the
+  web app, handy for testing). If a site has no sync server, the account
+  features simply don't appear.
+
 ### Hosting on your own server
 
-`release/dawnshift-web.zip` is always the latest web build (`npm run
+`release/dawnshift-web.zip` and `release/dawnshift-sync.zip` are always the latest web build and sync server (`npm run
 build:web` refreshes it). A server can fetch it straight from GitHub with
 [deploy/dawnshift-update.sh](deploy/dawnshift-update.sh), which needs a
 read-only GitHub token in `/root/.dawnshift-token`. Serve `/var/www/dawnshift`
@@ -67,9 +87,10 @@ as static files over HTTPS (for example with Nginx and Certbot).
 
 On a server that already runs Nginx and Certbot,
 [deploy/install-server.sh](deploy/install-server.sh) does all of it: asks for
-the token, installs `dawnshift-update`, adds the Nginx site (and removes it
-again if Nginx rejects it) and gets the HTTPS certificate. It's safe to run
-again.
+the token, installs `dawnshift-update`, runs the sync server as a systemd
+service (as its own `dawnshift` user, data in `/var/lib/dawnshift-sync`), adds
+the Nginx site with `/api/` passed to the sync server (undoing the change if
+Nginx rejects it) and gets the HTTPS certificate. It's safe to run again.
 
 ## Download (for people who just want to use it)
 
@@ -171,7 +192,10 @@ src/tools.js           what bots can do: ask you, remember, delegate, web, files
 src/templates.js       the ready-made roles
 src/store.js           saves everything to data/ (downloadable version)
 src/browser-store.js   saves everything in the browser (web version)
-web/                   starts the engine inside the page, plus the service worker
+web/                   starts the engine inside the page, account sync, service worker
+src/sync-crypto.js     end-to-end encryption for accounts
+src/sync-merge.js      combines data from several devices
+sync-server/           accounts and encrypted storage (no dependencies)
 public/            the web page (plain HTML/CSS/JS, no build step) and legal pages
 scripts/notices.mjs    builds THIRD_PARTY_NOTICES.md and public/licenses.html
 scripts/package.mjs    builds the downloadable ZIP

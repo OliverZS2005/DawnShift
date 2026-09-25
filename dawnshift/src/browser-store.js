@@ -1,15 +1,18 @@
 // In the web version, everything is saved in the browser's own storage
-// (IndexedDB) on the user's device. Nothing is sent to the website.
-import { emptyState, normalizePath, withLookups } from './store-common.js';
+// (IndexedDB) on the user's device. With an account, an encrypted copy is
+// also synced (see web/sync.js); the website itself can't read it.
+import { emptyState, normalizePath, withLookups, stamp } from './store-common.js';
 
 const DB_NAME = 'dawnshift';
+const SYNCED = ['connections', 'bots', 'tasks', 'board'];
 
 function openDb() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(DB_NAME, 2);
     req.onupgradeneeded = () => {
-      req.result.createObjectStore('state');
-      req.result.createObjectStore('files', { keyPath: 'path' });
+      const db = req.result;
+      for (const name of ['state', 'session']) if (!db.objectStoreNames.contains(name)) db.createObjectStore(name);
+      if (!db.objectStoreNames.contains('files')) db.createObjectStore('files', { keyPath: 'path' });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -34,6 +37,7 @@ export async function createBrowserStore() {
 
   let timer = null;
   let writing = Promise.resolve();
+  const listeners = new Set();
 
   function flush() {
     clearTimeout(timer);
@@ -46,9 +50,11 @@ export async function createBrowserStore() {
     return writing;
   }
 
-  function save() {
+  function save({ quiet = false } = {}) {
     state.version++;
     if (!timer) timer = setTimeout(flush, 150);
+    // quiet: a change that came from syncing, which shouldn't be synced back.
+    if (!quiet) for (const fn of listeners) fn();
   }
 
   // Save right away if the page is being closed or hidden.
@@ -80,11 +86,88 @@ export async function createBrowserStore() {
       const key = normalizePath(p);
       if (!key) throw new Error('Give the file a name.');
       await run(db, 'files', 'readwrite', (s) => s.put({ path: key, content, size: content.length, modified: new Date().toISOString() }));
+      for (const fn of listeners) fn();
     },
     async listAll() {
       return (await all()).map(({ path, size, modified }) => ({ path, size, modified }));
     },
   };
 
-  return withLookups({ state, save, flush, files });
+  const store = withLookups({ state, save, flush, files });
+
+  // Called after every change the user or a bot makes.
+  store.onChange = (fn) => listeners.add(fn);
+
+  // Everything that gets synced, as plain data.
+  store.exportData = async () => ({
+    ...structuredClone(Object.fromEntries([...SYNCED, 'secrets', 'deleted'].map((k) => [k, state[k] ?? (k === 'secrets' || k === 'deleted' ? {} : [])]))),
+    files: await all(),
+  });
+
+  // Puts merged data in place. Items that already exist are updated in place,
+  // so a bot that's in the middle of a task keeps working with the same object.
+  // Anything that changed on this device while the sync was in flight (or that
+  // keepLocal says to keep) stays as it is. Returns true if this device still
+  // has changes the merged data doesn't include.
+  store.applyData = async (data, { keepLocal = () => false } = {}) => {
+    let newerHere = false;
+    const deleted = { ...state.deleted, ...data.deleted };
+    for (const name of SYNCED) {
+      const existing = new Map(state[name].map((item) => [item.id, item]));
+      const seen = new Set();
+      const next = [];
+      for (const item of data[name]) {
+        seen.add(item.id);
+        const mine = existing.get(item.id);
+        if (!mine) next.push(item);
+        else if (keepLocal(item.id) || stamp(mine) > stamp(item)) {
+          newerHere ||= stamp(mine) > stamp(item);
+          next.push(mine);
+        } else {
+          for (const k of Object.keys(mine)) if (!(k in item)) delete mine[k];
+          next.push(Object.assign(mine, item));
+        }
+      }
+      // Items created here in the meantime.
+      for (const mine of state[name]) {
+        if (!seen.has(mine.id) && !(mine.id in deleted)) {
+          next.push(mine);
+          newerHere = true;
+        }
+      }
+      state[name] = next;
+    }
+    const secrets = { ...data.secrets };
+    for (const [k, v] of Object.entries(state.secrets)) {
+      if (!(k in secrets) && !(`secret:${k}` in deleted)) {
+        secrets[k] = v;
+        newerHere = true;
+      }
+    }
+    state.secrets = secrets;
+    state.deleted = deleted;
+    await run(db, 'files', 'readwrite', (s) => {
+      for (const f of data.files) s.put(f);
+    });
+    save({ quiet: true });
+    await flush();
+    return newerHere;
+  };
+
+  // Removes all Dawnshift data from this browser (used when logging out).
+  store.clearAll = async () => {
+    Object.assign(state, emptyState(), { version: state.version + 1 });
+    await run(db, 'files', 'readwrite', (s) => s.clear());
+    await flush();
+  };
+
+  // The login on this device. The data key is stored as a key the page can
+  // use but never read out, so it can't be copied off the device as text.
+  store.session = {
+    get: () => run(db, 'session', 'readonly', (s) => s.get('main')),
+    set: (value) => run(db, 'session', 'readwrite', (s) => s.put(value, 'main')),
+    clear: () => run(db, 'session', 'readwrite', (s) => s.delete('main')),
+  };
+
+  return store;
 }

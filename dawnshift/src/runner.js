@@ -318,6 +318,7 @@ export function createRunner({ store, callModel, maxConcurrent = 3, onChange = (
         for (const r of bot.routines ?? []) {
           if (!r.everyMinutes || new Date(r.nextRunAt ?? 0).getTime() > at) continue;
           r.nextRunAt = new Date(at + r.everyMinutes * 60000).toISOString();
+          bot.updatedAt = new Date(at).toISOString();
           const stillGoing = store.state.tasks.some((t) => t.routineId === r.id && ACTIVE.has(t.status));
           if (!stillGoing) createTask({ botId: bot.id, title: r.title, instructions: r.instructions, from: 'Routine', routineId: r.id });
         }

@@ -73,6 +73,11 @@ execFileSync('zip', ['-r', '-q', '-X', zip, '.'], { cwd: out, stdio: 'inherit' }
 fs.mkdirSync(path.join(root, 'release'), { recursive: true });
 fs.copyFileSync(zip, path.join(root, 'release', 'dawnshift-web.zip'));
 
+// 5. The account/sync server, packaged the same way for the server to fetch.
+const syncZip = path.join(root, 'release', 'dawnshift-sync.zip');
+fs.rmSync(syncZip, { force: true });
+execFileSync('zip', ['-q', '-X', syncZip, 'server.js', 'package.json'], { cwd: path.join(root, 'sync-server'), stdio: 'inherit' });
+
 const kb = (fs.statSync(path.join(out, 'dawnshift.js')).size / 1024).toFixed(0);
 const mb = (fs.statSync(zip).size / 1024 / 1024).toFixed(1);
 console.log(`Built web-dist/ (app bundle ${kb} KB) and dist/${path.basename(zip)} (${mb} MB)`);

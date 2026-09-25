@@ -1,6 +1,6 @@
 // Dawnshift's API: everything the interface can ask for or change.
 // server.js serves it over HTTP; the web version calls it directly in the page.
-import { newId } from './store-common.js';
+import { newId, nowIso, markDeleted } from './store-common.js';
 import { PRESETS, callModel, listModels, apiKeyFor } from './providers.js';
 import { ABILITIES } from './tools.js';
 import { TEMPLATES, STARTER_TEAM } from './templates.js';
@@ -144,21 +144,24 @@ export function createApi(store, runner) {
 
   // AI connections
   on('POST', '/api/connections', ({ body }) => {
-    const c = { id: newId('conn'), ...cleanConnection(body) };
+    const c = { id: newId('conn'), ...cleanConnection(body), updatedAt: nowIso() };
     store.state.connections.push(c);
     store.save();
     return publicConnection(c);
   });
   on('PUT', '/api/connections/:id', ({ params, body }) => {
     const i = store.state.connections.indexOf(getConn(params.id));
-    store.state.connections[i] = cleanConnection(body, store.state.connections[i]);
+    store.state.connections[i] = { ...cleanConnection(body, store.state.connections[i]), updatedAt: nowIso() };
     store.save();
     return publicConnection(store.state.connections[i]);
   });
   on('DELETE', '/api/connections/:id', ({ params }) => {
     const c = getConn(params.id);
     store.state.connections = store.state.connections.filter((x) => x !== c);
-    for (const b of store.state.bots) if (b.connectionId === c.id) b.connectionId = '';
+    markDeleted(store.state, c.id);
+    for (const b of store.state.bots) {
+      if (b.connectionId === c.id) Object.assign(b, { connectionId: '', updatedAt: nowIso() });
+    }
     store.save();
     return { ok: true };
   });
@@ -181,7 +184,7 @@ export function createApi(store, runner) {
 
   // Bots
   on('POST', '/api/bots', ({ body }) => {
-    const bot = { id: newId('bot'), createdAt: new Date().toISOString(), ...cleanBot(body, store) };
+    const bot = { id: newId('bot'), createdAt: nowIso(), ...cleanBot(body, store), updatedAt: nowIso() };
     store.state.bots.push(bot);
     store.save();
     return bot;
@@ -192,7 +195,7 @@ export function createApi(store, runner) {
     for (const key of STARTER_TEAM) {
       const t = TEMPLATES.find((x) => x.key === key);
       if (store.state.bots.some((b) => b.name.toLowerCase() === t.name.toLowerCase())) continue;
-      const bot = { id: newId('bot'), createdAt: new Date().toISOString(), ...cleanBot({ ...t, connectionId }, store) };
+      const bot = { id: newId('bot'), createdAt: nowIso(), ...cleanBot({ ...t, connectionId }, store), updatedAt: nowIso() };
       store.state.bots.push(bot);
       made.push(bot);
     }
@@ -201,7 +204,7 @@ export function createApi(store, runner) {
   });
   on('PUT', '/api/bots/:id', ({ params, body }) => {
     const bot = getBot(params.id);
-    Object.assign(bot, cleanBot(body, store, bot));
+    Object.assign(bot, cleanBot(body, store, bot), { updatedAt: nowIso() });
     for (const t of store.state.tasks) if (t.botId === bot.id) t.botName = bot.name;
     store.save();
     return bot;
@@ -210,6 +213,7 @@ export function createApi(store, runner) {
     const bot = getBot(params.id);
     for (const t of store.state.tasks) if (t.botId === bot.id) runner.cancel(t.id);
     store.state.bots = store.state.bots.filter((b) => b !== bot);
+    markDeleted(store.state, bot.id);
     store.save();
     return { ok: true };
   });
@@ -218,6 +222,7 @@ export function createApi(store, runner) {
     const i = Number(body.index);
     if (!Number.isInteger(i) || !bot.memory?.[i]) throw bad('No such memory.');
     bot.memory.splice(i, 1);
+    bot.updatedAt = nowIso();
     store.save();
     return bot;
   });
@@ -240,6 +245,7 @@ export function createApi(store, runner) {
   on('POST', '/api/tasks/:id/cancel', ({ params }) => (runner.cancel(params.id), { ok: true }));
   on('POST', '/api/tasks/clear-finished', () => {
     const keep = (t) => !['done', 'failed', 'cancelled'].includes(t.status) || store.state.tasks.some((p) => p.id === t.parentId && ['queued', 'running', 'needs_you', 'waiting'].includes(p.status));
+    for (const t of store.state.tasks) if (!keep(t)) markDeleted(store.state, t.id);
     store.state.tasks = store.state.tasks.filter(keep);
     store.save();
     return { ok: true };
@@ -247,7 +253,7 @@ export function createApi(store, runner) {
 
   // Team board
   on('POST', '/api/board', ({ body }) => {
-    store.state.board.push({ id: newId('post'), author: 'You', message: cleanText(body.message, 4000, 'Message'), at: new Date().toISOString() });
+    store.state.board.push({ id: newId('post'), author: 'You', message: cleanText(body.message, 4000, 'Message'), at: nowIso() });
     store.save();
     return { ok: true };
   });
@@ -257,11 +263,14 @@ export function createApi(store, runner) {
     const name = String(body.name ?? '').trim().toUpperCase();
     if (!/^[A-Z0-9_]{1,40}$/.test(name)) throw bad('Key names can only use letters, numbers and _ (like STRIPE_KEY).');
     store.state.secrets[name] = cleanText(body.value, 4000, 'Value');
+    if (store.state.deleted) delete store.state.deleted[`secret:${name}`];
     store.save();
     return { ok: true };
   });
   on('DELETE', '/api/secrets/:name', ({ params }) => {
-    delete store.state.secrets[decodeURIComponent(params.name)];
+    const name = decodeURIComponent(params.name);
+    delete store.state.secrets[name];
+    markDeleted(store.state, `secret:${name}`);
     store.save();
     return { ok: true };
   });

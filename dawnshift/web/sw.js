@@ -19,6 +19,8 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== location.origin) return;
+  // Account and sync requests always go straight to the server.
+  if (url.pathname.includes('/api/')) return;
   // Network first, so updates show up right away; the saved copy is the fallback.
   event.respondWith(
     fetch(event.request)

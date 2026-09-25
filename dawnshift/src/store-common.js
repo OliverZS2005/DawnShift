@@ -8,7 +8,19 @@ export const emptyState = () => ({
   tasks: [],
   board: [],
   secrets: {},
+  // id -> when it was deleted, so syncing devices don't bring it back.
+  deleted: {},
 });
+
+export const nowIso = () => new Date().toISOString();
+
+// When an item last changed, for deciding which copy is newer.
+export const stamp = (item) => Date.parse(item?.updatedAt ?? item?.at ?? item?.createdAt ?? 0) || 0;
+
+export function markDeleted(state, id) {
+  state.deleted ??= {};
+  state.deleted[id] = Date.now();
+}
 
 export function newId(prefix) {
   const bytes = globalThis.crypto.getRandomValues(new Uint8Array(5));

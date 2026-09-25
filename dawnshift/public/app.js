@@ -179,18 +179,19 @@ function render() {
   document.title = waiting.length ? `(${waiting.length}) Dawnshift` : 'Dawnshift';
 
   const main = document.getElementById('main');
-  const view = !S.connections.length || !S.bots.length ? (ui.view === 'settings' ? 'settings' : 'welcome') : ui.view;
+  const setupDone = S.connections.length && S.bots.length;
+  const view = setupDone || ['settings', 'account'].includes(ui.view) ? ui.view : 'welcome';
   if (mounted !== view) {
     document.body.append(buddy.el);
     fill(main);
     mounted = view;
     ui.taskChanged = true;
-    ({ welcome: mountWelcome, team: mountTeam, board: mountBoard, files: mountFiles, settings: mountSettings })[view](main);
+    ({ welcome: mountWelcome, team: mountTeam, board: mountBoard, files: mountFiles, settings: mountSettings, account: mountAccount })[view](main);
     main.firstElementChild?.classList.add('view-enter');
   }
   const fresh = mounted !== ui.lastRendered;
   ui.lastRendered = mounted;
-  ({ welcome: renderWelcome, team: renderTeam, board: renderBoard, files: () => {}, settings: renderSettings })[view]();
+  ({ welcome: renderWelcome, team: renderTeam, board: renderBoard, files: () => {}, settings: renderSettings, account: () => {} })[view]();
   if (fresh) stagger(main);
 }
 
@@ -242,6 +243,9 @@ function renderWelcome() {
             }, 'Hire the starter team'),
             h('button', { disabled: !hasConn, onclick: () => editBot() }, 'Hire one bot')))),
     ),
+    sync && syncStatus.available && !syncStatus.loggedIn
+      ? h('p', {}, 'Already have an account? ', h('a', { href: '#', onclick: (e) => { e.preventDefault(); go('account'); } }, 'Log in'), ' to get your team on this device.')
+      : null,
     h('p', { class: 'legal-links' }, 'By using Dawnshift you agree to the ', h('a', { href: 'terms.html' }, 'Terms of Service'),
       ' and ', h('a', { href: 'privacy.html' }, 'Privacy Policy'), '.'),
   );
@@ -853,6 +857,242 @@ function renderSettings() {
       : [h('p', { class: 'hint' }, 'No app keys yet.')]));
 }
 
+// ---------- account (web version with a sync server) ----------
+
+// Present only in the web version (see web/setup.js).
+const sync = globalThis.dawnshiftSync;
+let syncStatus = { available: false, loggedIn: false };
+
+function syncLabel(st) {
+  if (st.state === 'syncing') return 'Syncing…';
+  if (st.state === 'offline') return 'Offline. Will sync when you are back online.';
+  if (st.state === 'error') return `Sync problem: ${st.message}`;
+  if (st.lastSynced) return `Synced ${ago(st.lastSynced)}`;
+  return 'Not synced yet';
+}
+
+function field(label, attrs) {
+  const input = h('input', { required: true, ...attrs });
+  return { input, el: h('div', { class: 'field' }, h('label', { for: attrs.id }, label), input) };
+}
+
+function mountAccount(main) {
+  const page = h('div', { class: 'page account', id: 'account-page' });
+  main.append(page);
+  let shownFor = null;
+  const draw = (st) => {
+    if (!document.body.contains(page)) return;
+    const key = !st.available ? 'none' : st.loggedIn ? `in:${st.username}` : 'out';
+    if (key !== shownFor && !page.dataset.busy) {
+      shownFor = key;
+      fill(page, ...(!st.available ? accountUnavailable() : st.loggedIn ? accountPanel() : loginPanel('login')));
+    }
+    const line = page.querySelector('#sync-line');
+    if (line) line.textContent = syncLabel(st);
+  };
+  const stop = sync?.onStatus(draw);
+  if (!sync) draw({ available: false });
+  // Stop listening once another page is shown.
+  new MutationObserver((_, obs) => {
+    if (!document.body.contains(page)) {
+      stop?.();
+      obs.disconnect();
+    }
+  }).observe(main, { childList: true });
+}
+
+function accountUnavailable() {
+  return [
+    h('h1', {}, 'Accounts'),
+    h('p', { class: 'lede' }, sync
+      ? "This Dawnshift website doesn't have its account server set up, so your data stays on this device only."
+      : 'Accounts are part of the web version of Dawnshift. This downloadable version keeps everything on this computer.'),
+  ];
+}
+
+function loginPanel(mode) {
+  const page = document.getElementById('account-page');
+  const redraw = (m) => fill(page, ...loginPanel(m));
+  const user = field('Username', { id: 'acc-user', autocomplete: 'username', autocapitalize: 'none', spellcheck: false, minlength: 3, maxlength: 32 });
+  const pass = field(mode === 'recover' ? 'New password' : 'Password', {
+    id: 'acc-pass', type: 'password', autocomplete: mode === 'login' ? 'current-password' : 'new-password', minlength: mode === 'login' ? 1 : 8,
+  });
+  const confirmPass = field('Type the password again', { id: 'acc-pass2', type: 'password', autocomplete: 'new-password' });
+  const code = field('Recovery code', { id: 'acc-code', autocomplete: 'off', autocapitalize: 'characters', spellcheck: false, placeholder: 'ABCD-EFGH-…' });
+  const agree = h('input', { type: 'checkbox', required: true });
+  const submit = h('button', { class: 'primary', type: 'submit' }, { login: 'Log in', signup: 'Create account', recover: 'Set new password and log in' }[mode]);
+
+  const form = h('form', {
+    class: 'account-form',
+    onsubmit: (e) => {
+      e.preventDefault();
+      if (mode === 'signup' && pass.input.value !== confirmPass.input.value) return toast('The two passwords are different.', true);
+      page.dataset.busy = '1';
+      submit.textContent = 'Working… (this takes a moment)';
+      let showingCode = false;
+      attempt(async () => {
+        try {
+          const name = user.input.value.trim();
+          if (mode === 'login') {
+            await sync.login(name, pass.input.value);
+            buddy.nod(`Welcome back, ${name}!`);
+          } else if (mode === 'recover') {
+            await sync.recover(name, code.input.value, pass.input.value);
+            buddy.nod('New password set. Welcome back!');
+          } else {
+            const recoveryCode = await sync.signup(name, pass.input.value);
+            showingCode = true;
+            fill(page, ...recoveryScreen(recoveryCode));
+            buddy.cheer('Account created!');
+            return;
+          }
+          delete page.dataset.busy;
+          await refresh(true);
+          go(S.bots.length ? 'team' : 'welcome');
+        } finally {
+          // The recovery code screen stays up until the user confirms it's saved.
+          if (!showingCode) delete page.dataset.busy;
+          submit.textContent = { login: 'Log in', signup: 'Create account', recover: 'Set new password and log in' }[mode];
+        }
+      }, submit);
+    },
+  },
+  user.el,
+  mode === 'recover' ? code.el : null,
+  pass.el,
+  mode === 'signup' ? confirmPass.el : null,
+  mode === 'signup'
+    ? h('label', { class: 'check' }, agree, h('span', {}, 'I agree to the ', h('a', { href: 'terms.html', target: '_blank' }, 'Terms of Service'), ' and ', h('a', { href: 'privacy.html', target: '_blank' }, 'Privacy Policy'), '.'))
+    : null,
+  h('div', { class: 'row', style: 'margin-top:0.5rem' }, submit));
+
+  const link = (label, m) => h('a', { href: '#', onclick: (e) => { e.preventDefault(); redraw(m); } }, label);
+  return [
+    h('h1', {}, { login: 'Log in', signup: 'Create an account', recover: 'Forgot your password?' }[mode]),
+    h('p', { class: 'lede' }, mode === 'recover'
+      ? 'Use the recovery code you saved when you created your account to choose a new password.'
+      : 'With an account, your team, AI keys and files follow you to every phone and computer you log in on. Everything is encrypted on your device first: not even the server owner can read it.'),
+    form,
+    h('p', { class: 'account-links' },
+      mode !== 'login' ? link('Log in instead', 'login') : link('Create an account', 'signup'),
+      mode !== 'recover' ? [' · ', link('Forgot password?', 'recover')] : null),
+    mode === 'signup'
+      ? h('p', { class: 'hint' }, "There's no email reset: if you forget your password, only your recovery code can get you back in. You'll get it on the next screen.")
+      : null,
+  ];
+}
+
+function recoveryScreen(recoveryCode) {
+  const page = document.getElementById('account-page');
+  page.dataset.busy = '1';
+  const saved = h('input', { type: 'checkbox' });
+  const done = h('button', { class: 'primary', disabled: true, onclick: async () => {
+    delete page.dataset.busy;
+    await refresh(true);
+    go(S.bots.length ? 'team' : 'welcome');
+  } }, 'Continue');
+  saved.addEventListener('change', () => (done.disabled = !saved.checked));
+  const text = `Dawnshift recovery code for ${syncStatus.username}\n\n${recoveryCode}\n\nUse it at "Forgot password?" if you forget your password. Keep it somewhere safe.\n`;
+  return [
+    h('h1', {}, 'Save your recovery code'),
+    h('p', { class: 'lede' }, "If you forget your password, this code is the only way back into your account. Nobody can reset it for you, because nobody else can read your data."),
+    h('div', { class: 'recovery-code', tabindex: 0 }, recoveryCode),
+    h('div', { class: 'row', style: 'margin:1rem 0' },
+      h('button', { onclick: () => navigator.clipboard.writeText(recoveryCode).then(() => toast('Copied.'), () => toast("Couldn't copy. Write it down instead.", true)) }, 'Copy'),
+      h('button', { onclick: () => {
+        const a = h('a', { href: URL.createObjectURL(new Blob([text], { type: 'text/plain' })), download: 'dawnshift-recovery-code.txt' });
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      } }, 'Download')),
+    h('label', { class: 'check' }, saved, "I've saved my recovery code somewhere safe"),
+    h('div', { class: 'row', style: 'margin-top:1rem' }, done),
+  ];
+}
+
+function accountPanel() {
+  const current = field('Current password', { id: 'acc-cur', type: 'password', autocomplete: 'current-password' });
+  const next = field('New password', { id: 'acc-new', type: 'password', autocomplete: 'new-password', minlength: 8 });
+  const change = h('button', { type: 'submit' }, 'Change password');
+  const delPass = field('Your password', { id: 'acc-del', type: 'password', autocomplete: 'current-password' });
+  const del = h('button', { type: 'submit', class: 'danger' }, 'Delete my account');
+
+  return [
+    h('h1', {}, syncStatus.username),
+    h('p', { class: 'lede', id: 'sync-line' }, syncLabel(syncStatus)),
+    h('div', { class: 'row' },
+      h('button', { class: 'primary', onclick: (e) => attempt(() => sync.syncNow(), e.currentTarget) }, 'Sync now'),
+      h('button', { onclick: () => logoutDialog() }, 'Log out')),
+    h('p', { class: 'hint', style: 'margin-top:1rem' },
+      'Your team, AI keys, tasks and files sync to every device you log in on. Bots work on whichever device has Dawnshift open, so keep it open on one device at a time to avoid doing the same job twice.'),
+
+    h('section', { class: 'block', style: 'margin-top:2.5rem' },
+      h('h2', {}, 'Change password'),
+      h('p', { class: 'hint' }, 'Your other devices will be logged out.'),
+      h('form', {
+        onsubmit: (e) => {
+          e.preventDefault();
+          attempt(async () => {
+            await sync.changePassword(current.input.value, next.input.value);
+            current.input.value = next.input.value = '';
+            toast('Password changed.');
+          }, change);
+        },
+      }, current.el, next.el, change)),
+
+    h('section', { class: 'block' },
+      h('h2', {}, 'Delete account'),
+      h('p', { class: 'hint' }, 'Deletes your account and the synced copy of your data from the server. This device keeps its own copy until you log out.'),
+      h('form', {
+        onsubmit: (e) => {
+          e.preventDefault();
+          if (!confirm('Delete your account for good? This cannot be undone.')) return;
+          attempt(async () => {
+            await sync.deleteAccount(delPass.input.value);
+            toast('Account deleted.');
+          }, del);
+        },
+      }, delPass.el, del)),
+  ];
+}
+
+function logoutDialog() {
+  const dlg = document.getElementById('dialog');
+  const out = (keepData) => attempt(async () => {
+    await sync.logout({ keepData });
+    dlg.close();
+    // Start fresh, so nothing keeps running with the removed data.
+    if (!keepData) return location.reload();
+    await refresh(true);
+    toast('Logged out.');
+  });
+  fill(dlg, h('form', { method: 'dialog' },
+    h('div', { class: 'dialog-head' }, h('h2', {}, 'Log out'), h('button', { class: 'quiet', value: 'cancel' }, 'Close')),
+    h('p', {}, 'Remove your Dawnshift data (including your AI keys) from this device? Your account keeps its copy, so you get everything back when you log in again.'),
+    h('div', { class: 'dialog-foot' },
+      h('button', { type: 'button', onclick: () => out(true) }, 'Log out, keep data here'),
+      h('button', { type: 'button', class: 'primary', onclick: () => out(false) }, 'Log out and remove'))));
+  dlg.showModal();
+}
+
+// The account button in the top bar.
+function mountAccountButton() {
+  if (!sync) return;
+  const btn = h('button', { class: 'account-btn', hidden: true, onclick: () => go('account') });
+  document.querySelector('.topbar').insertBefore(btn, document.getElementById('needs-you'));
+  sync.onStatus((st) => {
+    const wasLoggedIn = syncStatus.loggedIn;
+    const changed = st.available !== syncStatus.available || st.loggedIn !== wasLoggedIn;
+    syncStatus = st;
+    if (changed && S && mounted === 'welcome') render();
+    btn.hidden = !st.available;
+    fill(btn, st.loggedIn ? [h('span', { class: `sync-dot ${st.state}` }), st.username] : 'Log in');
+    btn.title = st.loggedIn ? syncLabel(st) : 'Log in to sync across devices';
+    // Data may have arrived from another device.
+    if (st.loggedIn && st.state === 'synced') refresh().catch(() => {});
+    if (wasLoggedIn && !st.loggedIn && st.message) toast(st.message, true);
+  });
+}
+
 // ---------- start ----------
 
 document.querySelectorAll('[data-view]').forEach((el) =>
@@ -868,4 +1108,5 @@ document.getElementById('needs-you').addEventListener('click', () => {
   if (first) openTask(first.id);
 });
 
+mountAccountButton();
 refresh(true).catch((err) => toast(err.message, true)).finally(() => setTimeout(poll, 1500));

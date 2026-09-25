@@ -107,6 +107,7 @@ export const TOOLS = [
     async run({ note }, { bot }) {
       bot.memory ??= [];
       bot.memory.push(String(note).slice(0, 500));
+      bot.updatedAt = new Date().toISOString();
       if (bot.memory.length > MAX_MEMORY) bot.memory.splice(0, bot.memory.length - MAX_MEMORY);
       return { content: 'Saved to memory.' };
     },
