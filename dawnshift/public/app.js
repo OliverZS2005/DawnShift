@@ -726,12 +726,44 @@ function editConnection(conn) {
     conn.keyFromEnv ? h('div', { class: 'hint' }, `Using the key from ${preset.env}.`) : null),
   preset.kind === 'openai'
     ? h('div', { class: 'field' }, h('label', { for: 'c-base' }, 'Server address'), f.base,
-        preset.local ? h('div', { class: 'hint' }, conn.preset === 'ollama' ? 'Start Ollama and pull a model that supports tools (for example with "ollama pull" plus the model name).' : 'Start the local server in LM Studio and load a model.') : null)
+        preset.local ? h('div', { class: 'hint' }, conn.preset === 'ollama' ? 'Start Ollama and pull a model that supports tools (for example with "ollama pull" plus the model name).' : 'Start the local server in LM Studio and load a model.') : null,
+        preset.local && local ? localAiSteps(conn.preset) : null)
     : null,
   h('div', { class: 'field' }, h('label', { for: 'c-model' }, 'Default model'), h('div', { class: 'row' }, h('div', { class: 'grow' }, f.model, f.models), loadModels)),
   h('div', { class: 'dialog-foot' }, h('span'), save));
   fill(dlg, form);
   dlg.showModal();
+}
+
+// Setup steps for using an AI on your own computer from the web version.
+// Browsers only allow it if the AI server allows this website, and the
+// user allows "local network" access when the browser asks.
+function localAiSteps(preset) {
+  const origin = location.origin;
+  const safari = /^((?!chrome|chromium|crios|fxios|edg|android).)*safari/i.test(navigator.userAgent);
+  const code = (text) => h('code', { class: 'copy', title: 'Click to copy', onclick: () => navigator.clipboard?.writeText(text).then(() => toast('Copied.')) }, text);
+  const ollama = [
+    h('li', {}, 'Tell Ollama to allow this website. Set ', code(`OLLAMA_ORIGINS=${origin}`), ':',
+      h('ul', {},
+        h('li', {}, h('strong', {}, 'Windows: '), 'Start menu → "Edit environment variables for your account" → New → name ', code('OLLAMA_ORIGINS'), ', value ', code(origin), '. Then quit Ollama from the taskbar and start it again.'),
+        h('li', {}, h('strong', {}, 'Mac: '), 'in Terminal run ', code(`launchctl setenv OLLAMA_ORIGINS "${origin}"`), ', then quit and reopen Ollama.'),
+        h('li', {}, h('strong', {}, 'Linux: '), code('sudo systemctl edit ollama'), ', add ', code(`Environment="OLLAMA_ORIGINS=${origin}"`), ' under [Service], then ', code('sudo systemctl restart ollama'), '.'))),
+    h('li', {}, 'Using Dawnshift on a different device than Ollama (like your phone)? Also set ', code('OLLAMA_HOST=0.0.0.0'), ' the same way, and use the computer\'s address as the server address, like ', code('http://192.168.1.20:11434/v1'), '.'),
+  ];
+  const lmstudio = [
+    h('li', {}, 'In LM Studio open the Developer tab → Server settings and turn on ', h('strong', {}, 'Enable CORS'), '.'),
+    h('li', {}, 'Using Dawnshift on a different device (like your phone)? Also turn on ', h('strong', {}, 'Serve on Local Network'), ' and use the address LM Studio shows, like ', code('http://192.168.1.20:1234/v1'), '.'),
+  ];
+  return h('details', { class: 'call local-steps', open: safari || null },
+    h('summary', {}, 'Setup steps for the web version'),
+    h('div', { class: 'local-steps-body' },
+      safari
+        ? h('p', { class: 'warn' }, "Safari (on iPhone, iPad and Mac) doesn't let websites reach an AI on your own devices. Use Chrome or Edge on a computer or Android phone, or the downloadable version of Dawnshift.")
+        : null,
+      h('ol', {},
+        ...(preset === 'ollama' ? ollama : lmstudio),
+        h('li', {}, 'Click ', h('strong', {}, 'Load models'), '. If your browser asks to let this site access ', h('em', {}, 'devices on your local network'), ', click ', h('strong', {}, 'Allow'), '.')),
+      h('p', { class: 'hint' }, 'Works in Chrome and Edge (computer and Android). Firefox only works when the AI is on the same computer.')));
 }
 
 // ---------- board ----------

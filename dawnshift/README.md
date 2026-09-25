@@ -59,8 +59,15 @@ Differences from the downloadable version:
   background.
 - Browsers only let a page read websites that allow it, so the "Read web
   pages" and "web APIs" abilities work with fewer sites.
-- Ollama and LM Studio only work if they're set to allow web pages
-  (`OLLAMA_ORIGINS=*`, or CORS turned on in LM Studio).
+- Anyone can use their own Ollama or LM Studio from the web version in
+  Chrome or Edge (computer or Android): the AI server has to allow the
+  website (`OLLAMA_ORIGINS=https://your-site`, or "Enable CORS" in LM
+  Studio), and the user clicks **Allow** when the browser asks about devices
+  on the local network. Requests to local addresses carry
+  `targetAddressSpace`, which is what Chrome's Local Network Access rules
+  expect. The connection window shows these steps with the site's own
+  address filled in. Safari (iPhone, iPad, Mac) blocks this entirely, and
+  Firefox only allows it when the AI is on the same computer.
 - Dawnshift can only be open in one tab at a time.
 
 ### Accounts and sync

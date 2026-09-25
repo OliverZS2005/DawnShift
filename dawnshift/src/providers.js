@@ -104,10 +104,37 @@ function anthropicClient(conn) {
   });
 }
 
+// Where a host is, as browsers see it: on this device ("loopback"), on the
+// home network ("local"), or on the internet (null).
+export function addressSpace(host) {
+  const h = host.replace(/^\[|\]$/g, '').toLowerCase();
+  if (h === 'localhost' || h.endsWith('.localhost') || /^127\./.test(h) || h === '::1') return 'loopback';
+  if (/^(10\.|192\.168\.|169\.254\.)/.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h) || /^f[cd]/.test(h) || h.endsWith('.local')) return 'local';
+  return null;
+}
+
+// In the web version, requests to an AI on the user's own computer or home
+// network say so up front. Chrome and Edge then ask the user for permission
+// ("Allow access to devices on your local network") instead of blocking them
+// as insecure. Browsers that don't know the option simply ignore it.
+function browserFetch(url, init = {}) {
+  const space = addressSpace(new URL(String(url)).hostname);
+  return fetch(url, space ? { ...init, targetAddressSpace: space } : init);
+}
+
 function openaiClient(conn) {
   // Local servers don't check the key, but the SDK insists on having one.
-  return new OpenAI({ apiKey: apiKeyFor(conn) || 'not-needed', baseURL: conn.baseUrl, dangerouslyAllowBrowser: IN_BROWSER });
+  return new OpenAI({
+    apiKey: apiKeyFor(conn) || 'not-needed',
+    baseURL: conn.baseUrl,
+    dangerouslyAllowBrowser: IN_BROWSER,
+    ...(IN_BROWSER ? { fetch: browserFetch } : {}),
+  });
 }
+
+// Safari (on iPhone, iPad and Mac) never lets a website reach a server on the
+// user's own devices over plain http.
+const IS_SAFARI = IN_BROWSER && /^((?!chrome|chromium|crios|fxios|edg|android).)*safari/i.test(navigator.userAgent);
 
 export function toAnthropicMessages(messages) {
   const out = [];
@@ -288,16 +315,29 @@ export async function listModels(conn) {
   }
 }
 
+// True if the connection points at the user's own computer or home network.
+function isOwnDevice(conn) {
+  try {
+    return Boolean(addressSpace(new URL(conn.baseUrl).hostname)) || Boolean(PRESETS[conn.preset]?.local);
+  } catch {
+    return false;
+  }
+}
+
 function friendlyError(conn, err) {
   const where = conn.baseUrl || 'api.anthropic.com';
   let message = err.message;
   if (err instanceof Anthropic.AuthenticationError || err instanceof OpenAI.AuthenticationError) {
     message = `${conn.name}: the API key was rejected. Check it in Settings.`;
+  } else if (IN_BROWSER && isOwnDevice(conn) && (err instanceof OpenAI.APIConnectionError || err instanceof OpenAI.PermissionDeniedError)) {
+    const name = PRESETS[conn.preset]?.label.replace(' (local)', '') ?? 'the AI server';
+    message = IS_SAFARI
+      ? `Safari doesn't let websites reach an AI running on your own devices. Use Chrome or Edge on a computer, or the downloadable version of Dawnshift.`
+      : `Couldn't reach ${name} at ${where}. Check that it's running, that it allows this website (see "Setup steps" in the connection's settings), and that you clicked Allow if your browser asked about devices on your local network.`;
   } else if (err instanceof Anthropic.APIConnectionError || err instanceof OpenAI.APIConnectionError) {
     const name = PRESETS[conn.preset]?.label.replace(' (local)', '');
-    const webHint = conn.preset === 'ollama' ? 'set OLLAMA_ORIGINS=* before starting Ollama' : 'turn on CORS in its server settings';
     message = PRESETS[conn.preset]?.local
-      ? `Couldn't reach ${where}. Is ${name} running?${IN_BROWSER ? ` The web version also needs it to allow web pages: ${webHint}.` : ''}`
+      ? `Couldn't reach ${where}. Is ${name} running?`
       : IN_BROWSER
         ? `Couldn't reach ${where}. Check your internet connection. If it keeps happening, this AI service may not allow connections from a web page; try another one or the downloadable version.`
         : `Couldn't reach ${where}. Check your internet connection and the server address.`;
