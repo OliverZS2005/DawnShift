@@ -70,19 +70,34 @@ rm -f "$SITE.bak" "$SNIPPET.bak"
 systemctl reload nginx
 sleep 1
 
-# 4. Check it through Nginx, the way the app will use it.
-check() {
-  curl -fsS --max-time 15 --resolve "$DOMAIN:443:127.0.0.1" -H "Authorization: Bearer $1" "https://$DOMAIN/ollama/v1/models" 2>/dev/null ||
-    curl -fsS --max-time 15 -H "Host: $DOMAIN" -H "Authorization: Bearer $1" "http://127.0.0.1/ollama/v1/models" 2>/dev/null
+# 4. Check it through Nginx, the way the app will use it: over https, or
+# plain http if the site has no https yet. Prints the HTTP status code; the
+# answer itself goes to $OUT.
+OUT=$(mktemp)
+trap 'rm -f "$OUT"' EXIT
+status() {
+  local code
+  code=$(curl -sk --noproxy '*' --max-time 15 -o "$OUT" -w '%{http_code}' --resolve "$DOMAIN:443:127.0.0.1" \
+    -H "Authorization: Bearer $1" "https://$DOMAIN/ollama/v1/models" || true)
+  if [ "$code" = "000" ]; then
+    code=$(curl -s --noproxy '*' --max-time 15 -o "$OUT" -w '%{http_code}' -H "Host: $DOMAIN" \
+      -H "Authorization: Bearer $1" "http://127.0.0.1/ollama/v1/models" || true)
+  fi
+  echo "$code"
 }
-if ! MODELS=$(check "$KEY"); then
-  echo "Nginx is set up, but the test request through it failed. Paste this output to get help."
+BAD=$(status "wrong-key")
+if [ "$BAD" != "401" ]; then
+  echo "Warning: a request with a wrong key got answer $BAD instead of 401 (blocked)."
+  echo "Don't use this until it's fixed. Paste this output to get help."
   exit 1
 fi
-if check "wrong-key" >/dev/null; then
-  echo "Warning: the access key check isn't working. Don't use this until it's fixed."
+GOOD=$(status "$KEY")
+if [ "$GOOD" != "200" ]; then
+  echo "Nginx is set up, but a request with the right key got answer $GOOD instead of 200."
+  echo "Paste this output to get help."
   exit 1
 fi
+MODELS=$(cat "$OUT")
 
 echo
 echo "Ollama is connected. Models found:"
