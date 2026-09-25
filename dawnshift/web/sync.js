@@ -203,20 +203,25 @@ export function createSync({ store, runner }) {
       setStatus({ state: 'idle', message: 'Your account and its synced data were deleted. This device still has its own copy.' });
     },
 
-    async start() {
-      store.onChange(schedule);
+    // Asks the website whether it runs the account server.
+    async checkAvailable() {
       try {
         status.available = (await request('GET', '/api/health', undefined, { token: null })).service === 'dawnshift-sync';
       } catch {
         status.available = false;
       }
+      setStatus({ checked: true });
+      if (status.available && session) syncNow();
+      return status.available;
+    },
+
+    async start() {
+      store.onChange(schedule);
       session = (await store.session.get()) ?? null;
-      setStatus({});
-      if (!status.available) return;
-      setInterval(() => session && syncNow(), PULL_EVERY_MS);
-      addEventListener('online', () => session && syncNow());
-      document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && session && syncNow());
-      if (session) syncNow();
+      await api.checkAvailable();
+      setInterval(() => session && status.available && syncNow(), PULL_EVERY_MS);
+      addEventListener('online', () => session && status.available && syncNow());
+      document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && session && status.available && syncNow());
     },
   };
   return api;

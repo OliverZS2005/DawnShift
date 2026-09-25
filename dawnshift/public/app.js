@@ -94,7 +94,7 @@ const ACTIVE = new Set(['queued', 'running', 'needs_you', 'waiting']);
 // ---------- state ----------
 
 let S = null; // server state
-const ui = { view: 'team', botId: 'all', taskId: null, task: null, needsYouOnly: false, newIds: new Set(), changedIds: new Set() };
+const ui = { view: 'team', botId: 'all', taskId: null, task: null, needsYouOnly: false, newIds: new Set(), changedIds: new Set(), accountMode: 'login' };
 let mounted = null; // which view's skeleton is on screen
 
 async function refresh(force = false) {
@@ -212,12 +212,12 @@ function renderWelcome() {
   const hasConn = S.connections.length > 0;
   const page = document.getElementById('welcome');
   fill(page, 
-    h('h1', {}, 'Your AI team, on your computer'),
+    h('h1', {}, local ? 'Your AI team, wherever you are' : 'Your AI team, on your computer'),
     h('p', { class: 'lede' },
       'Dawnshift gives you a team of AI coworkers. Each one has a job, remembers what it learns, and can hand work to the others. ',
       'You choose which AI powers each bot: Claude, ChatGPT, Grok, Gemini, or a model running on your own machine.'),
     local
-      ? h('p', { class: 'hint' }, 'Everything, including your keys, is saved only in this browser on this device. Bots work while Dawnshift is open.')
+      ? h('p', { class: 'hint' }, 'Everything, including your keys, is saved in this browser on this device. Sign up to sync it to your other devices, encrypted. Bots work while Dawnshift is open.')
       : null,
     h('ol', { class: 'steps' },
       h('li', { class: hasConn ? 'done' : '' },
@@ -243,8 +243,11 @@ function renderWelcome() {
             }, 'Hire the starter team'),
             h('button', { disabled: !hasConn, onclick: () => editBot() }, 'Hire one bot')))),
     ),
-    sync && syncStatus.available && !syncStatus.loggedIn
-      ? h('p', {}, 'Already have an account? ', h('a', { href: '#', onclick: (e) => { e.preventDefault(); go('account'); } }, 'Log in'), ' to get your team on this device.')
+    sync && !syncStatus.loggedIn
+      ? h('div', { class: 'row welcome-account' },
+          h('span', { class: 'hint' }, 'Use Dawnshift on several devices?'),
+          h('button', { onclick: () => openAccount('signup') }, 'Sign up'),
+          h('button', { onclick: () => openAccount('login') }, 'Log in'))
       : null,
     h('p', { class: 'legal-links' }, 'By using Dawnshift you agree to the ', h('a', { href: 'terms.html' }, 'Terms of Service'),
       ' and ', h('a', { href: 'privacy.html' }, 'Privacy Policy'), '.'),
@@ -882,10 +885,10 @@ function mountAccount(main) {
   let shownFor = null;
   const draw = (st) => {
     if (!document.body.contains(page)) return;
-    const key = !st.available ? 'none' : st.loggedIn ? `in:${st.username}` : 'out';
+    const key = !st.available ? `none:${Boolean(st.checked)}` : st.loggedIn ? `in:${st.username}` : 'out';
     if (key !== shownFor && !page.dataset.busy) {
       shownFor = key;
-      fill(page, ...(!st.available ? accountUnavailable() : st.loggedIn ? accountPanel() : loginPanel('login')));
+      fill(page, ...(!st.available ? accountUnavailable() : st.loggedIn ? accountPanel() : loginPanel(ui.accountMode)));
     }
     const line = page.querySelector('#sync-line');
     if (line) line.textContent = syncLabel(st);
@@ -902,17 +905,26 @@ function mountAccount(main) {
 }
 
 function accountUnavailable() {
+  if (!sync) {
+    return [h('h1', {}, 'Accounts'), h('p', { class: 'lede' }, 'Accounts are part of the web version of Dawnshift. This downloadable version keeps everything on this computer.')];
+  }
+  if (!syncStatus.checked) return [h('h1', {}, 'Accounts'), h('p', { class: 'lede' }, 'Checking the account server…')];
   return [
-    h('h1', {}, 'Accounts'),
-    h('p', { class: 'lede' }, sync
-      ? "This Dawnshift website doesn't have its account server set up, so your data stays on this device only."
-      : 'Accounts are part of the web version of Dawnshift. This downloadable version keeps everything on this computer.'),
+    h('h1', {}, "Accounts aren't available right now"),
+    h('p', { class: 'lede' }, "This website's account server isn't answering, so logging in and signing up don't work yet. Everything you do is still saved on this device."),
+    h('p', { class: 'hint' }, 'Running this site yourself? Check that the dawnshift-sync service is running and that /api/ is passed to it (see "Accounts and sync" in the README).'),
+    h('button', { onclick: (e) => attempt(async () => {
+      if (!(await sync.checkAvailable())) toast('Still no answer from the account server.', true);
+    }, e.currentTarget) }, 'Try again'),
   ];
 }
 
 function loginPanel(mode) {
   const page = document.getElementById('account-page');
-  const redraw = (m) => fill(page, ...loginPanel(m));
+  const redraw = (m) => {
+    ui.accountMode = m;
+    fill(page, ...loginPanel(m));
+  };
   const user = field('Username', { id: 'acc-user', autocomplete: 'username', autocapitalize: 'none', spellcheck: false, minlength: 3, maxlength: 32 });
   const pass = field(mode === 'recover' ? 'New password' : 'Password', {
     id: 'acc-pass', type: 'password', autocomplete: mode === 'login' ? 'current-password' : 'new-password', minlength: mode === 'login' ? 1 : 8,
@@ -1075,18 +1087,27 @@ function logoutDialog() {
 }
 
 // The account button in the top bar.
+function openAccount(mode) {
+  ui.accountMode = mode;
+  go('account');
+}
+
+// The Log in / Sign up buttons in the top bar (the username once logged in).
 function mountAccountButton() {
   if (!sync) return;
-  const btn = h('button', { class: 'account-btn', hidden: true, onclick: () => go('account') });
-  document.querySelector('.topbar').insertBefore(btn, document.getElementById('needs-you'));
+  const box = h('div', { class: 'account-btns' });
+  document.querySelector('.topbar').insertBefore(box, document.getElementById('needs-you'));
   sync.onStatus((st) => {
     const wasLoggedIn = syncStatus.loggedIn;
-    const changed = st.available !== syncStatus.available || st.loggedIn !== wasLoggedIn;
+    const changed = st.available !== syncStatus.available || st.loggedIn !== wasLoggedIn || st.checked !== syncStatus.checked;
     syncStatus = st;
     if (changed && S && mounted === 'welcome') render();
-    btn.hidden = !st.available;
-    fill(btn, st.loggedIn ? [h('span', { class: `sync-dot ${st.state}` }), st.username] : 'Log in');
-    btn.title = st.loggedIn ? syncLabel(st) : 'Log in to sync across devices';
+    fill(box, st.loggedIn
+      ? h('button', { class: 'account-btn', title: syncLabel(st), onclick: () => go('account') }, h('span', { class: `sync-dot ${st.state}` }), st.username)
+      : [
+          h('button', { class: 'account-btn', onclick: () => openAccount('login') }, 'Log in'),
+          h('button', { class: 'account-btn primary', onclick: () => openAccount('signup') }, 'Sign up'),
+        ]);
     // Data may have arrived from another device.
     if (st.loggedIn && st.state === 'synced') refresh().catch(() => {});
     if (wasLoggedIn && !st.loggedIn && st.message) toast(st.message, true);
