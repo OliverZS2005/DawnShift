@@ -65,6 +65,12 @@ build:web` refreshes it). A server can fetch it straight from GitHub with
 read-only GitHub token in `/root/.dawnshift-token`. Serve `/var/www/dawnshift`
 as static files over HTTPS (for example with Nginx and Certbot).
 
+On a server that already runs Nginx and Certbot,
+[deploy/install-server.sh](deploy/install-server.sh) does all of it: asks for
+the token, installs `dawnshift-update`, adds the Nginx site (and removes it
+again if Nginx rejects it) and gets the HTTPS certificate. It's safe to run
+again.
+
 ## Download (for people who just want to use it)
 
 Download the Dawnshift ZIP, unzip it, install [Node.js](https://nodejs.org)
