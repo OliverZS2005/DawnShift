@@ -1,5 +1,6 @@
 // Dawnshift's web interface. Plain JavaScript, no build step.
 import { createMascot } from './mascot.js';
+import { GUIDES, ORDER, COST_LABEL } from './guides.js';
 
 const buddy = createMascot();
 document.body.append(buddy.el);
@@ -284,11 +285,38 @@ function iosInstallHint() {
 }
 
 function providerPicker() {
-  return h('div', { class: 'providers' },
-    Object.entries(S.presets).map(([key, p]) =>
-      h('button', { onclick: () => editConnection({ preset: key }) },
-        h('span', {}, p.label),
-        h('span', { class: 'kind' }, p.local ? 'local' : 'API key'))));
+  const keys = [...ORDER.filter((k) => S.presets[k]), ...Object.keys(S.presets).filter((k) => !ORDER.includes(k))];
+  return h('div', {},
+    h('p', { class: 'hint' }, 'New to this? ', h('strong', {}, 'Groq'), ' is free and takes about two minutes. Each option shows you step by step how to get it working.'),
+    h('div', { class: 'providers' },
+      keys.map((key) => {
+        const p = S.presets[key];
+        const g = GUIDES[key];
+        return h('button', { onclick: () => editConnection({ preset: key }) },
+          h('span', { class: 'provider-name' }, h('span', {}, p.label), g ? h('span', { class: 'provider-blurb' }, g.blurb) : null),
+          h('span', { class: `kind cost-${g?.cost ?? 'varies'}` }, COST_LABEL[g?.cost] ?? (p.local ? 'local' : 'API key')));
+      })));
+}
+
+// Renders one guide step: text, links, bold text and copyable code.
+function guidePiece(piece) {
+  if (typeof piece === 'string') return piece;
+  if (piece.a) return h('a', { href: piece.a, target: '_blank', rel: 'noopener' }, piece.text ?? piece.a);
+  if (piece.b) return h('strong', {}, piece.b);
+  if (piece.code) return h('code', { class: 'copy', title: 'Click to copy', onclick: () => navigator.clipboard?.writeText(piece.code).then(() => toast('Copied.')) }, piece.code);
+  return null;
+}
+
+// The step-by-step guide at the top of the Connect dialog (see guides.js).
+function setupGuide(presetKey, open) {
+  const g = GUIDES[presetKey];
+  if (!g) return null;
+  return h('details', { class: 'call guide', open: open || null },
+    h('summary', {}, 'Step by step: how to set this up'),
+    h('div', { class: 'guide-body' },
+      h('ol', {}, g.steps.map((step) => h('li', {}, step.map(guidePiece)))),
+      g.note ? h('p', { class: 'hint' }, g.note) : null,
+      g.webNote && local ? h('p', { class: 'hint' }, g.webNote) : null));
 }
 
 // ---------- team view ----------
@@ -718,11 +746,12 @@ function editConnection(conn) {
     },
   },
   h('div', { class: 'dialog-head' }, h('h2', {}, isNew ? `Connect ${preset.label}` : `Edit ${conn.name}`), h('button', { type: 'button', class: 'quiet', onclick: () => dlg.close() }, 'Close')),
+  setupGuide(conn.preset, isNew),
   h('div', { class: 'field' }, h('label', { for: 'c-name' }, 'Name'), f.name),
   h('div', { class: 'field' },
     h('label', { for: 'c-key' }, 'API key'),
     f.key,
-    preset.keyUrl ? h('div', { class: 'hint' }, 'Get one at ', h('a', { href: preset.keyUrl, target: '_blank', rel: 'noopener' }, new URL(preset.keyUrl).host), preset.env ? `, or set ${preset.env} before starting Dawnshift.` : '.') : null,
+    preset.keyUrl ? h('div', { class: 'hint' }, 'Get one at ', h('a', { href: preset.keyUrl, target: '_blank', rel: 'noopener' }, new URL(preset.keyUrl).host), preset.env && !local ? `, or set ${preset.env} before starting Dawnshift.` : '.') : null,
     conn.keyFromEnv ? h('div', { class: 'hint' }, `Using the key from ${preset.env}.`) : null),
   preset.kind === 'openai'
     ? h('div', { class: 'field' }, h('label', { for: 'c-base' }, 'Server address'), f.base,

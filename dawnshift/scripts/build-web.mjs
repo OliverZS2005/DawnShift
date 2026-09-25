@@ -35,8 +35,8 @@ await build({
   logLevel: 'warning',
 });
 
-// 2. Copy the pages, styles and icons. app.js and mascot.js are in the bundle.
-const SKIP = new Set(['app.js', 'mascot.js', 'index.html']);
+// 2. Copy the pages, styles and icons. The interface's scripts are in the bundle.
+const SKIP = new Set(['app.js', 'mascot.js', 'guides.js', 'index.html']);
 for (const name of fs.readdirSync(pub)) {
   if (!SKIP.has(name)) fs.cpSync(path.join(pub, name), path.join(out, name), { recursive: true });
 }

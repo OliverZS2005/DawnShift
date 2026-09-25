@@ -140,6 +140,10 @@ connecting an AI and hiring your team.
 
 ### Connecting an AI
 
+Each option in the app has step-by-step instructions with links, shown when
+you click it (the text lives in `public/guides.js`). A script for a setup
+video with YouTube chapters is in [docs/video-guide.md](docs/video-guide.md).
+
 | Provider | What you need |
 |---|---|
 | Claude (Anthropic) | An API key from console.anthropic.com. Defaults to `claude-opus-5`. |
