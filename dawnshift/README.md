@@ -98,6 +98,16 @@ service (as its own `dawnshift` user, data in `/var/lib/dawnshift-sync`), adds
 the Nginx site with `/api/` passed to the sync server (undoing the change if
 Nginx rejects it) and gets the HTTPS certificate. It's safe to run again.
 
+### Using your own Ollama server from the web version
+
+Browsers won't let an `https` page talk to a plain-`http` Ollama, and Ollama
+has no password. [deploy/connect-ollama.sh](deploy/connect-ollama.sh) fixes
+both: run it on the Dawnshift server with `OLLAMA_URL=http://<ollama-ip>:11434`
+and Nginx serves Ollama at `https://<your-domain>/ollama/v1`, but only to
+requests carrying a secret access key the script creates. In Dawnshift, add
+an **Ollama** connection with that address and the key as the API key.
+Ollama itself must listen on the network (`OLLAMA_HOST=0.0.0.0`).
+
 ## Download (for people who just want to use it)
 
 Download the Dawnshift ZIP, unzip it, install [Node.js](https://nodejs.org)
