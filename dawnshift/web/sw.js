@@ -23,7 +23,9 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.includes('/api/')) return;
   // Network first, so updates show up right away; the saved copy is the fallback.
   event.respondWith(
-    fetch(event.request)
+    // no-cache: always ask the server whether there's a newer version,
+    // instead of using the browser's own saved copy.
+    fetch(event.request, { cache: 'no-cache' })
       .then((res) => {
         if (res.ok) {
           const copy = res.clone();

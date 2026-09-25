@@ -76,6 +76,10 @@ systemctl restart dawnshift-sync
 # 5. Nginx: the app's files, and /api/ passed on to the account server.
 mkdir -p /etc/nginx/snippets
 cat > /etc/nginx/snippets/dawnshift-api.conf <<EOF
+# The app's files don't change name between versions, so browsers must
+# always check for a newer copy.
+add_header Cache-Control "no-cache" always;
+
 location /api/ {
     proxy_pass http://127.0.0.1:$SYNC_PORT;
     proxy_set_header Host \$host;
