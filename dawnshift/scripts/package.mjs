@@ -50,5 +50,9 @@ fs.chmodSync(path.join(stage, 'start-linux.sh'), 0o755);
 execFileSync('zip', ['-r', '-q', '-X', zipName, 'Dawnshift'], { cwd: dist, stdio: 'inherit' });
 fs.rmSync(stage, { recursive: true, force: true });
 
+// A copy with a fixed name in the repo, so it can be downloaded from GitHub.
+fs.mkdirSync(path.join(root, 'release'), { recursive: true });
+fs.copyFileSync(path.join(dist, zipName), path.join(root, 'release', 'Dawnshift-computer.zip'));
+
 const size = (fs.statSync(path.join(dist, zipName)).size / 1024 / 1024).toFixed(1);
-console.log(`Built dist/${zipName} (${size} MB)`);
+console.log(`Built dist/${zipName} (${size} MB), copied to release/Dawnshift-computer.zip`);
