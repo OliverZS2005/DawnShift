@@ -1,0 +1,67 @@
+# Builds the Dawnshift Android app (an APK you can install directly) and
+# publishes it as the "android-latest" release, on every change to Dawnshift.
+# Download it from the repo's Releases page.
+name: Android app
+
+on:
+  push:
+    branches: [claude/ai-grok-bot-x5v1dx]
+    paths: ['dawnshift/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-app
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dawnshift
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: dawnshift/package-lock.json
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run build:app
+
+      - name: Build the APK
+        working-directory: dawnshift/android
+        env:
+          DAWNSHIFT_VERSION_CODE: ${{ github.run_number }}
+          DAWNSHIFT_VERSION_NAME: 0.1.${{ github.run_number }}
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.run_number }}
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk Dawnshift.apk
+          cat > notes.md <<'EOF'
+          Test build of Dawnshift for Android phones.
+
+          **To install:** download `Dawnshift.apk` on your phone and open it. Android asks to allow installing apps from your browser or Files app: allow it, then tap **Install**. Google Play Protect may warn that it doesn't know the app, because it isn't from the Play Store: tap **More details → Install anyway**.
+
+          New builds install over the old one and keep your data.
+          EOF
+          gh release delete android-latest --yes --cleanup-tag || true
+          gh release create android-latest Dawnshift.apk \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "Dawnshift for Android (test build $RUN)" \
+            --notes-file notes.md

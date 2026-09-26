@@ -100,8 +100,31 @@ async function startServer() {
     });
     return { status: res.status, body: await res.json() };
   };
-  return { call, dir, close: () => server.close() };
+  return { call, base, dir, close: () => server.close() };
 }
+
+test('the Android app may call the API, other websites may not', async () => {
+  const s = await startServer();
+  try {
+    const preflight = (origin) => fetch(`${s.base}/api/sync`, {
+      method: 'OPTIONS',
+      headers: { origin, 'access-control-request-method': 'PUT', 'access-control-request-headers': 'authorization, content-type' },
+    });
+    const app = await preflight('https://localhost');
+    assert.equal(app.status, 204);
+    assert.equal(app.headers.get('access-control-allow-origin'), 'https://localhost');
+    assert.match(app.headers.get('access-control-allow-headers'), /authorization/);
+    const other = await preflight('https://evil.example');
+    assert.equal(other.headers.get('access-control-allow-origin'), null);
+
+    const health = await fetch(`${s.base}/api/health`, { headers: { origin: 'https://localhost' } });
+    assert.equal(health.headers.get('access-control-allow-origin'), 'https://localhost');
+    const plain = await fetch(`${s.base}/api/health`);
+    assert.equal(plain.headers.get('access-control-allow-origin'), null);
+  } finally {
+    s.close();
+  }
+});
 
 const account = (name, auth = 'YXV0aA==') => ({
   username: name, auth, salt: 'c2FsdA==', wrappedKey: 'a2V5',

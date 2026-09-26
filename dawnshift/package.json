@@ -10,7 +10,8 @@
     "test": "node --test",
     "notices": "node scripts/notices.mjs",
     "package": "node scripts/package.mjs",
-    "build:web": "node scripts/build-web.mjs"
+    "build:web": "node scripts/build-web.mjs",
+    "build:app": "node scripts/build-web.mjs --app && cap sync android"
   },
   "engines": {
     "node": ">=20"
@@ -21,6 +22,9 @@
   },
   "license": "SEE LICENSE IN LICENSE",
   "devDependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
     "esbuild": "^0.28.2"
   }
 }

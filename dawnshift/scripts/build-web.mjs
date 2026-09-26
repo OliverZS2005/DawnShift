@@ -2,6 +2,10 @@
 // dist/Dawnshift-web-<version>.zip. Upload the ZIP's contents to any web host
 // (for example the root of your subdomain) and Dawnshift runs in the browser.
 // Run with: npm run build:web
+//
+// With --app (npm run build:app) it builds the files for the Android app into
+// app-dist/ instead. The app carries its own files, so accounts go to
+// https://dawnshift.dawnlife.online, or to DAWNSHIFT_APP_SERVER if set.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -11,7 +15,11 @@ import { build } from 'esbuild';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { version } = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-const out = path.join(root, 'web-dist');
+const appServer = process.argv.includes('--app')
+  ? (process.env.DAWNSHIFT_APP_SERVER || 'https://dawnshift.dawnlife.online').replace(/\/+$/, '')
+  : null;
+if (appServer && !/^https:\/\/[^/]+$/.test(appServer)) throw new Error('DAWNSHIFT_APP_SERVER must look like https://example.com');
+const out = path.join(root, appServer ? 'app-dist' : 'web-dist');
 const pub = path.join(root, 'public');
 
 // The license page must list what ends up in the bundle.
@@ -33,6 +41,8 @@ await build({
   // Keeps the libraries' license comments in a file next to the bundle.
   legalComments: 'linked',
   logLevel: 'warning',
+  // Where web/sync.js sends account requests. Empty means this website.
+  define: { DAWNSHIFT_SERVER: JSON.stringify(appServer ?? '') },
 });
 
 // 2. Copy the pages, styles and icons. The interface's scripts are in the bundle.
@@ -44,6 +54,12 @@ const index = fs.readFileSync(path.join(pub, 'index.html'), 'utf8');
 const tag = '<script type="module" src="app.js"></script>';
 if (!index.includes(tag)) throw new Error('public/index.html no longer loads app.js the expected way.');
 fs.writeFileSync(path.join(out, 'index.html'), index.replace(tag, '<script type="module" src="dawnshift.js"></script>'));
+
+// The app needs no service worker or ZIPs: Capacitor packs app-dist/ into it.
+if (appServer) {
+  console.log(`Built app-dist/ for the Android app (accounts on ${appServer})`);
+  process.exit(0);
+}
 
 // 3. The service worker, with a version that changes whenever the app does.
 const files = [];

@@ -7,6 +7,11 @@ import {
 } from '../src/sync-crypto.js';
 import { mergeData, sameData } from '../src/sync-merge.js';
 
+// The account server: this website, or for the Android app the one it was
+// built for (set by scripts/build-web.mjs).
+/* global DAWNSHIFT_SERVER */
+const SERVER = typeof DAWNSHIFT_SERVER === 'string' ? DAWNSHIFT_SERVER : '';
+
 const PUSH_DELAY_MS = 2500;
 const PULL_EVERY_MS = 30000;
 
@@ -27,7 +32,7 @@ export function createSync({ store, runner }) {
   async function request(method, url, body, { token = session?.token } = {}) {
     let res;
     try {
-      res = await fetch(url, {
+      res = await fetch(SERVER + url, {
         method,
         headers: { ...(body ? { 'content-type': 'application/json' } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}) },
         body: body ? JSON.stringify(body) : undefined,

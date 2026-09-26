@@ -115,6 +115,25 @@ requests carrying a secret access key the script creates. In Dawnshift, add
 an **Ollama** connection with that address and the key as the API key.
 Ollama itself must listen on the network (`OLLAMA_HOST=0.0.0.0`).
 
+### Android app (test builds)
+
+The same web version, packed into an Android app with
+[Capacitor](https://capacitorjs.com) (in `android/`). GitHub builds it on every
+change ([.github/workflows/android.yml](../.github/workflows/android.yml)) and
+publishes `Dawnshift.apk` as the **android-latest** release: open it on an
+Android phone to install. Accounts sync through https://dawnshift.dawnlife.online,
+so the account server must be updated to a version that lets the app in
+(`dawnshift-update`).
+
+To build it yourself you need Android Studio (or the Android SDK) and JDK 21:
+`npm run build:app`, then `cd android && ./gradlew assembleDebug`. For another
+account server, set `DAWNSHIFT_APP_SERVER=https://your.domain` first. The app's
+icon and splash screen come from `assets/` (`npx @capacitor/assets generate --android`).
+
+The APK is signed with a debug key kept in the repo, so updates install over
+each other. That's fine for direct installs, but the Play Store needs your
+own upload key.
+
 ## Download (for people who just want to use it)
 
 Download the Dawnshift ZIP, unzip it, install [Node.js](https://nodejs.org)

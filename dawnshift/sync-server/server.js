@@ -18,6 +18,8 @@ const scrypt = promisify(crypto.scrypt);
 
 const MAX_BLOB = 8 * 1024 * 1024;
 const MAX_JSON = 32 * 1024;
+// Where the Dawnshift apps run from: Android (Capacitor) and iOS.
+const APP_ORIGINS = new Set(['https://localhost', 'capacitor://localhost']);
 const SESSION_DAYS = 60;
 const LOGIN_LIMIT = { tries: 10, windowMs: 15 * 60 * 1000 };
 const USERNAME = /^[a-z0-9][a-z0-9_.-]{2,31}$/;
@@ -285,6 +287,21 @@ export function createHandler(store) {
 
   return async function handle(req, res) {
     const url = new URL(req.url, 'http://local');
+    // The Android app runs from its own origin, so it may call the API from
+    // there. Requests are authorized by their token, never by cookies.
+    const cors = APP_ORIGINS.has(req.headers.origin)
+      ? { 'access-control-allow-origin': req.headers.origin, vary: 'Origin' }
+      : {};
+    if (req.method === 'OPTIONS' && url.pathname.startsWith('/api/')) {
+      res.writeHead(204, cors.vary ? {
+        ...cors,
+        'access-control-allow-methods': 'GET, POST, PUT',
+        'access-control-allow-headers': 'content-type, authorization',
+        'access-control-max-age': '86400',
+      } : {});
+      res.end();
+      return true;
+    }
     const route = routes[`${req.method} ${url.pathname}`];
     if (!route) return false;
     const ip = req.headers['cf-connecting-ip'] || req.headers['x-real-ip'] || req.socket.remoteAddress;
@@ -292,12 +309,12 @@ export function createHandler(store) {
       const body = req.method === 'GET' ? {} : await readJson(req, url.pathname === '/api/sync' ? MAX_BLOB + 1024 : MAX_JSON);
       const out = await route({ req, body, query: url.searchParams, ip });
       const status = out?.status ?? 200;
-      res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', ...cors });
       res.end(JSON.stringify(out?.status ? out.body : out));
     } catch (err) {
       const status = err.status ?? 500;
       if (status === 500) console.error(err);
-      res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', ...cors });
       res.end(JSON.stringify({ error: status === 500 ? 'Something went wrong on the server.' : err.message }));
     }
     return true;

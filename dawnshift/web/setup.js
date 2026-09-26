@@ -39,7 +39,9 @@ const sync = createSync({ store, runner });
 globalThis.dawnshiftSync = sync;
 sync.start();
 
-// Lets the app open offline and be installed to the home screen.
-if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+// Lets the app open offline and be installed to the home screen. The Android
+// app already has its files inside it.
+const inApp = Boolean(globalThis.Capacitor?.isNativePlatform?.());
+if (!inApp && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }

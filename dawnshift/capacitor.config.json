@@ -1,0 +1,11 @@
+{
+  "appId": "online.dawnlife.dawnshift",
+  "appName": "Dawnshift",
+  "webDir": "app-dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

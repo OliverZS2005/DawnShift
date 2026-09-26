@@ -32,8 +32,11 @@ const FONTS = [
   { name: 'Bricolage Grotesque', by: 'The Bricolage Grotesque Project Authors', url: 'https://github.com/ateliertriay/bricolage' },
 ];
 
+// Only needed to build, but their code ships inside the Android app.
+const IN_ANDROID_APP = new Set(['node_modules/@capacitor/android', 'node_modules/@capacitor/core']);
+
 const packages = Object.entries(lock.packages)
-  .filter(([p, info]) => p.startsWith('node_modules/') && !info.dev)
+  .filter(([p, info]) => p.startsWith('node_modules/') && (!info.dev || IN_ANDROID_APP.has(p)))
   .map(([p, info]) => {
     const dir = path.join(root, p);
     const meta = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
