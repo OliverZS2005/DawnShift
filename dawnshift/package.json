@@ -1,17 +1,26 @@
 {
   "name": "dawnshift",
+  "productName": "Dawnshift",
   "version": "0.1.0",
   "description": "A team of AI coworkers you run yourself. Each bot can use Claude, ChatGPT, Grok, Gemini, or a local model.",
+  "author": {
+    "name": "OliverZS2005",
+    "email": "contact@dawnlife.online"
+  },
+  "homepage": "https://dawnshift.dawnlife.online",
+  "repository": "github:OliverZS2005/DawnShift",
   "private": true,
   "type": "module",
-  "main": "server.js",
+  "main": "desktop/main.js",
   "scripts": {
     "start": "node server.js",
     "test": "node --test",
     "notices": "node scripts/notices.mjs",
     "package": "node scripts/package.mjs",
     "build:web": "node scripts/build-web.mjs",
-    "build:app": "node scripts/build-web.mjs --app && cap sync android"
+    "build:app": "node scripts/build-web.mjs --app && cap sync android",
+    "desktop": "electron .",
+    "build:desktop": "electron-builder --publish never"
   },
   "engines": {
     "node": ">=20"
@@ -25,6 +34,78 @@
     "@capacitor/android": "^8.5.2",
     "@capacitor/cli": "^8.5.2",
     "@capacitor/core": "^8.5.2",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2"
+  },
+  "build": {
+    "appId": "online.dawnlife.dawnshift",
+    "productName": "Dawnshift",
+    "copyright": "Copyright © 2026 OliverZS2005",
+    "directories": {
+      "output": "dist/desktop",
+      "buildResources": "desktop"
+    },
+    "files": [
+      "server.js",
+      "src/**",
+      "public/**",
+      "desktop/main.js",
+      "desktop/icon.png",
+      "package.json",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md"
+    ],
+    "icon": "desktop/icon.png",
+    "artifactName": "Dawnshift-${version}-${os}-${arch}.${ext}",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.productivity",
+      "identity": "-",
+      "hardenedRuntime": false
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Office",
+      "synopsis": "A team of AI coworkers",
+      "maintainer": "OliverZS2005 <contact@dawnlife.online>",
+      "icon": "desktop/icons"
+    }
   }
 }

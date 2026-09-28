@@ -37,6 +37,9 @@ jobs:
           java-version: 21
 
       - run: npm ci
+        env:
+          # Only the desktop app needs Electron itself.
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
       - run: npm test
       - run: npm run build:app
 

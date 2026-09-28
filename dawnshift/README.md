@@ -136,6 +136,31 @@ own upload key.
 
 ## Download (for people who just want to use it)
 
+### Desktop app (Windows, Mac and Linux)
+
+The easiest way: an installable app with its own window and a Start menu,
+Applications or app-menu entry. No Node.js needed. GitHub builds it on every
+change ([.github/workflows/desktop.yml](../.github/workflows/desktop.yml)) and
+publishes it as the **desktop-latest** release:
+
+| Computer | File |
+|---|---|
+| Windows | `Dawnshift-<version>-win-x64.exe` |
+| Mac (Apple chip / Intel) | `Dawnshift-<version>-mac-arm64.dmg` / `-mac-x64.dmg` |
+| Ubuntu, Debian, Mint, Pop!_OS | `Dawnshift-<version>-linux-amd64.deb` |
+| Other Linux | `Dawnshift-<version>-linux-x86_64.AppImage` |
+
+The release notes explain how to open each one. The app runs the same
+server as `npm start` inside [Electron](https://www.electronjs.org) (see
+[desktop/main.js](desktop/main.js)) and keeps its data in the usual place for
+app data: `%APPDATA%\Dawnshift` on Windows, `~/Library/Application Support/Dawnshift`
+on a Mac, `~/.config/Dawnshift` on Linux (**File → Open data folder**).
+
+To try it from the source code, run `npm run desktop`. `npm run build:desktop`
+builds the installers for the system you're on into `dist/desktop/`.
+
+### ZIP (needs Node.js)
+
 Download the Dawnshift ZIP, unzip it, install [Node.js](https://nodejs.org)
 (LTS), then double-click **Start Dawnshift (Windows).bat** or
 **Start Dawnshift (Mac).command**. Dawnshift opens in your browser. The

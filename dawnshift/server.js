@@ -58,16 +58,16 @@ async function serveStatic(res, pathname) {
 // ---------- server ----------
 
 // Blocks other websites open in your browser from using Dawnshift's API.
-function isTrustedRequest(req) {
+function isTrustedRequest(req, listenHost) {
   const host = req.headers.host ?? '';
   if (req.headers.origin && req.headers.origin !== `http://${host}`) return false;
   if (req.method !== 'GET' && !String(req.headers['content-type'] ?? '').startsWith('application/json')) return false;
   // Guards against DNS rebinding while Dawnshift is only listening locally.
-  if (['127.0.0.1', 'localhost', '::1'].includes(HOST) && !/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host)) return false;
+  if (['127.0.0.1', 'localhost', '::1'].includes(listenHost) && !/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host)) return false;
   return true;
 }
 
-export function createServer(store, runner) {
+export function createServer(store, runner, { host = HOST } = {}) {
   const handle = createApi(store, runner);
   return http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://local');
@@ -76,7 +76,7 @@ export function createServer(store, runner) {
         if (req.method !== 'GET') throw new HttpError(405, 'Method not allowed.');
         return await serveStatic(res, url.pathname);
       }
-      if (!isTrustedRequest(req)) throw new HttpError(403, 'Request blocked.');
+      if (!isTrustedRequest(req, host)) throw new HttpError(403, 'Request blocked.');
       const raw = req.method === 'GET' ? '' : await readBody(req);
       const result = await handle(req.method, req.url, raw ? JSON.parse(raw) : {});
       res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
@@ -99,31 +99,48 @@ function openBrowser(url) {
   spawn(cmd, args, { stdio: 'ignore', detached: true }).on('error', () => {}).unref();
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  setOwnPort(PORT);
-  const store = createStore(DATA_DIR);
+// Starts Dawnshift: its saved data, the bots, and the server for the
+// interface. Port 0 picks any free port. Used by the command line below and
+// by the desktop app (desktop/main.js).
+export async function startDawnshift({ dataDir = DATA_DIR, port = PORT, host = HOST } = {}) {
+  const store = createStore(dataDir);
   const runner = createRunner({ store, callModel });
+  const server = createServer(store, runner, { host });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, host, resolve);
+  });
+  const actualPort = server.address().port;
+  setOwnPort(actualPort);
   runner.start();
-  const server = createServer(store, runner);
+  return {
+    url: `http://${host === '127.0.0.1' ? 'localhost' : host}:${actualPort}`,
+    dataDir,
+    // Saves anything not yet written to disk.
+    stop: () => store.flush(),
+  };
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const url = `http://${HOST === '127.0.0.1' ? 'localhost' : HOST}:${PORT}`;
   // The double-click launchers pass --open so the app appears by itself.
   const open = process.argv.includes('--open') ? () => openBrowser(url) : () => {};
-  server.on('error', (err) => {
+  try {
+    const app = await startDawnshift();
+    console.log(`Dawnshift is running: ${app.url}`);
+    console.log(`Data is saved in ${app.dataDir}`);
+    console.log('Keep this window open while you use Dawnshift. Close it (or press Ctrl+C) to stop.');
+    open();
+    const stop = () => {
+      app.stop();
+      process.exit(0);
+    };
+    process.on('SIGINT', stop);
+    process.on('SIGTERM', stop);
+  } catch (err) {
     if (err.code !== 'EADDRINUSE') throw err;
     console.log(`Dawnshift is already running (or port ${PORT} is busy). Opening ${url}`);
     open();
     setTimeout(() => process.exit(0), 1000);
-  });
-  server.listen(PORT, HOST, () => {
-    console.log(`Dawnshift is running: ${url}`);
-    console.log(`Data is saved in ${DATA_DIR}`);
-    console.log('Keep this window open while you use Dawnshift. Close it (or press Ctrl+C) to stop.');
-    open();
-  });
-  const stop = () => {
-    store.flush();
-    process.exit(0);
-  };
-  process.on('SIGINT', stop);
-  process.on('SIGTERM', stop);
+  }
 }

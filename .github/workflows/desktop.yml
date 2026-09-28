@@ -1,0 +1,98 @@
+# Builds the Dawnshift desktop app for Windows, Mac and Linux, and publishes
+# the installers as the "desktop-latest" release on every change to Dawnshift.
+# Download them from the repo's Releases page.
+name: Desktop app
+
+on:
+  push:
+    branches: [claude/ai-grok-bot-x5v1dx]
+    paths: ['dawnshift/**', '.github/workflows/desktop.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-app
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: dawnshift
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: dawnshift/package-lock.json
+
+      - run: npm ci
+      - run: npm test
+        if: runner.os == 'Linux'
+
+      - name: Build the installers
+        run: npm run build:desktop
+        env:
+          # No paid signing certificate: Macs get an ad-hoc signature instead.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ runner.os }}
+          path: |
+            dawnshift/dist/desktop/*.exe
+            dawnshift/dist/desktop/*.dmg
+            dawnshift/dist/desktop/*.AppImage
+            dawnshift/dist/desktop/*.deb
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.run_number }}
+        run: |
+          ls -la out
+          cat > notes.md <<'EOF'
+          Dawnshift as a desktop app. Pick the file for your computer:
+
+          | Computer | File |
+          |---|---|
+          | Windows | `Dawnshift-…-win-x64.exe` |
+          | Mac with Apple chip (M1 and newer) | `Dawnshift-…-mac-arm64.dmg` |
+          | Mac with Intel chip | `Dawnshift-…-mac-x64.dmg` |
+          | Ubuntu, Debian, Linux Mint, Pop!_OS | `Dawnshift-…-linux-amd64.deb` |
+          | Other Linux | `Dawnshift-…-linux-x86_64.AppImage` |
+
+          **Windows:** open the `.exe`. If Windows says it protected your PC, click **More info → Run anyway**. Dawnshift installs and opens by itself, and it's in the Start menu afterwards.
+
+          **Mac:** open the `.dmg` and drag Dawnshift into Applications. The first time, right-click Dawnshift in Applications and choose **Open**, then **Open** again. If the Mac says it's damaged, open Terminal and run `xattr -cr /Applications/Dawnshift.app`, then open it again.
+
+          **Ubuntu, Debian and similar:** open the `.deb` with Software Install, or run `sudo apt install ./Dawnshift-*-linux-amd64.deb` in the folder you downloaded it to. Dawnshift is then in your app menu.
+
+          **Other Linux:** make the `.AppImage` executable (right-click → Properties → Allow executing, or `chmod +x Dawnshift-*.AppImage`) and open it. AppImages need FUSE 2 (on Fedora: `sudo dnf install fuse-libs`).
+
+          These builds aren't signed with a paid certificate, which is why Windows and Mac ask before opening them.
+          EOF
+          gh release delete desktop-latest --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
+          gh release create desktop-latest out/* -R "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "Dawnshift desktop app (build $RUN)" \
+            --notes-file notes.md
