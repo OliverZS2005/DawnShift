@@ -49,8 +49,19 @@
 }
 
 * { box-sizing: border-box; }
+
+/* Room for the phone's status bar, camera cutout and gesture bar. The Android
+   app's WebView can report env() as 0, so the app passes the real sizes in as
+   --safe-area-inset-* (Capacitor); browsers and iPhones fill in env(). */
+:root {
+  --safe-top: max(var(--safe-area-inset-top, 0px), env(safe-area-inset-top, 0px));
+  --safe-right: max(var(--safe-area-inset-right, 0px), env(safe-area-inset-right, 0px));
+  --safe-bottom: max(var(--safe-area-inset-bottom, 0px), env(safe-area-inset-bottom, 0px));
+  --safe-left: max(var(--safe-area-inset-left, 0px), env(safe-area-inset-left, 0px));
+}
 html, body { margin: 0; height: 100%; }
 body {
+  padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left);
   background: var(--paper);
   color: var(--ink);
   font: 16px/1.5 var(--body);
@@ -118,7 +129,7 @@ label { display: block; font-weight: 600; font-size: 0.875rem; margin: 0 0 0.3re
   padding: 0 1.25rem;
   min-height: 3.5rem;
   /* Room for the notch and status bar when installed on a phone. */
-  padding-top: env(safe-area-inset-top);
+  padding-top: var(--safe-top);
   border-bottom: 1px solid var(--line);
   background: var(--surface);
   flex-shrink: 0;
@@ -301,8 +312,9 @@ dialog {
   color: var(--ink);
   padding: 0;
   width: min(40rem, calc(100vw - 2rem));
-  max-height: calc(100vh - 3rem);
-  max-height: calc(100dvh - 3rem); /* excludes the phone browser's toolbars */
+  max-height: calc(100vh - 3rem - var(--safe-top) - var(--safe-bottom));
+  /* dvh excludes the phone browser's toolbars */
+  max-height: calc(100dvh - 3rem - var(--safe-top) - var(--safe-bottom));
 }
 dialog::backdrop { background: rgb(10 10 12 / 0.45); }
 dialog form { padding: 1.5rem; }
@@ -318,7 +330,7 @@ dialog legend { font-weight: 600; font-size: 0.875rem; margin-bottom: 0.4rem; pa
 
 #toast {
   position: fixed;
-  bottom: 1rem;
+  bottom: calc(1rem + var(--safe-bottom));
   left: 50%;
   transform: translateX(-50%);
   background: var(--ink);
@@ -342,7 +354,7 @@ dialog legend { font-weight: 600; font-size: 0.875rem; margin-bottom: 0.4rem; pa
   .team { height: auto; }
 }
 @media (max-width: 700px) {
-  .topbar { gap: 0.25rem 0.75rem; padding: 0.5rem 1rem; height: auto; flex-wrap: wrap; }
+  .topbar { gap: 0.25rem 0.75rem; padding: calc(0.5rem + var(--safe-top)) 1rem 0.5rem; height: auto; flex-wrap: wrap; }
   .needs-you { padding: 0.45rem 0.7rem; }
   .tabs button { padding: 0.5rem; }
   .team { grid-template-columns: 1fr; }
@@ -375,8 +387,8 @@ dialog legend { font-weight: 600; font-size: 0.875rem; margin-bottom: 0.4rem; pa
 
 .buddy {
   position: fixed;
-  left: 1rem;
-  bottom: 1rem;
+  left: calc(1rem + var(--safe-left));
+  bottom: calc(1rem + var(--safe-bottom));
   z-index: 20;
   display: flex;
   align-items: flex-end;
@@ -500,9 +512,9 @@ dialog legend { font-weight: 600; font-size: 0.875rem; margin-bottom: 0.4rem; pa
 .roster .buddy-bubble.show { animation: rise 0.25s ease-out; }
 
 @media (max-width: 700px) {
-  .roster .buddy { position: fixed; bottom: 0.75rem; padding: 0; background: none; margin: 0; flex-direction: row-reverse; align-items: flex-end; }
+  .roster .buddy { position: fixed; bottom: calc(0.75rem + var(--safe-bottom)); padding: 0; background: none; margin: 0; flex-direction: row-reverse; align-items: flex-end; }
   .roster .buddy-bubble { margin: 0 0 2.6rem; max-width: 12rem; border-radius: 10px 10px 2px 10px; }
-  .buddy { left: auto; right: 0.75rem; bottom: calc(0.75rem + env(safe-area-inset-bottom)); flex-direction: row-reverse; }
+  .buddy { left: auto; right: calc(0.75rem + var(--safe-right)); bottom: calc(0.75rem + var(--safe-bottom)); flex-direction: row-reverse; }
   .buddy-bot { width: 60px; height: 66px; }
   .buddy-bubble { margin-bottom: 2.6rem; border-radius: 10px 10px 2px 10px; transform-origin: bottom right; max-width: 12rem; }
 }
