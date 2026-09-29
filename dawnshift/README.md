@@ -89,6 +89,12 @@ an account and use the same team on every device they log in on.
   (settings: `PORT`, `HOST`, `DATA_DIR`, and `STATIC_DIR` to also serve the
   web app, handy for testing). If a site has no sync server, the account
   features simply don't appear.
+- **Every version can use the same account.** The web version and the
+  Android app sync from the page ([src/sync.js](src/sync.js)). The desktop
+  app and `npm start` run the same code in their server and keep the login
+  in `session.json` next to `state.json`. They use
+  https://dawnshift.dawnlife.online; set `DAWNSHIFT_SYNC_SERVER` to use
+  another server, or to `off` to turn accounts off.
 
 ### Hosting on your own server
 

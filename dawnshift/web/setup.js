@@ -5,7 +5,7 @@ import { createBrowserStore } from '../src/browser-store.js';
 import { createRunner } from '../src/runner.js';
 import { createApi } from '../src/api.js';
 import { callModel } from '../src/providers.js';
-import { createSync } from './sync.js';
+import { createSync } from '../src/sync.js';
 
 // index.html already explained that this browser is too old.
 if (globalThis.dawnshiftUnsupported) await new Promise(() => {});

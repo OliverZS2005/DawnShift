@@ -1,21 +1,22 @@
-// Accounts and syncing for the web version. Everything is encrypted on this
-// device before it's uploaded (see src/sync-crypto.js), so the server that
+// Accounts and syncing. Runs in the page in the web version and the Android
+// app, and in the server on a computer (server.js). Everything is encrypted on
+// this device before it's uploaded (see src/sync-crypto.js), so the server that
 // stores it can't read anyone's keys, tasks or files.
 import {
   deriveKeys, newDataKey, wrapKey, unwrapRaw, importDataKey, encryptJson, decryptJson,
   newRecoveryCode, normalizeRecoveryCode, randomBytes, toB64,
-} from '../src/sync-crypto.js';
-import { mergeData, sameData } from '../src/sync-merge.js';
+} from './sync-crypto.js';
+import { mergeData, sameData } from './sync-merge.js';
 
 // The account server: this website, or for the Android app the one it was
-// built for (set by scripts/build-web.mjs).
+// built for (set by scripts/build-web.mjs). The computer version passes its own.
 /* global DAWNSHIFT_SERVER */
 const SERVER = typeof DAWNSHIFT_SERVER === 'string' ? DAWNSHIFT_SERVER : '';
 
 const PUSH_DELAY_MS = 2500;
 const PULL_EVERY_MS = 30000;
 
-export function createSync({ store, runner }) {
+export function createSync({ store, runner, server = SERVER }) {
   let session = null; // { username, token, key, version }
   let dirty = true; // true until this device's data is known to be uploaded
   let busy = false;
@@ -32,7 +33,7 @@ export function createSync({ store, runner }) {
   async function request(method, url, body, { token = session?.token } = {}) {
     let res;
     try {
-      res = await fetch(SERVER + url, {
+      res = await fetch(server + url, {
         method,
         headers: { ...(body ? { 'content-type': 'application/json' } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}) },
         body: body ? JSON.stringify(body) : undefined,
@@ -48,6 +49,8 @@ export function createSync({ store, runner }) {
 
   async function startSession({ username, token, rawKey, version = 0 }) {
     session = { username, token, key: await importDataKey(rawKey), version };
+    // A store that saves to a file can't hold a CryptoKey, so it gets the bytes.
+    if (store.session.needsRawKey) session.rawKey = toB64(rawKey);
     await store.session.set(session);
     dirty = true;
     setStatus({ state: 'syncing', message: '' });
@@ -141,6 +144,7 @@ export function createSync({ store, runner }) {
   }
 
   const api = {
+    getStatus: () => ({ ...status }),
     onStatus(fn) {
       listeners.add(fn);
       fn({ ...status });
@@ -224,9 +228,16 @@ export function createSync({ store, runner }) {
       store.onChange(schedule);
       session = (await store.session.get()) ?? null;
       await api.checkAvailable();
-      setInterval(() => session && status.available && syncNow(), PULL_EVERY_MS);
-      addEventListener('online', () => session && status.available && syncNow());
-      document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && session && status.available && syncNow());
+      // Pull changes from other devices now and then. If the server couldn't be
+      // reached (say the computer started offline), keep asking.
+      setInterval(() => {
+        if (session) status.available ? syncNow() : api.checkAvailable();
+      }, PULL_EVERY_MS).unref?.();
+      // In a browser, also sync when coming back online or back to the tab.
+      if (typeof document !== 'undefined') {
+        addEventListener('online', () => session && status.available && syncNow());
+        document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && session && status.available && syncNow());
+      }
     },
   };
   return api;

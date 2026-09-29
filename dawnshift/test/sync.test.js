@@ -10,6 +10,8 @@ import {
 } from '../src/sync-crypto.js';
 import { mergeData, sameData } from '../src/sync-merge.js';
 import { openDb, createHandler } from '../sync-server/server.js';
+import { createStore } from '../src/store.js';
+import { createSync } from '../src/sync.js';
 
 // ---------- encryption ----------
 
@@ -205,6 +207,49 @@ test('recovery login, password change and account deletion', async () => {
     assert.equal((await s.call('POST', '/api/account/delete', { auth: 'bmV3YXV0aA==' }, fresh.body.token)).status, 200);
     assert.equal((await s.call('POST', '/api/account/login', { username: 'kim', auth: 'bmV3YXV0aA==' })).status, 401);
     assert.equal(fs.readdirSync(path.join(s.dir, 'blobs')).length, 0, 'the synced data is gone too');
+  } finally {
+    s.close();
+  }
+});
+
+test('the computer version syncs through an account, and stays logged in', async () => {
+  const s = await startServer();
+  const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'dawnshift-computer-'));
+  const [dirA, dirB] = [tmp(), tmp()];
+  const runner = { isRunning: () => false };
+  try {
+    const storeA = createStore(dirA);
+    const a = createSync({ store: storeA, runner, server: s.base });
+    await a.start();
+    assert.ok(a.getStatus().available, 'finds the account server');
+    storeA.state.bots.push({ id: 'bot_1', name: 'Researcher', updatedAt: new Date().toISOString() });
+    storeA.save();
+    await storeA.files.write('notes/hi.md', 'hello from computer A');
+    await a.signup('oliver', 'correct horse battery');
+    assert.equal(a.getStatus().state, 'synced', JSON.stringify(a.getStatus()));
+
+    const storeB = createStore(dirB);
+    const b = createSync({ store: storeB, runner, server: s.base });
+    await b.start();
+    await b.login('oliver', 'correct horse battery');
+    assert.equal(storeB.state.bots[0]?.name, 'Researcher', "computer A's bot arrived");
+    assert.equal(await storeB.files.read('notes/hi.md'), 'hello from computer A', 'and its file');
+    const saved = JSON.parse(fs.readFileSync(path.join(dirB, 'session.json'), 'utf8'));
+    assert.equal(saved.username, 'oliver');
+    assert.equal(fs.statSync(path.join(dirB, 'session.json')).mode & 0o077, 0, 'only this user can read the login');
+
+    // After a restart, computer B is still logged in and can sync.
+    const again = createSync({ store: createStore(dirB), runner, server: s.base });
+    await again.start();
+    assert.ok(again.getStatus().loggedIn);
+    // It syncs by itself on start; wait for that to finish.
+    for (let i = 0; i < 100 && again.getStatus().state !== 'synced'; i++) await new Promise((r) => setTimeout(r, 50));
+    assert.equal(again.getStatus().state, 'synced', JSON.stringify(again.getStatus()));
+
+    await again.logout();
+    assert.ok(!fs.existsSync(path.join(dirB, 'session.json')), 'logging out forgets the login');
+    const cleared = JSON.parse(fs.readFileSync(path.join(dirB, 'state.json'), 'utf8'));
+    assert.equal(cleared.bots.length, 0, 'and removes the data from this computer');
   } finally {
     s.close();
   }

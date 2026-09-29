@@ -1,10 +1,9 @@
 // In the web version, everything is saved in the browser's own storage
 // (IndexedDB) on the user's device. With an account, an encrypted copy is
-// also synced (see web/sync.js); the website itself can't read it.
-import { emptyState, normalizePath, withLookups, stamp } from './store-common.js';
+// also synced (see src/sync.js); the website itself can't read it.
+import { emptyState, normalizePath, withLookups, syncedState, mergeIntoState } from './store-common.js';
 
 const DB_NAME = 'dawnshift';
-const SYNCED = ['connections', 'bots', 'tasks', 'board'];
 
 function openDb() {
   return new Promise((resolve, reject) => {
@@ -99,53 +98,12 @@ export async function createBrowserStore() {
   store.onChange = (fn) => listeners.add(fn);
 
   // Everything that gets synced, as plain data.
-  store.exportData = async () => ({
-    ...structuredClone(Object.fromEntries([...SYNCED, 'secrets', 'deleted'].map((k) => [k, state[k] ?? (k === 'secrets' || k === 'deleted' ? {} : [])]))),
-    files: await all(),
-  });
+  store.exportData = async () => ({ ...syncedState(state), files: await all() });
 
-  // Puts merged data in place. Items that already exist are updated in place,
-  // so a bot that's in the middle of a task keeps working with the same object.
-  // Anything that changed on this device while the sync was in flight (or that
-  // keepLocal says to keep) stays as it is. Returns true if this device still
-  // has changes the merged data doesn't include.
-  store.applyData = async (data, { keepLocal = () => false } = {}) => {
-    let newerHere = false;
-    const deleted = { ...state.deleted, ...data.deleted };
-    for (const name of SYNCED) {
-      const existing = new Map(state[name].map((item) => [item.id, item]));
-      const seen = new Set();
-      const next = [];
-      for (const item of data[name]) {
-        seen.add(item.id);
-        const mine = existing.get(item.id);
-        if (!mine) next.push(item);
-        else if (keepLocal(item.id) || stamp(mine) > stamp(item)) {
-          newerHere ||= stamp(mine) > stamp(item);
-          next.push(mine);
-        } else {
-          for (const k of Object.keys(mine)) if (!(k in item)) delete mine[k];
-          next.push(Object.assign(mine, item));
-        }
-      }
-      // Items created here in the meantime.
-      for (const mine of state[name]) {
-        if (!seen.has(mine.id) && !(mine.id in deleted)) {
-          next.push(mine);
-          newerHere = true;
-        }
-      }
-      state[name] = next;
-    }
-    const secrets = { ...data.secrets };
-    for (const [k, v] of Object.entries(state.secrets)) {
-      if (!(k in secrets) && !(`secret:${k}` in deleted)) {
-        secrets[k] = v;
-        newerHere = true;
-      }
-    }
-    state.secrets = secrets;
-    state.deleted = deleted;
+  // Puts merged data in place (see mergeIntoState). Returns true if this
+  // device still has changes the merged data doesn't include.
+  store.applyData = async (data, { keepLocal } = {}) => {
+    const newerHere = mergeIntoState(state, data, keepLocal);
     await run(db, 'files', 'readwrite', (s) => {
       for (const f of data.files) s.put(f);
     });

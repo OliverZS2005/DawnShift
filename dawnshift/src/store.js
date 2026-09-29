@@ -1,14 +1,17 @@
 // On a computer, everything Dawnshift knows lives in one JSON file
 // (data/state.json), and the bots' files live in data/workspace/.
+// With an account, an encrypted copy is also synced (see src/sync.js).
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import { emptyState, normalizePath, withLookups } from './store-common.js';
+import { emptyState, normalizePath, withLookups, syncedState, mergeIntoState } from './store-common.js';
+import { importDataKey, fromB64 } from './sync-crypto.js';
 
 export { newId } from './store-common.js';
 
 export function createStore(dir, { persist = true } = {}) {
   const file = path.join(dir, 'state.json');
+  const sessionFile = path.join(dir, 'session.json');
   let state = emptyState();
   if (persist) {
     fs.mkdirSync(dir, { recursive: true });
@@ -18,6 +21,10 @@ export function createStore(dir, { persist = true } = {}) {
   }
 
   let timer = null;
+  const listeners = new Set();
+  const changed = () => {
+    for (const fn of listeners) fn();
+  };
 
   function flush() {
     clearTimeout(timer);
@@ -30,9 +37,11 @@ export function createStore(dir, { persist = true } = {}) {
   }
 
   // Bumps the version (so the interface knows to refresh) and writes soon after.
-  function save() {
+  // quiet: a change that came from syncing, which shouldn't be synced back.
+  function save({ quiet = false } = {}) {
     state.version++;
     if (!timer) timer = setTimeout(flush, 150);
+    if (!quiet) changed();
   }
 
   const workspaceDir = path.join(dir, 'workspace');
@@ -53,11 +62,12 @@ export function createStore(dir, { persist = true } = {}) {
       fsp.readFile(full(p), 'utf8').catch((err) => {
         throw err.code === 'ENOENT' || err.code === 'EISDIR' ? Object.assign(new Error(`No file called "${p}".`), { status: 404 }) : err;
       }),
-    async write(p, content) {
+    async write(p, content, { quiet = false } = {}) {
       const target = full(p);
       if (!normalizePath(p)) throw new Error('Give the file a name.');
       await fsp.mkdir(path.dirname(target), { recursive: true });
       await fsp.writeFile(target, content);
+      if (!quiet) changed();
     },
     async listAll() {
       await fsp.mkdir(workspaceDir, { recursive: true });
@@ -77,5 +87,60 @@ export function createStore(dir, { persist = true } = {}) {
     },
   };
 
-  return withLookups({ state, dir, save, flush, files });
+  const store = withLookups({ state, dir, save, flush, files });
+
+  // ---------- syncing ----------
+
+  // Called after every change the user or a bot makes.
+  store.onChange = (fn) => listeners.add(fn);
+
+  // Everything that gets synced, as plain data.
+  store.exportData = async () => ({
+    ...syncedState(state),
+    files: await Promise.all((await files.listAll()).map(async (f) => ({ ...f, content: await files.read(f.path) }))),
+  });
+
+  // Puts merged data in place (see mergeIntoState). Returns true if this
+  // computer still has changes the merged data doesn't include.
+  store.applyData = async (data, { keepLocal } = {}) => {
+    const newerHere = mergeIntoState(state, data, keepLocal);
+    for (const f of data.files) {
+      const mine = await files.read(f.path).catch(() => null);
+      if (mine !== f.content) await files.write(f.path, f.content, { quiet: true });
+    }
+    save({ quiet: true });
+    flush();
+    return newerHere;
+  };
+
+  // Removes all Dawnshift data from this computer (used when logging out).
+  store.clearAll = async () => {
+    const version = state.version;
+    for (const k of Object.keys(state)) delete state[k];
+    Object.assign(state, emptyState(), { version: version + 1 });
+    await fsp.rm(workspaceDir, { recursive: true, force: true });
+    flush();
+  };
+
+  // The login on this computer. The data key is saved as text in a file only
+  // this user can read, next to state.json (which holds the AI keys anyway).
+  store.session = {
+    async get() {
+      const saved = await fsp.readFile(sessionFile, 'utf8').then(JSON.parse).catch(() => null);
+      if (!saved) return null;
+      const { rawKey, ...rest } = saved;
+      return { ...rest, rawKey, key: await importDataKey(fromB64(rawKey)) };
+    },
+    async set({ key, rawKey, ...rest }) {
+      if (!persist) return;
+      if (!rawKey) throw new Error('The computer version needs the data key to stay logged in.');
+      await fsp.writeFile(sessionFile, JSON.stringify({ ...rest, rawKey }), { mode: 0o600 });
+    },
+    clear: () => fsp.rm(sessionFile, { force: true }),
+    // Tells src/sync.js to keep the key's bytes (as base64), since a file
+    // can't hold a CryptoKey.
+    needsRawKey: true,
+  };
+
+  return store;
 }

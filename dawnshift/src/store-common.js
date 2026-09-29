@@ -41,6 +41,65 @@ export function normalizePath(p = '.') {
   return parts.join('/');
 }
 
+// ---------- syncing (see src/sync.js) ----------
+
+// The lists that sync between devices, item by item.
+const SYNCED = ['connections', 'bots', 'tasks', 'board'];
+
+// Everything that gets synced, except files, as plain data.
+export function syncedState(state) {
+  return structuredClone({
+    ...Object.fromEntries(SYNCED.map((k) => [k, state[k] ?? []])),
+    secrets: state.secrets ?? {},
+    deleted: state.deleted ?? {},
+  });
+}
+
+// Puts merged data into state. Items that already exist are updated in place,
+// so a bot that's in the middle of a task keeps working with the same object.
+// Anything that changed on this device while the sync was in flight (or that
+// keepLocal says to keep) stays as it is. Returns true if this device still
+// has changes the merged data doesn't include.
+export function mergeIntoState(state, data, keepLocal = () => false) {
+  let newerHere = false;
+  const deleted = { ...state.deleted, ...data.deleted };
+  for (const name of SYNCED) {
+    const existing = new Map(state[name].map((item) => [item.id, item]));
+    const seen = new Set();
+    const next = [];
+    for (const item of data[name]) {
+      seen.add(item.id);
+      const mine = existing.get(item.id);
+      if (!mine) next.push(item);
+      else if (keepLocal(item.id) || stamp(mine) > stamp(item)) {
+        newerHere ||= stamp(mine) > stamp(item);
+        next.push(mine);
+      } else {
+        for (const k of Object.keys(mine)) if (!(k in item)) delete mine[k];
+        next.push(Object.assign(mine, item));
+      }
+    }
+    // Items created here in the meantime.
+    for (const mine of state[name]) {
+      if (!seen.has(mine.id) && !(mine.id in deleted)) {
+        next.push(mine);
+        newerHere = true;
+      }
+    }
+    state[name] = next;
+  }
+  const secrets = { ...data.secrets };
+  for (const [k, v] of Object.entries(state.secrets)) {
+    if (!(k in secrets) && !(`secret:${k}` in deleted)) {
+      secrets[k] = v;
+      newerHere = true;
+    }
+  }
+  state.secrets = secrets;
+  state.deleted = deleted;
+  return newerHere;
+}
+
 // Adds the lookup helpers both stores offer.
 export function withLookups(store) {
   store.bot = (id) => store.state.bots.find((b) => b.id === id);

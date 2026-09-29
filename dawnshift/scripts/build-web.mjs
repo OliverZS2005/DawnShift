@@ -41,7 +41,7 @@ await build({
   // Keeps the libraries' license comments in a file next to the bundle.
   legalComments: 'linked',
   logLevel: 'warning',
-  // Where web/sync.js sends account requests. Empty means this website.
+  // Where src/sync.js sends account requests. Empty means this website.
   define: { DAWNSHIFT_SERVER: JSON.stringify(appServer ?? '') },
 });
 

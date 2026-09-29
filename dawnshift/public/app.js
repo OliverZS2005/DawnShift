@@ -31,6 +31,10 @@ function fill(el, ...children) {
 // The web version runs Dawnshift's engine inside this page and hands us its API
 // directly (see web/main.js). Otherwise we talk to the local server.
 const local = globalThis.dawnshiftLocal;
+// The Android app (Capacitor) runs the web version inside an app.
+const inApp = Boolean(globalThis.Capacitor?.isNativePlatform?.());
+// Where this copy of Dawnshift keeps its data, for the interface's wording.
+const savedWhere = inApp ? 'in this app on this device' : local ? 'in this browser on this device' : 'on this computer';
 
 async function api(method, url, body) {
   if (local) {
@@ -218,9 +222,7 @@ function renderWelcome() {
       'Dawnshift gives you a team of AI coworkers. Each one has a job, remembers what it learns, and can hand work to the others. ',
       'You choose which AI powers each bot: Claude, ChatGPT, Grok, Gemini, or a model running on your own machine.'),
     iosInstallHint(),
-    local
-      ? h('p', { class: 'hint' }, 'Everything, including your keys, is saved in this browser on this device. Sign up to sync it to your other devices, encrypted. Bots work while Dawnshift is open.')
-      : null,
+    h('p', { class: 'hint' }, `Everything, including your keys, is saved ${savedWhere}. Sign up to sync it to your other devices, encrypted. Bots work while Dawnshift is open.`),
     h('ol', { class: 'steps' },
       h('li', { class: hasConn ? 'done' : '' },
         h('div', {},
@@ -885,7 +887,7 @@ function mountSettings(main) {
   const add = h('button', { type: 'submit' }, 'Add key');
   main.append(h('div', { class: 'page' },
     h('h1', {}, 'Settings'),
-    h('p', { class: 'lede' }, 'Everything is stored on this computer, in Dawnshift\'s data folder. Keys are never sent anywhere except the service they belong to.'),
+    h('p', { class: 'lede' }, `Everything is stored ${savedWhere}. Keys are only sent to the service they belong to, and, if you have an account, encrypted to your other devices.`),
     h('section', { class: 'block' },
       h('h2', {}, 'AI connections'),
       h('p', { class: 'hint' }, 'Add as many as you like. Each bot picks one in its settings.'),
@@ -950,10 +952,42 @@ function renderSettings() {
       : [h('p', { class: 'hint' }, 'No app keys yet.')]));
 }
 
-// ---------- account (web version with a sync server) ----------
+// ---------- account (syncing through an account server) ----------
 
-// Present only in the web version (see web/setup.js).
-const sync = globalThis.dawnshiftSync;
+// On a computer (the desktop app or npm start), syncing runs in Dawnshift's
+// own server; this offers the same functions as src/sync.js by asking it.
+function serverSync() {
+  const listeners = new Set();
+  let status = { available: false, loggedIn: false };
+  let last = '';
+  const emit = (st) => {
+    const json = JSON.stringify(st);
+    if (json === last) return;
+    last = json;
+    status = st;
+    for (const fn of listeners) fn({ ...st });
+  };
+  const poll = () => api('GET', '/api/account').then(emit, () => {});
+  const call = async (action, ...args) => {
+    const { result, status: st } = await api('POST', `/api/account/${action}`, { args });
+    emit(st);
+    return result;
+  };
+  poll();
+  setInterval(poll, 3000);
+  return {
+    onStatus(fn) {
+      listeners.add(fn);
+      fn({ ...status });
+      return () => listeners.delete(fn);
+    },
+    ...Object.fromEntries(['signup', 'login', 'recover', 'changePassword', 'logout', 'deleteAccount', 'checkAvailable', 'syncNow']
+      .map((action) => [action, (...args) => call(action, ...args)])),
+  };
+}
+
+// The web version and the Android app run syncing in the page (web/setup.js).
+const sync = globalThis.dawnshiftSync ?? (local ? null : serverSync());
 let syncStatus = { available: false, loggedIn: false };
 
 function syncLabel(st) {
@@ -1001,8 +1035,12 @@ function accountUnavailable() {
   if (!syncStatus.checked) return [h('h1', {}, 'Accounts'), h('p', { class: 'lede' }, 'Checking the account server…')];
   return [
     h('h1', {}, "Accounts aren't available right now"),
-    h('p', { class: 'lede' }, "This website's account server isn't answering, so logging in and signing up don't work yet. Everything you do is still saved on this device."),
-    h('p', { class: 'hint' }, 'Running this site yourself? Check that the dawnshift-sync service is running and that /api/ is passed to it (see "Accounts and sync" in the README).'),
+    h('p', { class: 'lede' }, `Dawnshift's account server isn't answering, so logging in and signing up don't work right now. Everything you do is still saved ${savedWhere}.`),
+    syncStatus.off
+      ? h('p', { class: 'hint' }, 'Accounts are turned off here (DAWNSHIFT_SYNC_SERVER=off).')
+      : local && !inApp
+        ? h('p', { class: 'hint' }, 'Running this site yourself? Check that the dawnshift-sync service is running and that /api/ is passed to it (see "Accounts and sync" in the README).')
+        : h('p', { class: 'hint' }, 'Check your internet connection, or try again in a little while.'),
     h('button', { onclick: (e) => attempt(async () => {
       if (!(await sync.checkAvailable())) toast('Still no answer from the account server.', true);
     }, e.currentTarget) }, 'Try again'),
