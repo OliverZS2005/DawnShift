@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cash Clash</title>
+<style>
+  :root {
+    --bg: #12141a; --panel: #1b1f29; --panel2: #232836; --line: #2e3446;
+    --text: #e8ebf2; --muted: #8a93a8; --gold: #f5c542; --green: #4ade80;
+    --red: #f87171; --blue: #60a5fa;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 16px; padding: 12px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 20px; letter-spacing: .5px; }
+  .money { font-size: 22px; font-weight: 700; color: var(--gold); font-variant-numeric: tabular-nums; }
+  .rate { color: var(--green); font-variant-numeric: tabular-nums; }
+  nav { display: flex; gap: 6px; margin-left: auto; }
+  nav button { background: var(--panel); }
+  nav button.active { background: var(--gold); color: #111; }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; cursor: pointer; font: inherit; }
+  button:hover:not(:disabled) { border-color: var(--gold); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary { background: var(--gold); color: #111; font-weight: 700; border: none; }
+  main { padding: 16px; max-width: 1000px; margin: 0 auto; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .card h3 { margin: 0 0 4px; font-size: 16px; }
+  .muted { color: var(--muted); }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; }
+  .bar { height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; margin-top: 8px; }
+  .bar > i { display: block; height: 100%; background: var(--green); }
+  .tag { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--panel2); }
+  .equipped { border-color: var(--gold); }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  tr.you { color: var(--gold); font-weight: 700; }
+  #arenaWrap { position: fixed; inset: 0; background: #000c; display: none; align-items: center; justify-content: center; z-index: 10; flex-direction: column; gap: 8px; }
+  canvas { background: #0d1017; border: 1px solid var(--line); border-radius: 8px; max-width: 100%; touch-action: none; }
+  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--panel2); border: 1px solid var(--gold); padding: 10px 16px; border-radius: 10px; display: none; z-index: 20; }
+  .log { max-height: 180px; overflow: auto; font-size: 13px; }
+  .log div { padding: 3px 0; border-bottom: 1px dashed var(--line); }
+  .win { color: var(--green); } .loss { color: var(--red); }
+</style>
+</head>
+<body>
+<header>
+  <h1>💰 Cash Clash</h1>
+  <div><div class="money" id="money">$0</div><div class="rate" id="rate">+$0/s</div></div>
+  <nav>
+    <button data-tab="tycoon" class="active">🏭 Tycoon</button>
+    <button data-tab="armory">🔫 Armory</button>
+    <button data-tab="battle">⚔️ Battle</button>
+  </nav>
+</header>
+<main id="view"></main>
+<div id="arenaWrap">
+  <div id="hud" class="muted"></div>
+  <canvas id="cv" width="900" height="560"></canvas>
+  <div class="muted">WASD / arrows move · Mouse aim · Click/hold shoot · R reload · 1-5 switch weapon</div>
+</div>
+<div id="toast"></div>
+
+<script>
+// ---------- Data ----------
+const BUILDINGS = [
+  { id: 'lemon',  name: 'Lemonade Stand', icon: '🍋', base: 15,      income: 1 },
+  { id: 'cafe',   name: 'Coffee Shop',    icon: '☕', base: 120,     income: 6 },
+  { id: 'arcade', name: 'Arcade',         icon: '🕹️', base: 1300,    income: 40 },
+  { id: 'fact',   name: 'Factory',        icon: '🏭', base: 14000,   income: 260 },
+  { id: 'bank',   name: 'Bank',           icon: '🏦', base: 160000,  income: 1800 },
+  { id: 'oil',    name: 'Oil Rig',        icon: '🛢️', base: 2.2e6,   income: 14000 },
+  { id: 'space',  name: 'Space Mine',     icon: '🚀', base: 3.5e7,   income: 120000 },
+];
+const WEAPONS = [
+  { id: 'pistol',  name: 'Pistol',         icon: '🔫', price: 0,      dmg: 14, rate: 3,  mag: 12, reload: 1.1, speed: 700, spread: .03, pellets: 1 },
+  { id: 'smg',     name: 'SMG',            icon: '💨', price: 2500,   dmg: 7,  rate: 12, mag: 35, reload: 1.6, speed: 750, spread: .10, pellets: 1 },
+  { id: 'shotgun', name: 'Shotgun',        icon: '💥', price: 12000,  dmg: 9,  rate: 1.3,mag: 6,  reload: 2.0, speed: 600, spread: .30, pellets: 7 },
+  { id: 'sniper',  name: 'Sniper',         icon: '🎯', price: 60000,  dmg: 70, rate: .8, mag: 4,  reload: 2.4, speed: 1500,spread: .005,pellets: 1 },
+  { id: 'rocket',  name: 'Rocket Launcher',icon: '🚀', price: 400000, dmg: 55, rate: .7, mag: 2,  reload: 2.8, speed: 420, spread: .02, pellets: 1, splash: 70 },
+];
+const STATS = { dmg: 'Damage', rate: 'Fire rate', mag: 'Magazine', armor: 'Armor' };
+const MAX_LVL = 10;
+const RIVAL_NAMES = ['xXSniperXx','MoneyMike','LemonLord','BigBankBob','NoScopeNina','TycoonTina','RocketRay','CashCarl','SprayPray','GoldGabe','FrugalFred','OilBaronOz','SpaceSam','PennyPia','CoinKing','ShotgunSue','ArcadeAce','FactoryFay','RichRick','DollarDee','BrokeBen','JackpotJo','VaultVic','StonksSteve'];
+
+// ---------- State ----------
+const fresh = () => ({
+  money: 50, buildings: {}, weapons: { pistol: { dmg: 0, rate: 0, mag: 0, armor: 0 } }, equipped: 'pistol',
+  rivals: RIVAL_NAMES.map((n, i) => ({ name: n, money: Math.round(30 * Math.pow(1.75, i) * (0.7 + Math.random() * 0.6)), skill: 0.3 + Math.random() * 0.6, recent: 0 })),
+  wins: 0, losses: 0, log: [], last: Date.now(),
+});
+let S;
+try { S = JSON.parse(localStorage.getItem('cashclash')) || fresh(); } catch { S = fresh(); }
+const save = () => { try { S.last = Date.now(); localStorage.setItem('cashclash', JSON.stringify(S)); } catch {} };
+
+// ---------- Economy ----------
+const fmt = n => { n = Math.floor(n); const u = ['', 'K', 'M', 'B', 'T', 'Qa']; let i = 0; let x = n; while (Math.abs(x) >= 1000 && i < u.length - 1) { x /= 1000; i++; } return '$' + (i ? x.toFixed(2) : x) + u[i]; };
+const owned = id => S.buildings[id]?.count || 0;
+const bLevel = id => S.buildings[id]?.level || 0;
+const bCost = b => b.base * Math.pow(1.15, owned(b.id));
+const bUpCost = b => b.base * 25 * Math.pow(4, bLevel(b.id));
+const bIncome = b => owned(b.id) * b.income * Math.pow(2, bLevel(b.id));
+const income = () => BUILDINGS.reduce((s, b) => s + bIncome(b), 0);
+const upCost = (w, stat) => Math.max(200, (w.price || 800) * 0.35) * Math.pow(1.6, S.weapons[w.id][stat]);
+
+// offline earnings (capped at 2h)
+{ const dt = Math.min(7200, (Date.now() - (S.last || Date.now())) / 1000); if (dt > 5) { S.money += income() * dt * 0.5; setTimeout(() => toast(`Welcome back! Offline earnings: ${fmt(income() * dt * 0.5)}`), 300); } }
+
+// rivals grow their wealth too, so the ladder keeps moving
+function tickRivals(dt) { for (const r of S.rivals) r.money *= 1 + 0.0015 * dt * (0.5 + r.skill); }
+
+// ---------- UI ----------
+let tab = 'tycoon';
+const $ = s => document.querySelector(s);
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = 'none', 3000); }
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => { tab = b.dataset.tab; document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active', x === b)); render(); });
+
+function render() {
+  const v = $('#view');
+  if (tab === 'tycoon') {
+    v.innerHTML = `<div class="grid">${BUILDINGS.map(b => `
+      <div class="card">
+        <h3>${b.icon} ${b.name} <span class="tag">x${owned(b.id)}</span> <span class="tag">Lv ${bLevel(b.id)}</span></h3>
+        <div class="muted">Each earns ${fmt(b.income * Math.pow(2, bLevel(b.id)))}/s · Total ${fmt(bIncome(b))}/s</div>
+        <div class="row"><button data-buy="${b.id}">Buy · ${fmt(bCost(b))}</button>
+        <button data-bup="${b.id}" ${owned(b.id) ? '' : 'disabled'}>Upgrade x2 · ${fmt(bUpCost(b))}</button></div>
+      </div>`).join('')}</div>`;
+  } else if (tab === 'armory') {
+    v.innerHTML = `<p class="muted">Buy weapons and upgrade them. Your <b>equipped</b> weapon and its upgrades decide how strong you are in battle. Armor upgrades are per-weapon loadouts.</p>
+    <div class="grid">${WEAPONS.map(w => {
+      const own = S.weapons[w.id];
+      return `<div class="card ${S.equipped === w.id ? 'equipped' : ''}">
+        <h3>${w.icon} ${w.name}</h3>
+        <div class="muted">${w.dmg * w.pellets} dmg/shot · ${w.rate}/s · mag ${w.mag}${w.splash ? ' · splash' : ''}</div>
+        ${own ? Object.keys(STATS).map(st => `<div class="row"><span>${STATS[st]} <span class="tag">${own[st]}/${MAX_LVL}</span></span>
+          <button data-wup="${w.id}:${st}" ${own[st] >= MAX_LVL ? 'disabled' : ''}>${own[st] >= MAX_LVL ? 'MAX' : fmt(upCost(w, st))}</button></div>`).join('') +
+          `<div class="row"><span></span><button data-eq="${w.id}" ${S.equipped === w.id ? 'disabled' : ''}>${S.equipped === w.id ? 'Equipped' : 'Equip'}</button></div>`
+        : `<div class="row"><span></span><button class="primary" data-wbuy="${w.id}">Buy · ${fmt(w.price)}</button></div>`}
+      </div>`; }).join('')}</div>`;
+  } else {
+    const ladder = [...S.rivals.map(r => ({ ...r })), { name: 'YOU', money: S.money, you: true }].sort((a, b) => b.money - a.money);
+    v.innerHTML = `<div class="grid">
+      <div class="card"><h3>⚔️ Find a match</h3>
+        <p class="muted">Matchmaking searches for the player whose money is closest to yours. Win: steal <b class="win">10%</b> of their money. Lose: they take <b class="loss">10%</b> of yours.</p>
+        <p>Record: <b class="win">${S.wins}W</b> / <b class="loss">${S.losses}L</b> · Weapon: ${WEAPONS.find(w => w.id === S.equipped).icon} ${WEAPONS.find(w => w.id === S.equipped).name}</p>
+        <button class="primary" id="queue">Search for opponent</button>
+        <div id="mm" class="muted" style="margin-top:8px"></div>
+        <h3 style="margin-top:14px">Battle log</h3>
+        <div class="log">${S.log.slice(-20).reverse().map(l => `<div class="${l.w ? 'win' : 'loss'}">${l.t}</div>`).join('') || '<span class="muted">No battles yet.</span>'}</div>
+      </div>
+      <div class="card"><h3>🏆 Leaderboard</h3><table>${ladder.map((r, i) => `<tr class="${r.you ? 'you' : ''}"><td>#${i + 1}</td><td>${r.name}</td><td>${fmt(r.money)}</td></tr>`).join('')}</table></div>
+    </div>`;
+    $('#queue').onclick = startQueue;
+  }
+}
+$('#view').addEventListener('click', e => {
+  const t = e.target.closest('button'); if (!t) return;
+  const d = t.dataset;
+  if (d.buy) { const b = BUILDINGS.find(x => x.id === d.buy), c = bCost(b); if (S.money >= c) { S.money -= c; S.buildings[b.id] = { count: owned(b.id) + 1, level: bLevel(b.id) }; } else toast('Not enough money'); }
+  if (d.bup) { const b = BUILDINGS.find(x => x.id === d.bup), c = bUpCost(b); if (S.money >= c) { S.money -= c; S.buildings[b.id].level++; } else toast('Not enough money'); }
+  if (d.wbuy) { const w = WEAPONS.find(x => x.id === d.wbuy); if (S.money >= w.price) { S.money -= w.price; S.weapons[w.id] = { dmg: 0, rate: 0, mag: 0, armor: 0 }; S.equipped = w.id; } else toast('Not enough money'); }
+  if (d.wup) { const [id, st] = d.wup.split(':'), w = WEAPONS.find(x => x.id === id), c = upCost(w, st); if (S.money >= c) { S.money -= c; S.weapons[id][st]++; } else toast('Not enough money'); }
+  if (d.eq) S.equipped = d.eq;
+  save(); render();
+});
+
+// ---------- Matchmaking ----------
+// Distance is measured on a log scale (so $1K vs $2K is as close as $1M vs $2M).
+// The acceptable window widens the longer you queue; recently-fought rivals are deprioritised.
+function findMatch(waitSec) {
+  const me = Math.log10(Math.max(1, S.money));
+  const window = 0.15 + waitSec * 0.25; // in orders of magnitude
+  const scored = S.rivals.map(r => ({ r, d: Math.abs(Math.log10(Math.max(1, r.money)) - me) + (r.recent > 0 ? 0.5 : 0) })).sort((a, b) => a.d - b.d);
+  return scored[0].d <= window ? scored[0].r : null;
+}
+let queueTimer;
+function startQueue() {
+  if (S.money < 10) return toast('You need at least $10 to battle');
+  const btn = $('#queue'); btn.disabled = true;
+  const t0 = performance.now();
+  clearInterval(queueTimer);
+  queueTimer = setInterval(() => {
+    const w = (performance.now() - t0) / 1000;
+    const mm = $('#mm'); if (!mm) return clearInterval(queueTimer);
+    mm.textContent = `Searching… ${w.toFixed(1)}s (range ±${(0.15 + w * 0.25).toFixed(2)} orders of magnitude)`;
+    const r = w > 0.8 && findMatch(w);
+    if (r) { clearInterval(queueTimer); mm.innerHTML = `Matched with <b>${r.name}</b> (${fmt(r.money)})`; setTimeout(() => startBattle(r), 700); }
+  }, 100);
+}
+
+// ---------- Arena ----------
+const cv = $('#cv'), cx = cv.getContext('2d');
+const keys = {}; let mouse = { x: 0, y: 0, down: false }; let G = null;
+addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; if (G && e.key >= '1' && e.key <= '5') { const w = WEAPONS[+e.key - 1]; if (S.weapons[w.id]) G.p.gun = makeGun(w.id, S.weapons[w.id]); } if (G && e.key.toLowerCase() === 'r') reload(G.p); });
+addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+cv.addEventListener('pointermove', e => { const r = cv.getBoundingClientRect(); mouse.x = (e.clientX - r.left) * cv.width / r.width; mouse.y = (e.clientY - r.top) * cv.height / r.height; });
+cv.addEventListener('pointerdown', e => { mouse.down = true; cv.dispatchEvent(new PointerEvent('pointermove', e)); });
+addEventListener('pointerup', () => mouse.down = false);
+
+function makeGun(id, up) {
+  const w = WEAPONS.find(x => x.id === id);
+  return { ...w, dmg: w.dmg * (1 + 0.15 * up.dmg), rate: w.rate * (1 + 0.08 * up.rate), mag: Math.round(w.mag * (1 + 0.15 * up.mag)), ammo: Math.round(w.mag * (1 + 0.15 * up.mag)), cd: 0, reloading: 0, armor: up.armor };
+}
+// Rival's loadout is derived from their wealth so richer opponents are tougher.
+function rivalLoadout(r) {
+  const affordable = WEAPONS.filter(w => w.price <= r.money * 0.6);
+  const w = affordable[Math.min(affordable.length - 1, Math.floor(Math.random() * 1.5 + affordable.length - 1.5))] || WEAPONS[0];
+  const lvl = Math.max(0, Math.min(MAX_LVL, Math.floor(Math.log10(Math.max(10, r.money)) * 1.3 - 2 + Math.random() * 2)));
+  return makeGun(w.id, { dmg: lvl, rate: lvl, mag: lvl, armor: lvl });
+}
+const WALLS = [[200, 120, 40, 140], [660, 300, 40, 140], [400, 60, 100, 30], [400, 470, 100, 30], [120, 400, 120, 30], [660, 130, 120, 30], [420, 250, 60, 60]];
+function hitsWall(x, y, rad) { if (x < rad || y < rad || x > cv.width - rad || y > cv.height - rad) return true; return WALLS.some(([wx, wy, ww, wh]) => x + rad > wx && x - rad < wx + ww && y + rad > wy && y - rad < wy + wh); }
+function lineClear(a, b) { const n = 30; for (let i = 1; i < n; i++) { const x = a.x + (b.x - a.x) * i / n, y = a.y + (b.y - a.y) * i / n; if (hitsWall(x, y, 1)) return false; } return true; }
+
+function startBattle(r) {
+  const p = { x: 80, y: 280, hp: 100, gun: makeGun(S.equipped, S.weapons[S.equipped]), ang: 0, col: '#f5c542' };
+  const e = { x: 820, y: 280, hp: 100, gun: rivalLoadout(r), ang: Math.PI, col: '#f87171', strafe: 1, think: 0, skill: r.skill };
+  G = { p, e, r, bullets: [], fx: [], t: 0, over: false };
+  $('#arenaWrap').style.display = 'flex';
+  let last = performance.now();
+  (function loop(now) { if (!G) return; const dt = Math.min(0.033, (now - last) / 1000); last = now; update(dt); draw(); if (G && !G.over) requestAnimationFrame(loop); })(last);
+}
+function reload(u) { if (!u.gun.reloading && u.gun.ammo < u.gun.mag) u.gun.reloading = u.gun.reload; }
+function shoot(u, ang, owner) {
+  const g = u.gun; if (g.cd > 0 || g.reloading > 0) return;
+  if (g.ammo <= 0) return reload(u);
+  g.ammo--; g.cd = 1 / g.rate;
+  for (let i = 0; i < g.pellets; i++) {
+    const a = ang + (Math.random() - .5) * g.spread * 2;
+    G.bullets.push({ x: u.x + Math.cos(a) * 18, y: u.y + Math.sin(a) * 18, vx: Math.cos(a) * g.speed, vy: Math.sin(a) * g.speed, dmg: g.dmg, owner, splash: g.splash, life: 1.5 });
+  }
+  if (g.ammo <= 0) reload(u);
+}
+function damage(u, d) { u.hp -= d / (1 + 0.1 * u.gun.armor); }
+function update(dt) {
+  const { p, e } = G; G.t += dt;
+  for (const u of [p, e]) { u.gun.cd -= dt; if (u.gun.reloading > 0 && (u.gun.reloading -= dt) <= 0) { u.gun.reloading = 0; u.gun.ammo = u.gun.mag; } }
+  // player
+  let mx = (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0), my = (keys.s || keys.arrowdown ? 1 : 0) - (keys.w || keys.arrowup ? 1 : 0);
+  const m = Math.hypot(mx, my) || 1, sp = 210;
+  if (!hitsWall(p.x + mx / m * sp * dt, p.y, 14)) p.x += mx / m * sp * dt;
+  if (!hitsWall(p.x, p.y + my / m * sp * dt, 14)) p.y += my / m * sp * dt;
+  p.ang = Math.atan2(mouse.y - p.y, mouse.x - p.x);
+  if (mouse.down) shoot(p, p.ang, 'p');
+  // AI: approach to preferred range, strafe, shoot with aim error based on skill
+  const dx = p.x - e.x, dy = p.y - e.y, dist = Math.hypot(dx, dy), see = lineClear(e, p);
+  e.ang = Math.atan2(dy, dx);
+  if ((e.think -= dt) <= 0) { e.think = 0.6 + Math.random(); e.strafe = Math.random() < .5 ? -1 : 1; }
+  const pref = e.gun.id === 'shotgun' ? 120 : e.gun.id === 'sniper' ? 420 : 260;
+  let ax = 0, ay = 0;
+  if (!see || dist > pref + 40) { ax = dx / dist; ay = dy / dist; } else if (dist < pref - 40) { ax = -dx / dist; ay = -dy / dist; }
+  ax += -dy / dist * e.strafe * .8; ay += dx / dist * e.strafe * .8;
+  const am = Math.hypot(ax, ay) || 1, es = 170 + 50 * e.skill;
+  if (!hitsWall(e.x + ax / am * es * dt, e.y, 14)) e.x += ax / am * es * dt; else e.strafe *= -1;
+  if (!hitsWall(e.x, e.y + ay / am * es * dt, 14)) e.y += ay / am * es * dt; else e.strafe *= -1;
+  if (see && G.t > 0.8) shoot(e, e.ang + (Math.random() - .5) * (0.5 - 0.4 * e.skill), 'e');
+  // bullets
+  for (const b of G.bullets) {
+    b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+    const tgt = b.owner === 'p' ? e : p;
+    const boom = () => { b.life = 0; if (b.splash) { G.fx.push({ x: b.x, y: b.y, r: b.splash, t: .3 }); for (const u of [p, e]) { const d = Math.hypot(u.x - b.x, u.y - b.y); if (d < b.splash) damage(u, b.dmg * (1 - d / b.splash) * (u === tgt ? 1 : 0.4)); } } };
+    if (hitsWall(b.x, b.y, 2)) boom();
+    else if (Math.hypot(tgt.x - b.x, tgt.y - b.y) < 15) { if (!b.splash) damage(tgt, b.dmg); boom(); G.fx.push({ x: b.x, y: b.y, r: 8, t: .15 }); }
+  }
+  G.bullets = G.bullets.filter(b => b.life > 0);
+  G.fx.forEach(f => f.t -= dt); G.fx = G.fx.filter(f => f.t > 0);
+  if (p.hp <= 0 || e.hp <= 0) endBattle(p.hp > 0);
+}
+function draw() {
+  const { p, e } = G;
+  cx.clearRect(0, 0, cv.width, cv.height);
+  cx.strokeStyle = '#1a1f2b'; for (let x = 0; x < cv.width; x += 40) { cx.beginPath(); cx.moveTo(x, 0); cx.lineTo(x, cv.height); cx.stroke(); } for (let y = 0; y < cv.height; y += 40) { cx.beginPath(); cx.moveTo(0, y); cx.lineTo(cv.width, y); cx.stroke(); }
+  cx.fillStyle = '#3a4258'; WALLS.forEach(w => cx.fillRect(...w));
+  for (const u of [p, e]) {
+    cx.save(); cx.translate(u.x, u.y); cx.rotate(u.ang); cx.fillStyle = '#ccc'; cx.fillRect(4, -3, 20, 6); cx.restore();
+    cx.fillStyle = u.col; cx.beginPath(); cx.arc(u.x, u.y, 14, 0, 7); cx.fill();
+    cx.fillStyle = '#000a'; cx.fillRect(u.x - 20, u.y - 28, 40, 5); cx.fillStyle = u === p ? '#4ade80' : '#f87171'; cx.fillRect(u.x - 20, u.y - 28, 40 * Math.max(0, u.hp) / 100, 5);
+  }
+  cx.fillStyle = '#ffe28a'; G.bullets.forEach(b => { cx.beginPath(); cx.arc(b.x, b.y, b.splash ? 5 : 3, 0, 7); cx.fill(); });
+  G.fx.forEach(f => { cx.fillStyle = `rgba(255,150,50,${f.t * 2})`; cx.beginPath(); cx.arc(f.x, f.y, f.r, 0, 7); cx.fill(); });
+  const g = p.gun;
+  $('#hud').innerHTML = `<b style="color:var(--gold)">YOU</b> ${g.icon} ${g.name} · ${g.reloading ? 'Reloading…' : `${g.ammo}/${g.mag}`} · HP ${Math.max(0, Math.ceil(p.hp))} &nbsp; vs &nbsp; <b style="color:var(--red)">${G.r.name}</b> ${e.gun.icon} ${e.gun.name} · HP ${Math.max(0, Math.ceil(e.hp))} · Pot ${fmt(G.r.money * .1)} / ${fmt(S.money * .1)}`;
+}
+function endBattle(won) {
+  G.over = true; const r = G.r;
+  S.rivals.forEach(x => x.recent = Math.max(0, x.recent - 1)); r.recent = 3;
+  let t;
+  if (won) { const gain = r.money * 0.1; r.money -= gain; S.money += gain; S.wins++; t = `Beat ${r.name} → +${fmt(gain)}`; }
+  else { const loss = S.money * 0.1; S.money -= loss; r.money += loss; S.losses++; t = `Lost to ${r.name} → -${fmt(loss)}`; }
+  S.log.push({ t, w: won }); S.log = S.log.slice(-50);
+  save();
+  cx.fillStyle = '#000b'; cx.fillRect(0, 0, cv.width, cv.height);
+  cx.fillStyle = won ? '#4ade80' : '#f87171'; cx.font = 'bold 48px system-ui'; cx.textAlign = 'center';
+  cx.fillText(won ? 'VICTORY' : 'DEFEAT', cv.width / 2, cv.height / 2 - 10);
+  cx.font = '22px system-ui'; cx.fillStyle = '#fff'; cx.fillText(t, cv.width / 2, cv.height / 2 + 30);
+  setTimeout(() => { $('#arenaWrap').style.display = 'none'; G = null; render(); }, 2200);
+}
+
+// ---------- Main loop ----------
+let lastTick = performance.now(), saveT = 0, renderT = 0;
+setInterval(() => {
+  const now = performance.now(), dt = (now - lastTick) / 1000; lastTick = now;
+  S.money += income() * dt; tickRivals(dt);
+  $('#money').textContent = fmt(S.money); $('#rate').textContent = `+${fmt(income())}/s`;
+  if ((saveT += dt) > 5) { saveT = 0; save(); }
+  if ((renderT += dt) > 1 && tab !== 'battle' && !G) { renderT = 0; render(); }
+}, 100);
+render();
+</script>
+</body>
+</html>
