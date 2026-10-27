@@ -4577,9 +4577,10 @@
     "wallTex": "concrete_wall",
     "wallTile": 3,
     "tints": [
-     "#d8cfbf"
+     "#a7a39b",
+     "#9a968e"
     ],
-    "trim": "#a89a7c",
+    "trim": "#7d7a73",
     "line": "#c9b98f",
     "lampsOn": false,
     "props": [
@@ -6450,13 +6451,23 @@
      "w": 11,
      "d": 15,
      "floors": 5,
-     "h": 17.1,
+     "h": 15,
      "facade": "brick2",
      "tint": "#e9e3dc",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 662052
+     "seed": 662052,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 2,
+       "n": 4,
+       "g": "dsss",
+       "u": "small",
+       "d": 37.85
+      }
+     ]
     },
     {
      "x": -21.35,
@@ -6557,13 +6568,23 @@
      "w": 16.64,
      "d": 15,
      "floors": 5,
-     "h": 17.1,
+     "h": 15,
      "facade": "brick2",
      "tint": "#e9e3dc",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 119534
+     "seed": 119534,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 3,
+       "n": 6,
+       "g": "dpsspp",
+       "u": "double",
+       "d": 34.08
+      }
+     ]
     },
     {
      "x": -14.48,
@@ -6667,13 +6688,23 @@
      "w": 15.58,
      "d": 15,
      "floors": 9,
-     "h": 30.3,
+     "h": 27,
      "facade": "brick2",
      "tint": "#e9e3dc",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 28174
+     "seed": 28174,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 3,
+       "n": 5,
+       "g": "ppssd",
+       "u": "double",
+       "d": 35.66
+      }
+     ]
     },
     {
      "x": 40.8,
@@ -7129,13 +7160,23 @@
      "w": 15,
      "d": 16,
      "floors": 7,
-     "h": 23.7,
+     "h": 21,
      "facade": "brick",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 4794
+     "seed": 4794,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 3,
+       "n": 5,
+       "g": "dspps",
+       "u": "double",
+       "d": 74.18
+      }
+     ]
     },
     {
      "x": -37.83,
@@ -8640,6 +8681,13 @@
        "g": "dpssp",
        "u": "double",
        "d": 64.62
+      },
+      {
+       "s": 2,
+       "n": 7,
+       "g": "dpsspss",
+       "u": "offset",
+       "d": 72.26
       }
      ]
     },
@@ -14239,13 +14287,23 @@
      "w": 18.82,
      "d": 15,
      "floors": 10,
-     "h": 33.6,
+     "h": 30,
      "facade": "concrete",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": true,
-     "seed": 480538
+     "seed": 480538,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 3,
+       "n": 6,
+       "g": "sspssd",
+       "u": "double",
+       "d": 65.03
+      }
+     ]
     },
     {
      "x": 16.2,
@@ -14282,6 +14340,13 @@
        "g": "dsppp",
        "u": "double",
        "d": 57.31
+      },
+      {
+       "s": 3,
+       "n": 5,
+       "g": "dsppp",
+       "u": "large",
+       "d": 50.83
       }
      ]
     },
@@ -14353,13 +14418,23 @@
      "w": 14.92,
      "d": 15,
      "floors": 8,
-     "h": 27,
+     "h": 24,
      "facade": "brick",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 443960
+     "seed": 443960,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 2,
+       "n": 5,
+       "g": "dspps",
+       "u": "small",
+       "d": 65.04
+      }
+     ]
     },
     {
      "x": 15.37,
@@ -14468,6 +14543,13 @@
        "g": "dsp",
        "u": "large",
        "d": 53.3
+      },
+      {
+       "s": 2,
+       "n": 5,
+       "g": "dspps",
+       "u": "small",
+       "d": 50.83
       }
      ]
     },
@@ -14832,13 +14914,23 @@
      "w": 18.24,
      "d": 15,
      "floors": 9,
-     "h": 30.3,
+     "h": 27,
      "facade": "brick2",
      "tint": "#ffffff",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 438122
+     "seed": 438122,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 3,
+       "n": 6,
+       "g": "dsssps",
+       "u": "double",
+       "d": 52.07
+      }
+     ]
     },
     {
      "x": 70.42,
@@ -14846,13 +14938,23 @@
      "w": 19.16,
      "d": 15,
      "floors": 5,
-     "h": 17.1,
+     "h": 15,
      "facade": "brick2",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 646529
+     "seed": 646529,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 3,
+       "n": 6,
+       "g": "sdddds",
+       "u": "large",
+       "d": 70.68
+      }
+     ]
     },
     {
      "x": 41.5,
@@ -15225,6 +15327,13 @@
        "g": "ddspp",
        "u": "double",
        "d": 66.37
+      },
+      {
+       "s": 2,
+       "n": 5,
+       "g": "ddspp",
+       "u": "small",
+       "d": 64.21
       }
      ]
     },
@@ -15528,13 +15637,23 @@
      "w": 13.93,
      "d": 15,
      "floors": 8,
-     "h": 27,
+     "h": 24,
      "facade": "concrete",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": true,
-     "seed": 364
+     "seed": 364,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 2,
+       "n": 5,
+       "g": "dpssp",
+       "u": "small",
+       "d": 60.93
+      }
+     ]
     },
     {
      "x": -48.95,
@@ -15542,13 +15661,23 @@
      "w": 9.43,
      "d": 15,
      "floors": 9,
-     "h": 30.3,
+     "h": 27,
      "facade": "brick",
      "tint": "#ffffff",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 94925
+     "seed": 94925,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 2,
+       "n": 3,
+       "g": "dps",
+       "u": "offset",
+       "d": 49.32
+      }
+     ]
     },
     {
      "x": -39.11,
@@ -15594,13 +15723,23 @@
      "w": 16.28,
      "d": 15,
      "floors": 11,
-     "h": 36.9,
+     "h": 33,
      "facade": "brick2",
      "tint": "#e9e3dc",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 190895
+     "seed": 190895,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 3,
+       "n": 5,
+       "g": "dpsss",
+       "u": "small",
+       "d": 58.1
+      }
+     ]
     },
     {
      "x": -41.82,
@@ -15844,6 +15983,13 @@
        "g": "dss",
        "u": "small",
        "d": 63.15
+      },
+      {
+       "s": 3,
+       "n": 5,
+       "g": "dssss",
+       "u": "double",
+       "d": 64.21
       }
      ]
     },
@@ -16041,6 +16187,13 @@
        "g": "dp",
        "u": "offset",
        "d": 62.47
+      },
+      {
+       "s": 2,
+       "n": 5,
+       "g": "dppss",
+       "u": "double",
+       "d": 64.22
       }
      ]
     },

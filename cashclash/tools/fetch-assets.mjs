@@ -10,7 +10,8 @@
 //   * Microsoft Rocketbox (https://github.com/microsoft/Microsoft-Rocketbox, MIT licence): realistic people
 //     and their animations. Converting those from FBX needs Blender on the PATH (tools/people.py).
 // The downloaded files are committed, so you only need this to change or refresh the art.
-// Pass a section name to redo just that part: models, textures, skies, facades, kits, cars, guns, people, fonts.
+// Pass a section name to redo just that part: models, textures, skies, facades, kits, cars, guns, people, fonts
+// (kits also takes one kit: `node tools/fetch-assets.mjs kits fence`).
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';

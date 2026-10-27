@@ -268,7 +268,7 @@
         tints: ['#9b3426', '#2c5a8c', '#3b7a46', '#c07a28', '#6b6f75'], trim: '#3a3d42', line: '#e0b82e', lampsOn: false,
         props: ['crate', 'military_crate', 'barrel', 'plastic_crate', 'utility_box', 'trash_can', 'covered_car', 'barrier'] },
       { name: 'Pillars', sky: 'sunset', exposure: 0.95, sun: '#ffc690', sunI: 3.2, floorTex: 'slate', floorTile: 3, outerTex: 'pavers', wallStyle: 'stone', wallTex: 'concrete_wall', wallTile: 3,
-        tints: ['#d8cfbf'], trim: '#a89a7c', line: '#c9b98f', lampsOn: false,
+        tints: ['#a7a39b', '#9a968e'], trim: '#7d7a73', line: '#c9b98f', lampsOn: false, // weathered cast concrete
         props: ['barrier', 'shrub', 'bench', 'trash_can', 'hydrant', 'barrel'] },
       { name: 'Corridors', sky: 'night', exposure: 1.25, sun: '#9fb4ff', sunI: 1.2, floorTex: 'metal_plate', floorTile: 2.5, outerTex: 'asphalt', wallStyle: 'metal', wallTex: 'metal_plate', wallTile: 2,
         tints: ['#9aa3ad'], trim: '#3fb6ff', line: '#3fb6ff', lampsOn: true,
@@ -410,10 +410,11 @@
       const [x, z] = side < 2 ? [along * Cx, (side ? 1 : -1) * out[1]] : [(side === 2 ? 1 : -1) * out[0], along * Cz];
       props.push({ model: pick(stuff), p: [round2(x), 0.15, round2(z)], ry: round2(r() * PI * 2) });
     }
-    // modelled fronts on the sides that face the middle (not the ones up against a neighbour)
-    const K = U.kit, touching = (b, side) => buildings.some(o => o !== b && (side < 2
-      ? Math.abs((o.x - o.w / 2 * (side ? -1 : 1)) - (b.x + b.w / 2 * (side ? -1 : 1))) < 0.05 && Math.abs(o.z - b.z) < (o.d + b.d) / 2 - 0.5
-      : Math.abs((o.z - o.d / 2 * (side === 3 ? -1 : 1)) - (b.z + b.d / 2 * (side === 3 ? -1 : 1))) < 0.05 && Math.abs(o.x - b.x) < (o.w + b.w) / 2 - 0.5));
+    // modelled fronts on the sides that face the middle (not the ones mostly hidden by a neighbour)
+    const K = U.kit, overlap = (a, aw, o, ow) => Math.min(a + aw / 2, o + ow / 2) - Math.max(a - aw / 2, o - ow / 2);
+    const touching = (b, side) => buildings.some(o => o !== b && (side < 2
+      ? Math.abs((o.x - o.w / 2 * (side ? -1 : 1)) - (b.x + b.w / 2 * (side ? -1 : 1))) < 0.05 && overlap(b.z, b.d, o.z, o.d) > b.d * 0.8
+      : Math.abs((o.z - o.d / 2 * (side === 3 ? -1 : 1)) - (b.z + b.d / 2 * (side === 3 ? -1 : 1))) < 0.05 && overlap(b.x, b.w, o.x, o.w) > b.w * 0.8));
     for (const b of buildings) {
       if (!b.near) continue;
       const faces = [];
