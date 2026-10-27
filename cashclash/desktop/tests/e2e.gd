@@ -82,7 +82,7 @@ func _ready() -> void:
 	Game.send({"type": "queue"})
 	put_file("desk_queued", "ok")
 	t2 = 0.0
-	while result.is_empty() and t2 < 90:
+	while result.is_empty() and t2 < 200: # the server ends fights after 180s at most
 		await get_tree().create_timer(0.5).timeout
 		t2 += 0.5
 	check(not result.is_empty(), "online fight vs web player finished: " + (result[0] if result.size() else "timeout"))

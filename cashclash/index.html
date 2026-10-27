@@ -41,8 +41,73 @@
   tr.you { color: var(--gold); font-weight: 700; }
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 6px; }
   .dot.on { background: var(--green); }
-  #arenaWrap { position: fixed; inset: 0; background: #000c; display: none; align-items: center; justify-content: center; z-index: 10; flex-direction: column; gap: 8px; padding: 8px; }
-  canvas { background: #0d1017; border: 1px solid var(--line); border-radius: 8px; max-width: 100%; touch-action: none; }
+  /* ---------- First-person fight HUD ----------
+     Brief: tactical, crisp, readable. Ink plates over the 3D world, warm-white text, one amber accent
+     for hit confirmation and critical callouts; blue/red stay as team colours. Condensed labels +
+     monospace numerals, sharp 2px corners, motion only where it carries information. */
+  @font-face { font-family: 'Barlow Condensed'; src: url(desktop/assets/fonts/barlow-condensed-600.woff2) format('woff2'); font-weight: 600; font-display: swap; }
+  @font-face { font-family: 'Barlow Condensed'; src: url(desktop/assets/fonts/barlow-condensed-800.woff2) format('woff2'); font-weight: 800; font-display: swap; }
+  @font-face { font-family: 'JetBrains Mono'; src: url(desktop/assets/fonts/jetbrains-mono-500.woff2) format('woff2'); font-weight: 500; font-display: swap; }
+  @font-face { font-family: 'JetBrains Mono'; src: url(desktop/assets/fonts/jetbrains-mono-700.woff2) format('woff2'); font-weight: 700; font-display: swap; }
+  #arenaWrap {
+    --ink: rgba(11, 13, 16, .74); --edge: rgba(242, 239, 232, .14); --hud: #F2EFE8; --dim: #B9B4AA; --amber: #FFB020;
+    --you: #4f8ff0; --foe: #e2584b; --ok: #4ade80; --low: #f87171;
+    --f-label: 'Barlow Condensed', 'Arial Narrow', sans-serif; --f-num: 'JetBrains Mono', ui-monospace, monospace;
+    position: fixed; inset: 0; background: #07080b; display: none; z-index: 10; color: var(--hud); font-family: var(--f-label); user-select: none;
+  }
+  #cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #arenaWrap .plate { position: absolute; background: var(--ink); border: 1px solid var(--edge); border-radius: 2px; }
+  #arenaWrap .label { font-weight: 600; font-size: 14px; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+  #arenaWrap .num { font-family: var(--f-num); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+  #arenaWrap .meter { height: 6px; background: rgba(242, 239, 232, .12); border-radius: 1px; overflow: hidden; }
+  #arenaWrap .meter > i { display: block; height: 100%; width: 100%; background: var(--ok); transition: width .12s linear; }
+  /* crosshair: four ticks whose gap opens with weapon spread and movement */
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; --gap: 8px; pointer-events: none; }
+  #crosshair i { position: absolute; background: var(--hud); box-shadow: 0 0 0 1px rgba(0, 0, 0, .6); transition: top .08s, left .08s; }
+  #crosshair i:nth-child(1) { width: 2px; height: 9px; left: -1px; top: calc(-1 * var(--gap) - 9px); }
+  #crosshair i:nth-child(2) { width: 2px; height: 9px; left: -1px; top: var(--gap); }
+  #crosshair i:nth-child(3) { width: 9px; height: 2px; top: -1px; left: calc(-1 * var(--gap) - 9px); }
+  #crosshair i:nth-child(4) { width: 9px; height: 2px; top: -1px; left: var(--gap); }
+  #hitmark { position: absolute; left: -11px; top: -11px; width: 22px; height: 22px; opacity: 0; }
+  #hitmark::before, #hitmark::after { content: ''; position: absolute; left: 10px; top: -1px; width: 2px; height: 24px; background: var(--amber); box-shadow: 0 0 0 1px rgba(0, 0, 0, .5); transform: rotate(45deg); }
+  #hitmark::after { transform: rotate(-45deg); }
+  #hitmark.on { animation: hit .22s ease-out; }
+  @keyframes hit { from { opacity: 1; transform: scale(1.25); } to { opacity: 0; transform: scale(1); } }
+  #vignette { position: absolute; inset: 0; pointer-events: none; opacity: 0; box-shadow: inset 0 0 140px 30px rgba(226, 50, 40, .7); }
+  #vignette.on { animation: hurt .45s ease-out; }
+  #vignette.critical { opacity: .45; }
+  @keyframes hurt { from { opacity: 1; } to { opacity: 0; } }
+  /* opponent, top centre */
+  #foe { top: 16px; left: 50%; transform: translateX(-50%); padding: 8px 14px 10px; min-width: 260px; }
+  #foe .who { display: flex; justify-content: space-between; align-items: baseline; gap: 18px; margin-bottom: 6px; }
+  #foe .who b { font-weight: 800; font-size: 22px; letter-spacing: .01em; }
+  #foe .meter > i { background: var(--foe); }
+  #stakes { top: 92px; left: 50%; transform: translateX(-50%); padding: 4px 10px; font-family: var(--f-num); font-size: 13px; font-weight: 500; white-space: nowrap; }
+  #stakes .w { color: var(--ok); } #stakes .l { color: var(--low); }
+  #minimap { top: 16px; right: 16px; }
+  /* you, bottom corners */
+  #vitals { left: 16px; bottom: 16px; padding: 10px 14px 12px; width: 200px; }
+  #vitals .num { font-size: 44px; }
+  #vitals .meter { margin-top: 8px; }
+  #vitals.low .num { color: var(--low); } #vitals.low .meter > i { background: var(--low); }
+  #arms { right: 16px; bottom: 16px; padding: 10px 14px 12px; text-align: right; min-width: 200px; }
+  #arms .num { font-size: 44px; }
+  #arms .mag { font-family: var(--f-num); font-weight: 500; font-size: 18px; color: var(--dim); margin-left: 4px; }
+  #arms .gun { display: block; font-weight: 800; font-size: 20px; margin-top: 4px; }
+  #arms.low .num, #arms.reloading .gun { color: var(--amber); }
+  #keys { left: 50%; bottom: 16px; transform: translateX(-50%); padding: 6px 12px; font-size: 15px; color: var(--dim); transition: opacity 1.2s; white-space: nowrap; }
+  #keys kbd { font-family: var(--f-num); font-size: 12px; color: var(--hud); border: 1px solid var(--edge); border-radius: 2px; padding: 1px 5px; margin: 0 2px; }
+  #keys.gone { opacity: 0; }
+  #lockPrompt { left: 50%; top: 58%; transform: translateX(-50%); padding: 14px 22px; text-align: center; cursor: pointer; }
+  #lockPrompt b { display: block; font-weight: 800; font-size: 26px; }
+  #lockPrompt span { font-size: 16px; color: var(--dim); }
+  #result { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; background: rgba(7, 8, 11, .62); gap: 10px; }
+  #result b { font-weight: 800; font-size: 84px; letter-spacing: .04em; line-height: .9; }
+  #result span { font-family: var(--f-num); font-weight: 500; font-size: 18px; }
+  @media (prefers-reduced-motion: reduce) { #hitmark.on, #vignette.on { animation-duration: .01s; } #keys, #crosshair i, #arenaWrap .meter > i { transition: none; } }
+  #cityWrap { position: relative; height: 44vh; min-height: 260px; display: none; border-bottom: 1px solid var(--line); }
+  #city { width: 100%; height: 100%; display: block; touch-action: none; }
+  #cityHint { position: absolute; left: 16px; bottom: 10px; background: #0b0d12aa; border-radius: 8px; padding: 4px 10px; font-size: 12px; pointer-events: none; }
   #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--panel2); border: 1px solid var(--gold); padding: 10px 16px; border-radius: 10px; display: none; z-index: 20; }
   .log { max-height: 180px; overflow: auto; font-size: 13px; }
   .log div { padding: 3px 0; border-bottom: 1px dashed var(--line); }
@@ -69,15 +134,27 @@
     <button data-tab="reboot">🔄 Reboot</button>
   </nav>
 </header>
+<div id="cityWrap"><canvas id="city"></canvas><div id="cityHint" class="muted">Drag to look around · scroll to zoom · click a lot to buy</div></div>
 <main id="view"></main>
 <div id="arenaWrap">
-  <div id="hud" class="muted"></div>
-  <canvas id="cv" width="900" height="560"></canvas>
-  <div class="muted">WASD / arrows move · Mouse aim · Click/hold shoot · R reload · 1-5 switch weapon</div>
+  <canvas id="cv"></canvas>
+  <div id="vignette"></div>
+  <div id="crosshair"><i></i><i></i><i></i><i></i><b id="hitmark"></b></div>
+  <div id="foe" class="plate"><div class="who"><b id="foeName"></b><span class="label" id="foeGun"></span></div><div class="meter"><i id="foeHp"></i></div></div>
+  <div id="stakes" class="plate"></div>
+  <canvas id="minimap" class="plate" width="225" height="140"></canvas>
+  <div id="vitals" class="plate"><span class="label">Health</span><div class="num" id="hpNum">100</div><div class="meter"><i id="hpBar"></i></div></div>
+  <div id="arms" class="plate"><span class="label" id="armsLabel">Ammo</span><div><span class="num" id="ammo">12</span><span class="mag" id="mag">/ 12</span></div><span class="gun" id="gunName"></span></div>
+  <div id="keys" class="plate"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · mouse looks · click fires · <kbd>R</kbd> reload · <kbd>1</kbd>–<kbd>5</kbd> weapons · <kbd>Esc</kbd> frees the cursor</div>
+  <div id="lockPrompt" class="plate"><b>Click to take aim</b><span>Your mouse turns your head. Press Esc any time to get the cursor back.</span></div>
+  <div id="result"><b></b><span></span></div>
 </div>
 <div id="toast"></div>
 
 <script src="shared.js"></script>
+<script src="vendor/three.bundle.js"></script>
+<script src="models.js"></script>
+<script src="render3d.js"></script>
 <script>
 const { BUILDINGS, WEAPONS, STATS, MAX_LVL, fmt } = CC;
 const $ = s => document.querySelector(s);
@@ -209,8 +286,8 @@ function render() {
   document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active', x.dataset.tab === tab));
   const pill = $('#modePill'); pill.className = 'mode' + (mode === 'mp' ? ' mp' : ''); pill.textContent = mode === 'mp' ? `🌐 ${NET?.server || 'Multiplayer'}` : '💻 Singleplayer';
   const v = $('#view'), t = T();
-  if (tab === 'play') v.innerHTML = renderPlay();
-  else if (tab === 'tycoon') v.innerHTML = eventBanner(t) + `<p class="muted"><b class="lvl">${CC.LEVELS[t.level - 1]}</b> · income x${CC.globalMult(t).toFixed(2)} · Owning 25/50/100/200 of a building doubles its output each time.</p>
+  if (tab === 'play') setView(v, renderPlay());
+  else if (tab === 'tycoon') setView(v, eventBanner(t) + `<p class="muted"><b class="lvl">${CC.LEVELS[t.level - 1]}</b> · income x${CC.globalMult(t).toFixed(2)} · Owning 25/50/100/200 of a building doubles its output each time.</p>
     <div class="grid">${BUILDINGS.map(b => !CC.unlocked(t, b) ? `
       <div class="card locked"><h3>🔒 ${b.icon} ${b.name}</h3><div class="muted">Unlocks at business level ${b.unlock}: <b>${CC.LEVELS[b.unlock - 1]}</b>. Reboot to get there.</div></div>` : `
       <div class="card">
@@ -218,8 +295,8 @@ function render() {
         <div class="muted">Total ${fmt(CC.bIncome(t, b))}/s${CC.nextMilestone(CC.owned(t, b.id)) ? ` · next x2 at ${CC.nextMilestone(CC.owned(t, b.id))} owned` : ' · all milestones!'}</div>
         <div class="row"><button data-a='{"type":"buy","id":"${b.id}"}' ${t.money < CC.bCost(t, b) ? 'disabled' : ''}>Buy · ${fmt(CC.bCost(t, b))}</button>
         <button data-a='{"type":"bup","id":"${b.id}"}' ${CC.owned(t, b.id) && t.money >= CC.bUpCost(t, b) ? '' : 'disabled'}>Upgrade x2 · ${fmt(CC.bUpCost(t, b))}</button></div>
-      </div>`).join('')}</div>`;
-  else if (tab === 'armory') v.innerHTML = `<p class="muted">Buy weapons and upgrade them. You bring your <b>equipped</b> weapon into battle and can switch to any other owned weapon with keys 1-5.</p>
+      </div>`).join('')}</div>`);
+  else if (tab === 'armory') setView(v, `<p class="muted">Buy weapons and upgrade them. You bring your <b>equipped</b> weapon into battle and can switch to any other owned weapon with keys 1-5.</p>
     <div class="grid">${WEAPONS.map(w => {
       const own = t.weapons[w.id];
       return `<div class="card ${t.equipped === w.id ? 'equipped' : ''}">
@@ -229,11 +306,14 @@ function render() {
           <button data-a='{"type":"wup","id":"${w.id}","stat":"${st}"}' ${own[st] >= MAX_LVL || t.money < CC.upCost(t, w, st) ? 'disabled' : ''}>${own[st] >= MAX_LVL ? 'MAX' : fmt(CC.upCost(t, w, st))}</button></div>`).join('') +
           `<div class="row"><span></span><button data-a='{"type":"equip","id":"${w.id}"}' ${t.equipped === w.id ? 'disabled' : ''}>${t.equipped === w.id ? 'Equipped' : 'Equip'}</button></div>`
         : `<div class="row"><span></span><button class="primary" data-a='{"type":"wbuy","id":"${w.id}"}' ${t.money < w.price ? 'disabled' : ''}>Buy · ${fmt(w.price)}</button></div>`}
-      </div>`; }).join('')}</div>`;
-  else if (tab === 'reboot') v.innerHTML = renderReboot(t);
-  else v.innerHTML = mode === 'mp' ? renderBattleMP() : renderBattleSP();
-  updateMoney();
+      </div>`; }).join('')}</div>`);
+  else if (tab === 'reboot') setView(v, renderReboot(t));
+  else setView(v, mode === 'mp' ? renderBattleMP() : renderBattleSP());
+  updateMoney(); showCity();
 }
+// Only touch the page when something visible changed, so a button never vanishes under your cursor mid-click.
+let shownHtml = '';
+function setView(v, html) { if (shownHtml !== html) { v.innerHTML = html; shownHtml = html; } }
 
 function eventBanner(t) {
   if (!t.event || t.event.until < Date.now()) return '';
@@ -279,6 +359,7 @@ function renderPlay() {
   return `<div class="grid">
     <div class="card ${mode === 'sp' ? 'current' : ''}"><h3>💻 Singleplayer</h3>
       <p class="muted">Runs entirely on your PC. Fight computer rivals. You have one singleplayer game — you can reset it, but not make another.</p>
+      ${R3D.assetsAvailable ? '' : `<p class="loss">You opened this page straight from a file, so the 3D art can't load and you're seeing simple shapes. For full graphics run <code>npm start</code> in the cashclash folder and open <b>http://localhost:8080</b>.</p>`}
       <p>${fmt(t.money)} · ${fmt(CC.income(t))}/s · ${SP.wins}W / ${SP.losses}L</p>
       <div class="row"><button class="primary" data-sp ${mode === 'sp' ? 'disabled' : ''}>${mode === 'sp' ? 'Playing' : 'Play singleplayer'}</button>
       <button class="danger" data-reset>Reset singleplayer game</button></div>
@@ -371,10 +452,15 @@ function startQueueSP() {
     if (best.d <= CC.searchWindow(w)) { clearInterval(queueTimer); mm.innerHTML = `Matched with <b>${best.r.name}</b> (L${best.r.level}${best.r.prestige ? '★' + best.r.prestige : ''}, ${fmt(best.r.money)})`; setTimeout(() => openArena({ mp: false, rival: best.r }), 700); }
   }, 100);
 }
-// ---------- Arena (shared by both modes) ----------
-const cv = $('#cv'), cx = cv.getContext('2d');
-const keys = {}, mouse = { x: 0, y: 0, down: false };
+// ---------- Arena (first person, shared by both modes) ----------
+const cv = $('#cv');
+let arena3d = null; // created on first fight
+const keys = {}, mouse = { down: false };
 let G = null, oneShot = {};
+const SENS = 0.0022, TURN = 2.6; // radians per pixel of mouse movement / per second on the arrow keys
+const locked = () => document.pointerLockElement === cv;
+// Browsers only grant pointer lock after a click; a refused request just leaves the "click to aim" prompt up.
+const lockMouse = () => { try { const p = cv.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch {} };
 addEventListener('keydown', e => {
   keys[e.key.toLowerCase()] = true;
   if (!G) return;
@@ -382,19 +468,29 @@ addEventListener('keydown', e => {
   if (e.key.toLowerCase() === 'r') oneShot.reload = true;
 });
 addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
-cv.addEventListener('pointermove', e => { const r = cv.getBoundingClientRect(); mouse.x = (e.clientX - r.left) * cv.width / r.width; mouse.y = (e.clientY - r.top) * cv.height / r.height; });
-cv.addEventListener('pointerdown', e => { mouse.down = true; cv.dispatchEvent(new PointerEvent('pointermove', e)); });
-addEventListener('pointerup', () => mouse.down = false);
-
-const readMove = () => ({
-  mx: (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0),
-  my: (keys.s || keys.arrowdown ? 1 : 0) - (keys.w || keys.arrowup ? 1 : 0),
+// Mouse-look: the first click captures the mouse (pointer lock); after that clicks fire.
+$('#arenaWrap').addEventListener('pointerdown', e => {
+  if (!G || G.over) return;
+  if (!locked()) { lockMouse(); return; }
+  if (e.button === 0) mouse.down = true;
 });
-function readInput(me) {
-  const inp = {
-    ...readMove(),
-    ang: me ? Math.atan2(mouse.y - me.y, mouse.x - me.x) : 0, shoot: mouse.down, ...oneShot,
-  };
+addEventListener('pointerup', () => mouse.down = false);
+addEventListener('mousemove', e => {
+  if (!G || !locked()) return;
+  G.yaw += e.movementX * SENS;
+  G.pitch = Math.max(-0.6, Math.min(0.45, (G.pitch || 0) - e.movementY * SENS));
+});
+document.addEventListener('pointerlockchange', () => { if (!locked()) mouse.down = false; });
+
+// Movement keys are relative to where you face; the game itself moves in map directions.
+function readMove() {
+  const f = (keys.w || keys.arrowup ? 1 : 0) - (keys.s || keys.arrowdown ? 1 : 0);
+  const r = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
+  const a = G ? G.yaw : 0, c = Math.cos(a), s = Math.sin(a);
+  return { mx: f * c - r * s, my: f * s + r * c };
+}
+function readInput() {
+  const inp = { ...readMove(), ang: G.yaw, shoot: mouse.down, ...oneShot };
   oneShot = {}; return inp;
 }
 
@@ -407,6 +503,7 @@ function readInput(me) {
 const INTERP_DELAY = 0.1;
 function onSnap(snap, ack) {
   const g = G; g.buf.push({ snap, at: performance.now() });
+  if (g.yaw === undefined) g.yaw = snap.u[g.you].ang; // face the way the server spawned you
   while (g.buf.length > 2 && g.buf[1].snap.t < snap.t - 1) g.buf.shift();
   g.pending = g.pending.filter(p => p.seq > ack);
 }
@@ -433,40 +530,45 @@ function interpolatedView(g, dt) {
   else { const e = Math.min(1, dt * 18); g.me = { x: lerp(g.me.x, target.x, e), y: lerp(g.me.y, target.y, e) }; }
   u[g.you] = { ...last.snap.u[g.you], x: g.me.x, y: g.me.y, ang: g.myAng ?? last.snap.u[g.you].ang };
   const age = Math.max(0, rt - s0.t);
-  return { m: last.snap.m, u, b: s0.b.map(([x, y, big, vx, vy]) => [x + vx * age, y + vy * age, big]), fx: s0.fx };
+  return { m: last.snap.m, u, b: s0.b.map(([x, y, big, vx, vy]) => [x + vx * age, y + vy * age, big, vx, vy]), fx: s0.fx };
 }
 
 function openArena(opts) {
   G = { ...opts, over: false, buf: [], pending: [], seq: 0 };
-  if (!opts.mp) { G.you = 0; G.oppName = opts.rival.name; G.A = CC.newArena(SP.tycoon, CC.rivalLoadout(opts.rival)); G.pot = { win: opts.rival.money * CC.STEAL, lose: SP.tycoon.money * CC.STEAL }; }
-  $('#arenaWrap').style.display = 'flex';
+  if (!opts.mp) { G.you = 0; G.oppName = opts.rival.name; G.A = CC.newArena(SP.tycoon, CC.rivalLoadout(opts.rival)); G.pot = { win: opts.rival.money * CC.STEAL, lose: SP.tycoon.money * CC.STEAL }; G.yaw = G.A.units[0].ang; }
+  G.pitch = 0; G.started = performance.now(); G.foeSeen = -1e9;
+  $('#arenaWrap').style.display = 'block'; $('#result').style.display = 'none'; $('#keys').classList.remove('gone');
+  lockMouse(); // works when the fight started from a click; otherwise the prompt asks for one
+  if (!arena3d) arena3d = R3D.createArena(cv);
+  arena3d.reset();
   let last = performance.now(), sendT = 0;
   const g = G;
   (function loop(now) {
     if (G !== g) return;
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     let view = null;
+    g.yaw = (g.yaw || 0) + ((keys.arrowright ? 1 : 0) - (keys.arrowleft ? 1 : 0)) * TURN * dt; // keyboard turning
     if (g.mp) {
       if (g.buf.length) {
         const held = readMove();
         g.live = { ...held, dt: Math.min(sendT + dt, CC.TICK) };
+        g.myAng = g.yaw;
         view = interpolatedView(g, dt);
-        g.myAng = Math.atan2(mouse.y - g.me.y, mouse.x - g.me.x);
         if (!g.over && (sendT += dt) >= CC.TICK) {
           sendT = 0;
-          const inp = readInput(g.me); inp.seq = ++g.seq;
+          const inp = readInput(); inp.seq = ++g.seq;
           g.pending.push({ seq: inp.seq, mx: inp.mx, my: inp.my });
           netSend({ type: 'input', input: inp });
         }
       }
     } else {
       if (!g.over) {
-        const w = CC.stepArena(g.A, [readInput(g.A.units[0]), CC.botInput(g.A, 1, g.rival.skill)], dt);
+        const w = CC.stepArena(g.A, [readInput(), CC.botInput(g.A, 1, g.rival.skill)], dt);
         if (w >= 0) endSP(w === 0);
       }
       view = CC.snapshot(g.A);
     }
-    if (view) draw(view);
+    if (view) draw(view, dt);
     requestAnimationFrame(loop);
   })(last);
 }
@@ -483,34 +585,87 @@ function showResult(won, text) {
   G.over = true; G.result = { won, text };
   setTimeout(closeArena, 2500);
 }
-function closeArena() { $('#arenaWrap').style.display = 'none'; G = null; render(); }
+function closeArena() { if (locked()) document.exitPointerLock(); $('#arenaWrap').style.display = 'none'; G = null; render(); }
 
-function draw(s) {
-  const { W, H } = CC, map = CC.MAPS[s.m];
-  cx.clearRect(0, 0, W, H);
-  cx.strokeStyle = '#1a1f2b';
-  for (let x = 0; x < W; x += 40) { cx.beginPath(); cx.moveTo(x, 0); cx.lineTo(x, H); cx.stroke(); }
-  for (let y = 0; y < H; y += 40) { cx.beginPath(); cx.moveTo(0, y); cx.lineTo(W, y); cx.stroke(); }
-  cx.fillStyle = '#3a4258'; map.walls.forEach(w => cx.fillRect(...w));
-  s.u.forEach((u, i) => {
-    const mine = i === G.you;
-    cx.save(); cx.translate(u.x, u.y); cx.rotate(u.ang); cx.fillStyle = '#ccc'; cx.fillRect(4, -3, 20, 6); cx.restore();
-    cx.fillStyle = mine ? '#f5c542' : '#f87171'; cx.beginPath(); cx.arc(u.x, u.y, 14, 0, 7); cx.fill();
-    cx.fillStyle = '#000a'; cx.fillRect(u.x - 20, u.y - 28, 40, 5); cx.fillStyle = mine ? '#4ade80' : '#f87171'; cx.fillRect(u.x - 20, u.y - 28, 40 * u.hp / u.mhp, 5);
-  });
-  cx.fillStyle = '#ffe28a'; s.b.forEach(([x, y, big]) => { cx.beginPath(); cx.arc(x, y, big ? 5 : 3, 0, 7); cx.fill(); });
-  s.fx.forEach(([x, y, r, t]) => { cx.fillStyle = `rgba(255,150,50,${t * 2})`; cx.beginPath(); cx.arc(x, y, r, 0, 7); cx.fill(); });
-  const me = s.u[G.you], op = s.u[1 - G.you], wi = id => WEAPONS.find(w => w.id === id);
-  $('#hud').innerHTML = `<span class="muted">🗺️ ${map.name}</span> · <b style="color:var(--gold)">YOU</b> ${wi(me.g.id).icon} ${wi(me.g.id).name} · ${me.g.rl ? 'Reloading…' : `${me.g.ammo}/${me.g.mag}`} · HP ${me.hp}/${me.mhp}
-    &nbsp; vs &nbsp; <b style="color:var(--red)">${esc(G.oppName)}</b> ${wi(op.g.id).icon} ${wi(op.g.id).name} · HP ${op.hp}/${op.mhp}
-    &nbsp;·&nbsp; Win <span class="win">+${fmt(G.pot.win)}</span> / Lose <span class="loss">-${fmt(G.pot.lose)}</span>`;
-  if (G.result) {
-    cx.fillStyle = '#000b'; cx.fillRect(0, 0, W, H);
-    cx.fillStyle = G.result.won ? '#4ade80' : '#f87171'; cx.font = 'bold 48px system-ui'; cx.textAlign = 'center';
-    cx.fillText(G.result.won ? 'VICTORY' : 'DEFEAT', W / 2, H / 2 - 10);
-    cx.font = '22px system-ui'; cx.fillStyle = '#fff'; cx.fillText(G.result.text, W / 2, H / 2 + 30);
+function draw(s, dt) {
+  arena3d.update(s, G.you, ['You', G.oppName], dt, G.pitch || 0);
+  arena3d.render();
+  hud(s, arena3d.events);
+}
+
+// ----- HUD -----
+const restart = (el, cls) => { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); };
+function hud(s, ev) {
+  const me = s.u[G.you], op = s.u[1 - G.you], gun = WEAPONS.find(w => w.id === me.g.id), foeGun = WEAPONS.find(w => w.id === op.g.id);
+  // opponent
+  $('#foeName').textContent = G.oppName;
+  $('#foeGun').textContent = foeGun.name;
+  $('#foeHp').style.width = `${100 * Math.max(0, op.hp / op.mhp)}%`;
+  $('#stakes').innerHTML = `${esc(CC.MAPS[s.m].name)} · <span class="w">win +${fmt(G.pot.win)}</span> · <span class="l">lose −${fmt(G.pot.lose)}</span>`;
+  // you
+  const hp = Math.max(0, me.hp / me.mhp);
+  $('#hpNum').textContent = Math.max(0, Math.ceil(me.hp));
+  $('#hpBar').style.width = `${100 * hp}%`;
+  $('#vitals').classList.toggle('low', hp <= 0.35);
+  $('#vignette').classList.toggle('critical', hp > 0 && hp <= 0.25);
+  $('#ammo').textContent = me.g.rl ? '–' : me.g.ammo;
+  $('#mag').textContent = `/ ${me.g.mag}`;
+  $('#gunName').textContent = me.g.rl ? 'Reloading' : gun.name;
+  $('#arms').classList.toggle('low', !me.g.rl && me.g.ammo <= Math.ceil(me.g.mag * 0.25));
+  $('#arms').classList.toggle('reloading', !!me.g.rl);
+  // crosshair opens up with the weapon's spread and while you move
+  const moving = (keys.w || keys.a || keys.s || keys.d || keys.arrowup || keys.arrowdown) ? 1 : 0;
+  $('#crosshair').style.setProperty('--gap', `${Math.round(5 + gun.spread * 70 + moving * 5)}px`);
+  if (ev.hitEnemy) restart($('#hitmark'), 'on');
+  if (ev.hurt) restart($('#vignette'), 'on');
+  // the controls hint fades after a few seconds; the lock prompt shows whenever the mouse is free
+  if (performance.now() - G.started > 6000) $('#keys').classList.add('gone');
+  $('#lockPrompt').style.display = locked() || G.over ? 'none' : 'block';
+  minimap(s, me, op);
+  const res = $('#result');
+  if (G.result && res.style.display !== 'flex') {
+    res.style.display = 'flex';
+    res.querySelector('b').textContent = G.result.won ? 'Victory' : 'Defeat';
+    res.querySelector('b').style.color = G.result.won ? 'var(--ok)' : 'var(--low)';
+    res.querySelector('span').textContent = G.result.text;
+    if (locked()) document.exitPointerLock();
   }
 }
+// Overhead map: walls, you (an arrow) and the opponent, shown only while you can see them
+// or for a moment after they fire (no wall-hacks).
+function sees(walls, a, b) {
+  for (let i = 1; i < 24; i++) if (CC.hitsWall(walls, a.x + (b.x - a.x) * i / 24, a.y + (b.y - a.y) * i / 24, 1)) return false;
+  return true;
+}
+function minimap(s, me, op) {
+  const c = $('#minimap'), dpr = Math.min(2, devicePixelRatio || 1), W = 225, H = 140;
+  if (c.width !== W * dpr) { c.width = W * dpr; c.height = H * dpr; c.style.width = W + 'px'; c.style.height = H + 'px'; }
+  const x = c.getContext('2d'), k = W / CC.W, walls = CC.MAPS[s.m].walls;
+  x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, W, H);
+  x.fillStyle = 'rgba(242,239,232,.5)';
+  for (const [wx, wy, ww, wh] of walls) x.fillRect(wx * k, wy * k, ww * k, wh * k);
+  if (op.g.ammo !== G.foeAmmo) { if (G.foeAmmo !== undefined && op.g.ammo < G.foeAmmo) G.foeSeen = performance.now(); G.foeAmmo = op.g.ammo; }
+  if (op.hp > 0 && (sees(walls, me, op) || performance.now() - G.foeSeen < 900)) {
+    x.fillStyle = '#e2584b'; x.beginPath(); x.arc(op.x * k, op.y * k, 4, 0, Math.PI * 2); x.fill();
+  }
+  x.save(); x.translate(me.x * k, me.y * k); x.rotate(G.yaw);
+  x.fillStyle = '#4f8ff0'; x.strokeStyle = 'rgba(0,0,0,.6)'; x.lineWidth = 1;
+  x.beginPath(); x.moveTo(7, 0); x.lineTo(-5, -5); x.lineTo(-2, 0); x.lineTo(-5, 5); x.closePath(); x.fill(); x.stroke();
+  x.restore();
+}
+
+// ---------- 3D city (tycoon view) ----------
+const city = R3D.createCity($('#city'), {
+  onLot: i => { const b = BUILDINGS[i]; act({ type: 'buy', id: b.id }); if (mode === 'sp') render(); },
+  onCrate: () => { act({ type: 'claim' }); if (mode === 'sp') render(); },
+});
+function showCity() {
+  const on = tab === 'tycoon' && !G;
+  $('#cityWrap').style.display = on ? 'block' : 'none';
+  if (on) { city.update(T()); city.start(); } else city.stop();
+}
+// Load the fighters and weapons in the background so the first fight starts instantly.
+setTimeout(() => { if (!arena3d) arena3d = R3D.createArena(cv); arena3d.preload(); }, 1500);
 
 // ---------- Main loop ----------
 function updateMoney() { const t = T(); $('#money').textContent = fmt(t.money); $('#rate').textContent = `+${fmt(CC.income(t))}/s`; }
@@ -522,6 +677,7 @@ setInterval(() => {
   for (const r of SP.rivals) { const news = CC.tickRival(r, dt); if (news && mode === 'sp' && tab === 'battle') toast('📰 ' + news); }
   if ((eventT += dt) >= 1) { eventT = 0; const ev = CC.rollEvent(SP.tycoon); if (ev && mode === 'sp') eventToast(ev); }
   updateMoney();
+  if (tab === 'tycoon' && !G) city.update(T());
   if ((saveT += dt) > 5) { saveT = 0; saveSP(); }
   if ((renderT += dt) > 1 && (tab === 'tycoon' || tab === 'armory' || tab === 'reboot') && !G) { renderT = 0; render(); }
 }, 100);

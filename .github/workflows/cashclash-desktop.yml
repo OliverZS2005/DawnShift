@@ -37,7 +37,10 @@ jobs:
           dir=~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
           mkdir -p $dir && unzip -q /tmp/templates.tpz -d /tmp && mv /tmp/templates/* $dir/
 
-      - name: Import project
+      - name: Check desktop/models.json matches models.js
+        run: node ../tools/build-models.js --check
+
+      - name: Import project (models, textures, skies, fonts)
         run: godot --headless --import --path .
 
       - name: Check desktop rules match the web rules

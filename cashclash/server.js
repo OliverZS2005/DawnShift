@@ -54,7 +54,16 @@ function handleSync(req, res, code) {
 }
 
 // ---------- HTTP (static files + sync API) ----------
-const STATIC = { '/': 'index.html', '/index.html': 'index.html', '/shared.js': 'shared.js' };
+const STATIC = { '/': 'index.html', '/index.html': 'index.html', '/shared.js': 'shared.js', '/models.js': 'models.js', '/render3d.js': 'render3d.js', '/vendor/three.bundle.js': 'vendor/three.bundle.js' };
+// The 3D art (models, textures, skies) lives in desktop/assets so the Godot app shares it.
+const ASSET_DIR = path.join(__dirname, 'desktop', 'assets');
+const TYPES = { '.woff2': 'font/woff2', '.glb': 'model/gltf-binary', '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.hdr': 'application/octet-stream', '.js': 'text/javascript', '.html': 'text/html' };
+function staticFile(url) {
+  if (STATIC[url]) return path.join(__dirname, STATIC[url]);
+  if (!url.startsWith('/desktop/assets/')) return null;
+  const f = path.normalize(path.join(ASSET_DIR, decodeURIComponent(url.slice('/desktop/assets/'.length))));
+  return f.startsWith(ASSET_DIR + path.sep) && TYPES[path.extname(f)] ? f : null; // no escaping the folder
+}
 const server = http.createServer((req, res) => {
   // Desktop app and file:// pages call the sync API from other origins.
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -63,10 +72,11 @@ const server = http.createServer((req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   const sm = req.url.match(/^\/api\/sync\/([^/?]+)/);
   if (sm) return handleSync(req, res, sm[1]);
-  const f = STATIC[req.url.split('?')[0]];
-  if (!f) { res.writeHead(404); return res.end('Not found'); }
-  res.writeHead(200, { 'Content-Type': f.endsWith('.js') ? 'text/javascript' : 'text/html' });
-  fs.createReadStream(path.join(__dirname, f)).pipe(res);
+  const f = staticFile(req.url.split('?')[0]);
+  if (!f || !fs.existsSync(f)) { res.writeHead(404); return res.end('Not found'); }
+  const art = f.startsWith(ASSET_DIR);
+  res.writeHead(200, { 'Content-Type': TYPES[path.extname(f)], 'Cache-Control': art ? 'public, max-age=86400' : 'no-cache' });
+  fs.createReadStream(f).pipe(res);
 });
 
 // ---------- Sessions ----------

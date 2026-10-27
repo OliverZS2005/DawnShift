@@ -1,6 +1,26 @@
 # 💰 Cash Clash
 
-A money tycoon with a top-down arena shooter. Win a battle and you take 10% of your opponent's money; lose and they take 10% of yours.
+A money tycoon with a first-person arena shooter. Win a battle and you take 10% of your opponent's money; lose and they take 10% of yours.
+
+## Fights (first person)
+| Key | Does |
+|---|---|
+| Mouse | Look around (the first click captures the mouse; **Esc** gives it back) |
+| Click / hold | Fire |
+| W / S or ↑ / ↓ | Forward / back |
+| A / D | Strafe |
+| ← / → | Turn without the mouse |
+| R | Reload |
+| 1–5 | Switch weapon (Pistol, SMG, Shotgun, Sniper, Rocket Launcher) |
+
+The HUD shows your health and ammo, the opponent's name and health, what's at stake, and a minimap. The opponent only appears on the minimap while you can see them, or for a moment after they fire.
+
+## Graphics
+Both the web and desktop versions are fully 3D: animated soldiers, photo-scanned props and materials, real HDRI skies, shadows, ambient occlusion and bloom. The tycoon tab shows your business as a 3D city you can rotate, zoom and click to buy.
+- `models.js` describes every scene once (buildings, arena themes, decoration and prop placement). `render3d.js` (web, Three.js) and `desktop/r3d.gd`, `city3d.gd`, `arena3d.gd` (Godot) both build from it, so the two versions look the same.
+- The art is CC0 and lives in `desktop/assets/` (credits in `desktop/assets/CREDITS.md`). The HUD fonts are under the SIL Open Font License.
+- The web page loads that art over HTTP, so play it through a server (`npm start`). If you open `index.html` straight from disk it still works, with simple shapes instead.
+- The web version lowers its own quality on slow computers. Add `?quality=low`, `medium` or `high` to the address to choose yourself.
 
 ## Progression
 - **Milestones:** owning 25, 50, 100 or 200 of one building doubles that building's output each time.
@@ -20,7 +40,7 @@ The desktop version lives in [`desktop/`](desktop/). It's a Godot 4.3 project wi
 In the 🎮 Play tab, under **Sync**, create a sync code on one device and enter it on the other. Your singleplayer game and your multiplayer logins are then stored on a Cash Clash server under that code and stay in sync. Each device pushes its save every 20 seconds and when you close it, and loads the other device's progress if that's newer. Play on one device at a time; if both play at once, the device that saves second loses its progress since the last sync.
 
 ## Singleplayer
-Open `index.html` in a browser. It runs entirely on your PC and you fight computer rivals.
+Run `npm start` and open http://localhost:8080. Singleplayer runs entirely on your PC and you fight computer rivals.
 You get exactly one singleplayer game. You can reset it from the 🎮 Play tab, but you can't create another.
 
 ## Multiplayer
@@ -33,9 +53,10 @@ The server remembers you through a token stored in your browser, so the next tim
 ## Host your own server
 ```
 cd cashclash
-npm install
+npm install --omit=dev
 npm start          # http://localhost:8080
 ```
+(`--omit=dev` skips the tools that only rebuild the art and the 3D bundle.)
 Players can open `http://<your-ip>:8080` or type that address into the Play tab.
 
 | Env var | Default | Meaning |
@@ -49,3 +70,12 @@ Players can open `http://<your-ip>:8080` or type that address into the Play tab.
 The server controls money, purchases, matchmaking and the battle simulation, so clients can only send inputs.
 To make online play feel smooth, your own player is predicted locally and corrected against the server. Your opponent and the bullets are drawn about 100ms behind the server, smoothed between updates.
 Matchmaking pairs the queued players whose wealth is closest on a log scale. The range it accepts widens the longer they wait.
+
+## Rebuilding the art and the 3D bundle
+You only need these to change the art or upgrade Three.js:
+```
+npm install
+npm run fetch-assets          # downloads the CC0 art into desktop/assets
+npm run build:three           # rebuilds vendor/three.bundle.js
+node tools/build-models.js    # refreshes desktop/models.json after editing models.js (CI checks this)
+```

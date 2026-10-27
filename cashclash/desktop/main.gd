@@ -26,6 +26,7 @@ var toast_left := 0.0
 var confirm_dlg: ConfirmationDialog
 var confirm_cb: Callable
 var arena
+var city
 var rerender_acc := 0.0
 var dirty := true
 var queue_lbl: Label
@@ -67,6 +68,14 @@ func _ready() -> void:
 		b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		tab_btns[t[0]] = b
 		hb.add_child(b)
+
+	# The 3D city sits above the Tycoon tab's cards and stays alive between re-renders.
+	city = preload("res://city3d.gd").new()
+	city.custom_minimum_size.y = 320
+	city.visible = false
+	city.lot_clicked.connect(func(i): Game.act({"type": "buy", "id": CC.BUILDINGS[i].id}); render())
+	city.crate_clicked.connect(func(): Game.act({"type": "claim"}); render())
+	root.add_child(city)
 
 	var scroll = ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -120,6 +129,10 @@ func _process(dt: float) -> void:
 			toast_panel.visible = false
 	if queue_lbl and is_instance_valid(queue_lbl):
 		queue_lbl.text = Game.net.get("queue_text", "") if Game.mode == "mp" else Game.sp_queue_status()
+	city.visible = tab == "tycoon" and not arena.visible
+	if city.visible:
+		city.custom_minimum_size.y = max(260.0, size.y * 0.42)
+		city.update_city(t)
 	# The Play tab has text fields, so it only re-renders when something actually changes.
 	rerender_acc += dt
 	if arena.visible:

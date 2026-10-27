@@ -1,0 +1,37 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://y7cj7eimebko"
+path="res://.godot/imported/bench_modular_street_seating_timber_rough.webp-94d260026775ec8c9a6c120f67fda568.ctex"
+metadata={
+"vram_texture": false
+}
+generator_parameters={
+"md5": "f65b67f9fe902f82158340ef9ea6edb7"
+}
+
+[deps]
+
+source_file="res://assets/models/bench_modular_street_seating_timber_rough.webp"
+dest_files=["res://.godot/imported/bench_modular_street_seating_timber_rough.webp-94d260026775ec8c9a6c120f67fda568.ctex"]
+
+[params]
+
+compress/mode=0
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=1
