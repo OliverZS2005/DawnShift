@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://ddamiqtp836af"
-path="res://.godot/imported/pine.glb-fd733693478dc652a5f570d10c98217e.scn"
+uid="uid://dw3176mi26j38"
+path="res://.godot/imported/hoodie.glb-5d7180ed7d85afc43258ea620f2f2c1d.scn"
 
 [deps]
 
-source_file="res://assets/models/pine.glb"
-dest_files=["res://.godot/imported/pine.glb-fd733693478dc652a5f570d10c98217e.scn"]
+source_file="res://assets/characters/hoodie.glb"
+dest_files=["res://.godot/imported/hoodie.glb-5d7180ed7d85afc43258ea620f2f2c1d.scn"]
 
 [params]
 

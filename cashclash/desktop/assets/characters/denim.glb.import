@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://bocusirrw6ma5"
-path="res://.godot/imported/adventurer.glb-ef2dc178905d09fe74a857a4b32c8454.scn"
+uid="uid://durqm6aspsd2r"
+path="res://.godot/imported/denim.glb-62afc0c33ee9f67b3ede9bf1d5639085.scn"
 
 [deps]
 
-source_file="res://assets/characters/adventurer.glb"
-dest_files=["res://.godot/imported/adventurer.glb-ef2dc178905d09fe74a857a4b32c8454.scn"]
+source_file="res://assets/characters/denim.glb"
+dest_files=["res://.godot/imported/denim.glb-62afc0c33ee9f67b3ede9bf1d5639085.scn"]
 
 [params]
 

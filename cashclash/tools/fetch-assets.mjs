@@ -3,14 +3,17 @@
 // Sources (all CC0 / public domain):
 //   * Poly Haven (https://polyhaven.com): photo-scanned props, PBR textures and HDRI skies
 //   * Quaternius (https://quaternius.com) animated characters, via the @netforge/asset-library-files npm package
+//   * Microsoft Rocketbox (https://github.com/microsoft/Microsoft-Rocketbox, MIT licence): realistic people
+//     and their animations. Converting those from FBX needs Blender on the PATH (tools/people.py).
 // The downloaded files are committed, so you only need this to change or refresh the art.
+// Pass a section name to redo just that part: models, textures, skies, characters, people, fonts.
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { dedup, prune, weld, simplify, textureCompress } from '@gltf-transform/functions';
+import { center, dedup, prune, weld, simplify, textureCompress } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptSimplifier } from 'meshoptimizer';
 import sharp from 'sharp';
 
@@ -20,7 +23,9 @@ const UA = { 'User-Agent': 'CashClash-asset-fetch/1.0 (+https://github.com/Olive
 
 // Poly Haven scans are film-quality; these budgets keep them small enough for a web game.
 const TEX_SIZE = 512;                                    // max texture size inside models
-const SIMPLIFY = { shrub: 0.25, bench: 0.5 };             // keep this fraction of triangles
+const SIMPLIFY = { shrub: 0.12, bench: 0.5, street_lamp: 0.15, barrier: 0.1, plastic_crate: 0.2, hydrant: 0.3, covered_car: 0.35 }; // keep this fraction of triangles
+// Some scans ship two versions side by side (clean and weathered): keep one, centred on the origin.
+const ONE_VARIANT = { hydrant: /_aged/, trash_can: /_rust/, military_crate: /_b$/ };
 // name in the game -> Poly Haven asset id
 const MODELS = {
   crate: 'wooden_crate_01', military_crate: 'old_military_crate', barrel: 'barrel_03', barrier: 'concrete_road_barrier',
@@ -34,9 +39,16 @@ const TEXTURES = {
   plaster: 'grey_plaster', concrete_wall: 'concrete_wall_008', roof: 'clay_roof_tiles', shutter: 'painted_metal_shutter',
 };
 const SKIES = { day: 'kloofendal_48d_partly_cloudy_puresky', sunset: 'qwantani_sunset_puresky', dusk: 'qwantani_dusk_2_puresky', night: 'rogland_clear_night' };
-// From the npm package's library/lowpoly/. (Poly Haven's photo-scanned trees are tens of MB each.)
-const CHARACTERS = { soldier: 'soldier.glb', adventurer: 'adventurer.glb' };
-const PACKAGE_MODELS = { tree: 'tree_oak.glb', pine: 'tree_pine.glb' };
+// From the npm package's library/lowpoly/: the soldier, whose armoury supplies the guns.
+const CHARACTERS = { soldier: 'soldier.glb' };
+// Rocketbox people: game name -> avatar folder. Each gets these clips (Rocketbox animation files;
+// "xy" ones have the walking movement taken out so they run on the spot).
+const PEOPLE = { hoodie: 'Male_Adult_04', jacket: 'Male_Adult_10', denim: 'Male_Adult_12' };
+const PEOPLE_CLIPS = { idle: 'static/m_idle_neutral_01', run: 'xy/m_run_neutral', walk: 'xy/m_walk_neutral_01' };
+const ROCKETBOX = 'https://raw.githubusercontent.com/microsoft/Microsoft-Rocketbox/master/Assets/';
+const PEOPLE_TEX = 1024;
+const only = process.argv[2];
+const want = section => !only || only === section;
 
 const get = async url => { const r = await fetch(url, { headers: UA }); if (!r.ok) throw new Error(`${r.status} ${url}`); return Buffer.from(await r.arrayBuffer()); };
 const api = async id => JSON.parse((await get(`https://api.polyhaven.com/files/${id}`)).toString());
@@ -45,53 +57,71 @@ const save = (rel, buf) => { const f = path.join(ROOT, rel); fs.mkdirSync(path.d
 await MeshoptDecoder.ready; await MeshoptSimplifier.ready;
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.decoder': MeshoptDecoder });
 // Writes a plain GLB (no meshopt/quantization extensions) so Godot's importer can read it too.
-async function writeGlb(doc, rel, ratio) {
+async function writeGlb(doc, rel, ratio, texSize = TEX_SIZE, drop) {
   // meshopt/quantization: Godot can't read them. unlit: those materials would ignore the scene's lighting.
   for (const ext of doc.getRoot().listExtensionsUsed()) if (/meshopt|quantization|unlit/i.test(ext.extensionName)) ext.dispose();
-  const steps = [dedup(), prune()];
-  if (ratio) steps.push(weld(), simplify({ simplifier: MeshoptSimplifier, ratio, error: 0.01 }));
-  steps.push(textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [TEX_SIZE, TEX_SIZE], quality: 82 }));
+  if (drop) for (const n of doc.getRoot().listNodes()) if (drop.test(n.getName())) n.dispose();
+  const steps = drop ? [center({ pivot: 'below' }), dedup(), prune()] : [dedup(), prune()];
+  if (ratio) steps.push(weld(), simplify({ simplifier: MeshoptSimplifier, ratio, error: 0.04 })); // props are seen from metres away
+  steps.push(textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [texSize, texSize], quality: 82 }));
   await doc.transform(...steps);
   save(rel, Buffer.from(await io.writeBinary(doc)));
 }
 
 fs.rmSync(TMP, { recursive: true, force: true }); fs.mkdirSync(TMP, { recursive: true });
-console.log('Models (Poly Haven)');
-for (const [name, id] of Object.entries(MODELS)) {
+if (want('models')) console.log('Models (Poly Haven)');
+for (const [name, id] of want('models') ? Object.entries(MODELS) : []) {
   const g = (await api(id)).gltf['1k'].gltf, dir = path.join(TMP, id);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'model.gltf'), await get(g.url));
   for (const [rel, f] of Object.entries(g.include || {})) { fs.mkdirSync(path.join(dir, path.dirname(rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), await get(f.url)); }
-  await writeGlb(await io.read(path.join(dir, 'model.gltf')), `models/${name}.glb`, SIMPLIFY[name]);
+  await writeGlb(await io.read(path.join(dir, 'model.gltf')), `models/${name}.glb`, SIMPLIFY[name], TEX_SIZE, ONE_VARIANT[name]);
 }
-console.log('Textures (Poly Haven)');
-for (const [name, id] of Object.entries(TEXTURES)) {
+if (want('textures')) console.log('Textures (Poly Haven)');
+for (const [name, id] of want('textures') ? Object.entries(TEXTURES) : []) {
   const f = await api(id);
   for (const [map, suffix] of [['Diffuse', 'diff'], ['nor_gl', 'nor'], ['Rough', 'rough']])
     if (f[map]) save(`textures/${name}_${suffix}.jpg`, await sharp(await get(f[map]['1k'].jpg.url)).resize(suffix === 'diff' ? 1024 : 512).jpeg({ quality: 80, mozjpeg: true }).toBuffer());
 }
-console.log('Skies (Poly Haven)');
-for (const [name, id] of Object.entries(SKIES)) save(`sky/${name}.hdr`, await get((await api(id)).hdri['1k'].hdr.url));
+if (want('skies')) console.log('Skies (Poly Haven)');
+for (const [name, id] of want('skies') ? Object.entries(SKIES) : []) save(`sky/${name}.hdr`, await get((await api(id)).hdri['1k'].hdr.url));
+if (want('characters')) {
 console.log('Characters (Quaternius)');
 const meta = JSON.parse((await get('https://registry.npmjs.org/@netforge/asset-library-files/0.2.0')).toString());
 fs.writeFileSync(path.join(TMP, 'pkg.tgz'), await get(meta.dist.tarball));
 execFileSync('tar', ['xzf', 'pkg.tgz'], { cwd: TMP });
 for (const [name, file] of Object.entries(CHARACTERS)) await writeGlb(await io.read(path.join(TMP, 'package/library/lowpoly', file)), `characters/${name}.glb`);
-for (const [name, file] of Object.entries(PACKAGE_MODELS)) {
-  const doc = await io.read(path.join(TMP, 'package/library/lowpoly', file));
-  // These leave metalness unset, which glTF reads as fully metallic (chrome trees). Make them matte,
-  // and turn the stylised teal leaves into a natural green that sits with the photo-scanned props.
-  for (const m of doc.getRoot().listMaterials()) {
-    m.setMetallicFactor(0).setRoughnessFactor(0.9);
-    if (/leaf/i.test(m.getName())) m.setBaseColorFactor(/dark/i.test(m.getName()) ? [0.035, 0.11, 0.05, 1] : [0.07, 0.17, 0.04, 1]); // linear values
-    else if (/bark|wood/i.test(m.getName())) m.setBaseColorFactor([0.2, 0.11, 0.06, 1]);
-  }
-  await writeGlb(doc, `models/${name}.glb`);
 }
 
-console.log('Fonts (from the @fontsource npm packages, SIL Open Font License)');
+if (want('people')) {
+  console.log('People (Microsoft Rocketbox, converted with Blender)');
+  const dl = async rel => { const f = path.join(TMP, 'rb', rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, await get(ROCKETBOX + rel)); return f; };
+  const clips = [];
+  for (const [clip, file] of Object.entries(PEOPLE_CLIPS)) {
+    const [set, name] = file.split('/');
+    clips.push(`${clip}=${await dl(`Animations/all_animations_max_motextr_${set}/${name}.max.fbx`)}`);
+  }
+  for (const [name, folder] of Object.entries(PEOPLE)) {
+    const fbx = await dl(`Avatars/Adults/${folder}/Export/${folder}.fbx`);
+    // the FBX names its textures (Rocketbox numbers them per avatar, e.g. m024_body_color.tga)
+    for (const tga of new Set(fs.readFileSync(fbx, 'latin1').match(/m\d+_[a-z]+_[a-z]+\.tga/g))) await dl(`Avatars/Adults/${folder}/Textures/${tga}`);
+    const raw = path.join(TMP, `${name}.glb`);
+    execFileSync('blender', ['-b', '--python', path.join(path.dirname(fileURLToPath(import.meta.url)), 'people.py'), '--', fbx, raw, ...clips], { stdio: 'ignore' });
+    const doc = await io.read(raw);
+    for (const m of doc.getRoot().listMaterials()) {
+      if (/opacity/.test(m.getName())) m.setAlphaMode('MASK').setAlphaCutoff(0.5); // hair, lashes
+      // readable texture names (Godot writes them out as files, prefixed with the model: jacket_body_color)
+      const part = m.getName().split('_').pop();
+      if (m.getBaseColorTexture()) m.getBaseColorTexture().setName(`${part}_color`);
+      if (m.getNormalTexture()) m.getNormalTexture().setName(`${part}_normal`);
+    }
+    await writeGlb(doc, `characters/${name}.glb`, 0, PEOPLE_TEX);
+  }
+}
+
+if (want('fonts')) console.log('Fonts (from the @fontsource npm packages, SIL Open Font License)');
 const FONTS = { 'barlow-condensed': [600, 800], 'jetbrains-mono': [500, 700] };
-for (const [family, weights] of Object.entries(FONTS)) {
+for (const [family, weights] of want('fonts') ? Object.entries(FONTS) : []) {
   const pkg = path.join(ROOT, '..', '..', 'node_modules', '@fontsource', family);
   for (const w of weights) save(`fonts/${family}-${w}.woff2`, fs.readFileSync(path.join(pkg, 'files', `${family}-latin-${w}-normal.woff2`)));
   save(`fonts/${family}-LICENSE.txt`, fs.readFileSync(path.join(pkg, 'LICENSE')));
@@ -99,10 +129,14 @@ for (const [family, weights] of Object.entries(FONTS)) {
 
 fs.writeFileSync(path.join(ROOT, 'CREDITS.md'), `# Art credits
 
-Everything here is CC0 (public domain). Credit isn't required, but it's deserved.
+Everything here is CC0 (public domain) unless noted. Credit isn't required for CC0, but it's deserved.
 
 - **Poly Haven** (https://polyhaven.com), CC0: ${Object.values(MODELS).join(', ')} (models); ${Object.values(TEXTURES).join(', ')} (textures); ${Object.values(SKIES).join(', ')} (HDRI skies).
-- **Quaternius** (https://quaternius.com), CC0: animated characters (${Object.values(CHARACTERS).join(', ')}) and trees (${Object.values(PACKAGE_MODELS).join(', ')}), taken from the @netforge/asset-library-files npm package.
+- **Quaternius** (https://quaternius.com), CC0: ${Object.values(CHARACTERS).join(', ')} (its guns), taken from the @netforge/asset-library-files npm package.
+
+People (MIT licence, notice below): **Microsoft Rocketbox** avatars ${Object.values(PEOPLE).join(', ')} and animations ${Object.values(PEOPLE_CLIPS).map(c => c.split('/')[1]).join(', ')} (https://github.com/microsoft/Microsoft-Rocketbox), converted to glTF.
+
+> Copyright (c) Microsoft Corporation. Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 Fonts (SIL Open Font License 1.1, license files next to them): Barlow Condensed (Jeremy Tribby) and JetBrains Mono (JetBrains), via the @fontsource npm packages.
 

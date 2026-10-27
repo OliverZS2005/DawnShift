@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cw3wevlqrbcge"
-path="res://.godot/imported/hydrant_fire_hydrant_aged_diff.webp-8cbf5d53ae923b1cce307249a188478a.ctex"
+uid="uid://cnin3jnxiufnk"
+path="res://.godot/imported/jacket_head_color.webp-55cb56c4cfffd0104a870308cc8d8e33.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "463ea36c188437a2fbe28d26041e4157"
+"md5": "3a6d81e53a2e766fd7d10e77f45626fe"
 }
 
 [deps]
 
-source_file="res://assets/models/hydrant_fire_hydrant_aged_diff.webp"
-dest_files=["res://.godot/imported/hydrant_fire_hydrant_aged_diff.webp-8cbf5d53ae923b1cce307249a188478a.ctex"]
+source_file="res://assets/characters/jacket_head_color.webp"
+dest_files=["res://.godot/imported/jacket_head_color.webp-55cb56c4cfffd0104a870308cc8d8e33.ctex"]
 
 [params]
 

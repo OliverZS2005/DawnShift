@@ -1,5 +1,5 @@
-# 3D tycoon city for the desktop app: 3x3 lots of buildings on textured streets with real street
-# furniture, trees, lamps, a skyline that grows with your level, floating coins and the golden crate.
+# 3D tycoon city for the desktop app: 3x3 lots of buildings on a plaza in the middle of city blocks,
+# with street furniture, lamps, a skyline in the haze, floating coins and the golden crate.
 # Drag to orbit, scroll to zoom, click a lot to buy. Mirrors createCity() in ../render3d.js.
 extends Control
 
@@ -55,10 +55,14 @@ func _set_level(lv: int) -> void:
 	v.world.add_child(sun_light)
 	for c in world.get_children():
 		c.queue_free()
-	# the business sits on level ground in open country: hills, wind-blown grass, trees, mountains
-	var flat = R3D.M.LANDSCAPE.flatCity
-	var bare = 1.5 * L + float(R3D.M.CITY.road)
-	world.add_child(R3D.landscape(flat, [bare, bare], 2000).group)
+	# the business takes up a paved plaza in the middle of the city
+	var clear = R3D.M.URBAN.city.clear
+	var plaza = MeshInstance3D.new()
+	var pm = PlaneMesh.new(); pm.size = Vector2(2 * clear[0], 2 * clear[1])
+	plaza.mesh = pm
+	plaza.material_override = R3D.pbr("pavers", Color("#a9a399"), 2.5, 0.0, Color("#77746f"))
+	world.add_child(plaza)
+	world.add_child(R3D.city("city", night))
 	# roads with lane markings
 	var asphalt = R3D.pbr("asphalt", Color("#a8a8a8"), 4.0, 0.0, Color("#45464a"))
 	var paint = R3D.flat(Color("#efe9d2"), 0.7)
@@ -72,12 +76,12 @@ func _set_level(lv: int) -> void:
 			world.add_child(R3D.box(Vector3(1.1, 0.01, 0.09), paint, Vector3(d, 0.065, off)))
 			world.add_child(R3D.box(Vector3(0.09, 0.01, 1.1), paint, Vector3(off, 0.065, d)))
 			d += 2.4
-	# street furniture, cars, trees, lamps
+	# street furniture, cars, lamps
 	for d in R3D.M.CITY.props:
 		var o = R3D.prop(d.model)
 		if o == null:
 			continue
-		o.position = Vector3(d.p[0], R3D.terrain_height(d.p[0], d.p[2], flat), d.p[2])
+		o.position = Vector3(d.p[0], d.p[1], d.p[2])
 		o.rotation.y = d.ry
 		if d.has("s"):
 			o.scale *= float(d.s)
@@ -87,21 +91,6 @@ func _set_level(lv: int) -> void:
 			l.light_color = Color("#ffd49a"); l.light_energy = 3.0; l.omni_range = 20
 			l.position = Vector3(d.p[0], 5.3, d.p[2])
 			world.add_child(l)
-	# skyline: photo-textured towers, windows lit at night
-	var seed = 7
-	for k in int(th.skyline):
-		seed = (seed * 16807) % 2147483647; var a = seed / 2147483647.0 * TAU
-		seed = (seed * 16807) % 2147483647; var r = 105 + seed / 2147483647.0 * 70
-		seed = (seed * 16807) % 2147483647; var h = 14 + seed / 2147483647.0 * (8 + lv * 7)
-		seed = (seed * 16807) % 2147483647; var w = 8 + seed / 2147483647.0 * 8
-		var mat = R3D.pbr(R3D.M.CITY.skylineTex[k % 3], [Color("#c9c2b6"), Color("#d8d8d8"), Color("#b9bcc2")][k % 3], 8.0).duplicate()
-		if night:
-			mat.emission_enabled = true
-			mat.emission = Color("#ffcf80")
-			mat.emission_energy_multiplier = 0.35
-		var base = R3D.terrain_height(cos(a) * r, sin(a) * r, flat) - 1
-		world.add_child(R3D.box(Vector3(w, h, w), mat, Vector3(cos(a) * r, base + h / 2, sin(a) * r)))
-		world.add_child(R3D.box(Vector3(w + 0.4, 0.5, w + 0.4), R3D.flat(Color("#3d4148"), 0.7, 0.4), Vector3(cos(a) * r, base + h + 0.25, sin(a) * r)))
 	R3D.shadows(world)
 	for l in lots:
 		l.key = ""

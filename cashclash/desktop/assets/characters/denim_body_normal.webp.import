@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dg7d8s10y7fny"
-path="res://.godot/imported/hydrant_fire_hydrant_aged_metal-fire_hydrant_aged_rough.webp-5d518986e42f0a9c41325974114c3cbc.ctex"
+uid="uid://b7t7mawk8a7w5"
+path="res://.godot/imported/denim_body_normal.webp-db612e259c96058c5551ad798e7d9333.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "083598a743db106106b98310a2bddbae"
+"md5": "a0e6e31190196c7ff980c432e091f21a"
 }
 
 [deps]
 
-source_file="res://assets/models/hydrant_fire_hydrant_aged_metal-fire_hydrant_aged_rough.webp"
-dest_files=["res://.godot/imported/hydrant_fire_hydrant_aged_metal-fire_hydrant_aged_rough.webp-5d518986e42f0a9c41325974114c3cbc.ctex"]
+source_file="res://assets/characters/denim_body_normal.webp"
+dest_files=["res://.godot/imported/denim_body_normal.webp-db612e259c96058c5551ad798e7d9333.ctex"]
 
 [params]
 

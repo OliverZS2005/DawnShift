@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cpfyctp8atvd1"
-path="res://.godot/imported/trash_can_metal_trash_can_rust_metal-metal_trash_can_rust_rough.webp-f3e7585baa1149f52c43d5fed8a466bf.ctex"
+uid="uid://dfcorvkpih7c3"
+path="res://.godot/imported/jacket_body_color.webp-49697708e7c8152819a6483363d07d29.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "c49e1fa69a29f122ca9571c1a53b49f3"
+"md5": "d03ad803dafaf1af1c08725219bf194b"
 }
 
 [deps]
 
-source_file="res://assets/models/trash_can_metal_trash_can_rust_metal-metal_trash_can_rust_rough.webp"
-dest_files=["res://.godot/imported/trash_can_metal_trash_can_rust_metal-metal_trash_can_rust_rough.webp-f3e7585baa1149f52c43d5fed8a466bf.ctex"]
+source_file="res://assets/characters/jacket_body_color.webp"
+dest_files=["res://.godot/imported/jacket_body_color.webp-49697708e7c8152819a6483363d07d29.ctex"]
 
 [params]
 

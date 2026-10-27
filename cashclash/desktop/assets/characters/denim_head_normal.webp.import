@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cg3p01ce0i2px"
-path="res://.godot/imported/trash_can_metal_trash_can_rust_nor_gl.webp-29f410c0a866aaf207714564b81b1222.ctex"
+uid="uid://clcysi4wnimjs"
+path="res://.godot/imported/denim_head_normal.webp-ce68f5ad12db95eee9e76e73234439fe.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "bd5fc3607446bfeee11f48ba74facc74"
+"md5": "4a46485f80ad15bf2865d0f4be239139"
 }
 
 [deps]
 
-source_file="res://assets/models/trash_can_metal_trash_can_rust_nor_gl.webp"
-dest_files=["res://.godot/imported/trash_can_metal_trash_can_rust_nor_gl.webp-29f410c0a866aaf207714564b81b1222.ctex"]
+source_file="res://assets/characters/denim_head_normal.webp"
+dest_files=["res://.godot/imported/denim_head_normal.webp-ce68f5ad12db95eee9e76e73234439fe.ctex"]
 
 [params]
 

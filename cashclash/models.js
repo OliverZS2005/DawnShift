@@ -199,16 +199,20 @@
   const ASSETS = {
     skies: { day: 'sky/day.hdr', sunset: 'sky/sunset.hdr', dusk: 'sky/dusk.hdr', night: 'sky/night.hdr' },
     models: Object.fromEntries(['crate', 'military_crate', 'barrel', 'barrier', 'street_lamp', 'trash_can', 'hydrant', 'utility_box',
-      'plastic_crate', 'covered_car', 'shrub', 'bench', 'tree', 'pine'].map(n => [n, `models/${n}.glb`])),
-    characters: { soldier: 'characters/soldier.glb', adventurer: 'characters/adventurer.glb' },
+      'plastic_crate', 'covered_car', 'shrub', 'bench'].map(n => [n, `models/${n}.glb`])),
+    characters: { soldier: 'characters/soldier.glb', hoodie: 'characters/hoodie.glb', jacket: 'characters/jacket.glb', denim: 'characters/denim.glb' },
     textures: ['concrete_floor', 'corrugated', 'metal_plate', 'marble', 'asphalt', 'brick', 'grass', 'pavers', 'slate', 'plaster', 'concrete_wall', 'roof', 'shutter'],
-    heights: { tree: 5.5, pine: 7.5, soldier: 1.8, adventurer: 1.8 },
-    // The fighters: realistically proportioned adventurers (Quaternius). The guns they hold come from
-    // the soldier model. Clips are picked by movement relative to where they aim (strafing runs).
+    heights: { soldier: 1.8 }, // the Rocketbox people are already real size
+    // The fighters: photoreal people (Microsoft Rocketbox), one per opponent. Their legs play the run,
+    // walk and idle clips in the direction they move; the upper body turns to where they aim and both
+    // hands hold the gun out in front (posed in code each frame, the way GTA does it).
     fighter: {
-      model: 'adventurer', hand: 'Wrist.R', uniform: ['Green', 'LightGreen'], hide: [],
-      clips: { idle: 'Idle_Gun_Pointing', run: 'Run_Shoot', back: 'Run_Back', left: 'Run_Left', right: 'Run_Right', shoot: 'Idle_Gun_Shoot', hit: 'HitRecieve', death: 'Death' },
-      gunLen: { pistol: 0.32, smg: 0.55, shotgun: 0.85, sniper: 1.0, rocket: 1.0 },
+      people: ['hoodie', 'jacket', 'denim'],
+      bones: { spine: ['Bip01 Spine', 'Bip01 Spine1', 'Bip01 Spine2'], head: 'Bip01 Head',
+        R: ['Bip01 R UpperArm', 'Bip01 R Forearm', 'Bip01 R Hand'], L: ['Bip01 L UpperArm', 'Bip01 L Forearm', 'Bip01 L Hand'] },
+      gunLen: { pistol: 0.26, smg: 0.5, shotgun: 0.85, sniper: 1.0, rocket: 1.0 },
+      // where the gun is held: [ahead of the chest, below it, right of centre] in metres
+      hold: { pistol: [0.53, 0.04, 0.04], smg: [0.38, 0.08, 0.1], shotgun: [0.34, 0.06, 0.13], sniper: [0.32, 0.04, 0.13], rocket: [0.18, -0.16, 0.17] },
     },
     // The guns: nodes in the soldier model, taken in the pose of his aiming clip (names end with it,
     // e.g. "CharacterArmature|Idle_Shoot") so barrel and roll come from the artist's pose.
@@ -232,7 +236,7 @@
         props: ['crate', 'military_crate', 'barrel', 'plastic_crate', 'utility_box', 'trash_can', 'covered_car', 'barrier'] },
       { name: 'Pillars', sky: 'sunset', exposure: 0.95, sun: '#ffc690', sunI: 3.2, floorTex: 'slate', floorTile: 3, outerTex: 'pavers', wallStyle: 'stone', wallTex: 'concrete_wall', wallTile: 3,
         tints: ['#d8cfbf'], trim: '#a89a7c', line: '#c9b98f', lampsOn: false,
-        props: ['barrier', 'shrub', 'bench', 'trash_can', 'hydrant', 'tree'] },
+        props: ['barrier', 'shrub', 'bench', 'trash_can', 'hydrant', 'barrel'] },
       { name: 'Corridors', sky: 'night', exposure: 1.25, sun: '#9fb4ff', sunI: 1.2, floorTex: 'metal_plate', floorTile: 2.5, outerTex: 'asphalt', wallStyle: 'metal', wallTex: 'metal_plate', wallTile: 2,
         tints: ['#9aa3ad'], trim: '#3fb6ff', line: '#3fb6ff', lampsOn: true,
         props: ['utility_box', 'barrel', 'plastic_crate', 'military_crate', 'trash_can', 'barrier'] },
@@ -259,17 +263,16 @@
   // 3x3 lots, `lot` metres apart, with roads between them. Lot i sits at x = (1 - floor(i/3)) * lot, z = (i % 3 - 1) * lot.
   const CITY = {
     lot: 10, pad: 7.6, road: 2.4,
-    // Sky, light and skyline change as your business level rises (index = level - 1).
+    // Sky and light change as your business level rises (index = level - 1).
     levels: [
-      { sky: 'day', exposure: 1.0, sun: '#fff1d6', sunI: 3.0, skyline: 0, lampsOn: false },
-      { sky: 'day', exposure: 1.0, sun: '#fff1d6', sunI: 3.0, skyline: 8, lampsOn: false },
-      { sky: 'day', exposure: 1.0, sun: '#fff1d6', sunI: 3.0, skyline: 14, lampsOn: false },
-      { sky: 'sunset', exposure: 0.95, sun: '#ffc690', sunI: 3.0, skyline: 22, lampsOn: false },
-      { sky: 'sunset', exposure: 0.95, sun: '#ffb070', sunI: 2.6, skyline: 30, lampsOn: true },
-      { sky: 'dusk', exposure: 1.1, sun: '#ffcfa0', sunI: 1.8, skyline: 38, lampsOn: true },
-      { sky: 'night', exposure: 1.3, sun: '#a9bcff', sunI: 0.9, skyline: 46, lampsOn: true },
+      { sky: 'day', exposure: 1.0, sun: '#fff1d6', sunI: 3.0, lampsOn: false },
+      { sky: 'day', exposure: 1.0, sun: '#fff1d6', sunI: 3.0, lampsOn: false },
+      { sky: 'day', exposure: 1.0, sun: '#fff1d6', sunI: 3.0, lampsOn: false },
+      { sky: 'sunset', exposure: 0.95, sun: '#ffc690', sunI: 3.0, lampsOn: false },
+      { sky: 'sunset', exposure: 0.95, sun: '#ffb070', sunI: 2.6, lampsOn: true },
+      { sky: 'dusk', exposure: 1.1, sun: '#ffcfa0', sunI: 1.8, lampsOn: true },
+      { sky: 'night', exposure: 1.3, sun: '#a9bcff', sunI: 0.9, lampsOn: true },
     ],
-    skylineTex: ['brick', 'plaster', 'concrete_wall'],
   };
   CITY.props = (() => {
     const r = rng(4242), out = [], L = CITY.lot;
@@ -283,41 +286,113 @@
       const [x, z] = side < 2 ? [along * L, (side ? 1 : -1) * (1.5 * L + 2.2)] : [(side === 2 ? 1 : -1) * (1.5 * L + 2.2), along * L];
       out.push({ model: furniture[i % furniture.length], p: [+x.toFixed(2), 0, +z.toFixed(2)], ry: side < 2 ? (side ? PI : 0) : (side === 2 ? -PI / 2 : PI / 2) });
     }
-    // parked cars and a park ring of trees
+    // parked cars
     for (const [x, z, ry] of [[-1.5 * L - 2.4, -6, 0], [1.5 * L + 2.6, 7, PI], [4, 1.5 * L + 2.6, PI / 2]]) out.push({ model: 'covered_car', p: [x, 0, z], ry });
-    for (let i = 0; i < 30; i++) {
-      const a = i / 30 * PI * 2 + r() * 0.15, d = 23 + r() * 9;
-      out.push({ model: r() < 0.6 ? 'tree' : 'pine', p: [+(Math.cos(a) * d).toFixed(2), 0, +(Math.sin(a) * d).toFixed(2)], ry: +(r() * PI * 2).toFixed(3), s: +(0.8 + r() * 0.5).toFixed(2) });
-    }
     return out;
   })();
 
-  // ---------- Landscape (rolling hills, mountains, grass, trees around the arena and the city) ----------
-  // terrainHeight() is deterministic so the desktop port (r3d.gd) builds exactly the same hills.
-  const LANDSCAPE = {
-    size: 640, segments: 220,
-    flatArena: [27, 18], flatCity: [26, 26], // half-extents (m) of the level ground around the play area
-    ramp: 22, hills: 6, hillScale: 0.017, mountains: 150, mountainScale: 0.0045, mountainStart: 110,
-    grass: { high: 70000, medium: 26000, low: 8000, radius: 75, height: [0.35, 0.85] },
-    trees: 110,
-    haze: { day: '#c6d6e4', sunset: '#e7b892', dusk: '#a58fa6', night: '#1d2436' }, // aerial-perspective fog colour per sky
+  // ---------- City blocks (GTA-style streets around the arena and the business) ----------
+  // cityLayout() is deterministic, so the web and desktop versions build exactly the same streets.
+  const URBAN = {
+    haze: { day: '#b8b1a3', sunset: '#c4a184', dusk: '#6f6474', night: '#15171e' }, // smog colour per sky
+    fog: 0.0062,          // exponential fog density (web); distant blocks fade into the smog
+    storey: 3.3,          // metres per floor
+    street: 13, sidewalk: 2.6, block: 46, depth: 15, radius: 150,
+    near: 105,            // buildings closer than this get real windows; further ones a painted window grid
+    shadows: 60,          // buildings closer than this cast shadows (the sun's shadow map covers the middle)
+    facades: [
+      { tex: 'brick', tints: ['#c08f7a', '#a87563', '#cfa58d', '#93695a'] },
+      { tex: 'plaster', tints: ['#d3c7b1', '#bdb3a3', '#c9b89c'] },
+      { tex: 'concrete_wall', tints: ['#b0aea8', '#97958f'] },
+    ],
+    skyline: { count: 64, radius: [230, 430], size: [14, 30], floors: [18, 58] },
+    // clear: half-extents (m) of the open ground in the middle; ring: buildings wall it in (a courtyard)
+    arena: { clear: [30, 21], ring: true, seed: 77 },
+    city: { clear: [21, 21], ring: false, seed: 91 },
   };
-  const hash2 = (i, j) => { const s = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return s - Math.floor(s); };
-  function vnoise(x, z) {
-    const i = Math.floor(x), j = Math.floor(z), fx = x - i, fz = z - j, u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
-    const a = hash2(i, j), b = hash2(i + 1, j), c = hash2(i, j + 1), d = hash2(i + 1, j + 1);
-    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  const round2 = v => +v.toFixed(2);
+  function cityLayout(where) {
+    const U = URBAN, o = U[where], r = rng(o.seed), [cx, cz] = o.clear, D = U.depth;
+    const buildings = [], sidewalks = [], lamps = [], cars = [], props = [];
+    const pick = a => a[Math.floor(r() * a.length)];
+    function building(x0, z0, x1, z1, floors) {
+      const f = pick(U.facades), x = (x0 + x1) / 2, z = (z0 + z1) / 2;
+      buildings.push({ x: round2(x), z: round2(z), w: round2(x1 - x0), d: round2(z1 - z0), floors, h: round2(floors * U.storey + 0.6),
+        tex: f.tex, tint: pick(f.tints), near: Math.hypot(x, z) < U.near, shade: Math.hypot(x, z) < U.shadows, tank: floors <= 10 && r() < 0.35, seed: Math.floor(r() * 1e6) });
+    }
+    // fill one side of a rectangle with buildings of varied width; `gap` leaves the odd alley
+    function row(along0, along1, across0, across1, vertical, floorsMin, floorsMax, gap) {
+      for (let t = along0; t < along1 - 3;) {
+        let w = Math.min(8 + r() * 11, along1 - t); if (along1 - t - w < 6) w = along1 - t;
+        const floors = floorsMin + Math.floor(r() * (floorsMax - floorsMin + 1));
+        if (r() >= gap) vertical ? building(across0, t, across1, t + w, floors) : building(t, across0, t + w, across1, floors);
+        t += w;
+      }
+    }
+    // a block: buildings around its edge facing the streets, sidewalks outside it
+    function block(x0, x1, z0, z1, ring) {
+      const dist = Math.hypot((x0 + x1) / 2, (z0 + z1) / 2), tall = dist > 110 ? 9 : 0;
+      const dz = Math.min(D, (z1 - z0) / 2), dx = Math.min(D, (x1 - x0) / 2);
+      const lo = ring ? 4 : 3 + tall, hi = ring ? 9 : 11 + tall * 2, gap = ring ? 0.1 : 0.04;
+      row(x0, x1, z0, z0 + dz, false, lo, hi, gap); row(x0, x1, z1 - dz, z1, false, lo, hi, gap);
+      row(z0 + dz, z1 - dz, x0, x0 + dx, true, lo, hi, gap); row(z0 + dz, z1 - dz, x1 - dx, x1, true, lo, hi, gap);
+      const s = U.sidewalk;
+      sidewalks.push([x0 - s, z0 - s, x1 + s, z0], [x0 - s, z1, x1 + s, z1 + s], [x0 - s, z0, x0, z1], [x1, z0, x1 + s, z1]);
+    }
+    // the middle: a courtyard walled in by buildings (arena), or open ground (the business)
+    let Cx = cx, Cz = cz;
+    if (o.ring) { block(-cx - D, cx + D, -cz - D, cz + D, true); Cx += D; Cz += D; }
+    else { const s = U.sidewalk; sidewalks.push([-cx - s, -cz - s, cx + s, -cz], [-cx - s, cz, cx + s, cz + s], [-cx - s, -cz, -cx, cz], [cx, -cz, cx + s, cz]); }
+    // blocks in a grid around it, separated by streets
+    const spans = c => { const out = [[-c, c]]; for (let a = c + U.street; a < U.radius; a += U.block + U.street) out.push([a, a + U.block], [-a - U.block, -a]); return out; };
+    for (const [x0, x1] of spans(Cx)) for (const [z0, z1] of spans(Cz)) if (x0 !== -Cx || z0 !== -Cz) block(x0, x1, z0, z1, false);
+    // street furniture on the sidewalks of the streets right around the middle
+    const edge = [Cx + U.street - 1.1, Cz + U.street - 1.1], inner = [Cx + 1.1, Cz + 1.1];
+    for (let i = 0; i < 16; i++) {
+      const side = i % 4, along = -0.85 + (Math.floor(i / 4) / 3) * 1.7 + (r() - 0.5) * 0.1, out = i % 8 < 4 ? edge : inner;
+      const [x, z] = side < 2 ? [along * Cx, (side ? 1 : -1) * out[1]] : [(side === 2 ? 1 : -1) * out[0], along * Cz];
+      lamps.push({ model: 'street_lamp', p: [round2(x), 0.15, round2(z)], ry: round2(side < 2 ? (side ? -PI / 2 : PI / 2) : (side === 2 ? PI : 0)), light: true });
+    }
+    for (let i = 0; i < 12; i++) { // parked cars along the kerb
+      const side = i % 4, along = -0.8 + r() * 1.6, off = (side < 2 ? Cz : Cx) + U.street - U.sidewalk - 1.4;
+      const [x, z] = side < 2 ? [along * Cx, (side ? 1 : -1) * off] : [(side === 2 ? 1 : -1) * off, along * Cz];
+      cars.push({ model: 'covered_car', p: [round2(x), 0, round2(z)], ry: round2(side < 2 ? PI / 2 : 0) });
+    }
+    const stuff = ['hydrant', 'trash_can', 'trash_can', 'utility_box', 'plastic_crate', 'barrel'];
+    for (let i = 0; i < 18; i++) {
+      const side = i % 4, along = -0.9 + r() * 1.8, out = r() < 0.5 ? edge : inner;
+      const [x, z] = side < 2 ? [along * Cx, (side ? 1 : -1) * out[1]] : [(side === 2 ? 1 : -1) * out[0], along * Cz];
+      props.push({ model: pick(stuff), p: [round2(x), 0.15, round2(z)], ry: round2(r() * PI * 2) });
+    }
+    // the skyline: towers far away in the haze
+    const S = U.skyline, skyline = [];
+    for (let i = 0; i < S.count; i++) {
+      const a = r() * PI * 2, d = S.radius[0] + r() * (S.radius[1] - S.radius[0]), w = S.size[0] + r() * (S.size[1] - S.size[0]);
+      const floors = S.floors[0] + Math.floor(r() * (S.floors[1] - S.floors[0]));
+      skyline.push({ x: round2(Math.cos(a) * d), z: round2(Math.sin(a) * d), w: round2(w), d: round2(w * (0.7 + r() * 0.5)), floors, h: round2(floors * U.storey), tint: pick(pick(U.facades).tints) });
+    }
+    return { buildings, sidewalks: sidewalks.map(a => a.map(round2)), lamps, cars, props, skyline };
   }
-  function fbm(x, z) { let s = 0, a = 0.5, f = 1; for (let o = 0; o < 4; o++) { s += a * vnoise(x * f, z * f); f *= 2; a *= 0.5; } return s; }
-  // Ground height (m) at x,z; `flat` = half-extents of the level area in the middle.
-  function terrainHeight(x, z, flat) {
-    const L = LANDSCAPE, dx = Math.max(0, Math.abs(x) - flat[0]), dz = Math.max(0, Math.abs(z) - flat[1]);
-    const r = Math.min(1, Math.hypot(dx, dz) / L.ramp), ramp = r * r * (3 - 2 * r);
-    const hills = fbm(x * L.hillScale + 11, z * L.hillScale + 7) * L.hills * 2;
-    const m = Math.min(1, Math.max(0, (Math.hypot(x, z) - L.mountainStart) / 120));
-    const f = fbm(x * L.mountainScale + 3, z * L.mountainScale + 5);
-    return ramp * hills + f * f * L.mountains * 2 * m - 0.05;
+  // Windows on the sides of a building you can see from the middle (the arena or the business):
+  // [x, y, z, rotationY, width, height, lit]; rotationY turns the window to face out of that side.
+  // Ground floors get wide shop windows. `night` lights some of them.
+  function windowsOf(b, night) {
+    const U = URBAN, r = rng(b.seed), out = [];
+    const sides = [[0, -1, b.w, 0], [0, 1, b.w, PI], [-1, 0, b.d, -PI / 2], [1, 0, b.d, PI / 2]];
+    for (const [sx, sz, len, ry] of sides) {
+      if (sx * -b.x + sz * -b.z < -1) continue; // faces away from the middle
+      const n = Math.max(1, Math.floor((len - 1.4) / 3.1)), step = len / n;
+      for (let f = 0; f < b.floors; f++) {
+        const shop = f === 0, y = shop ? 1.55 : f * U.storey + 1.75, ww = shop ? Math.min(step - 0.8, 2.6) : 1.25, wh = shop ? 2.1 : 1.65;
+        for (let k = 0; k < n; k++) {
+          const t = -len / 2 + step * (k + 0.5);
+          const x = b.x + (sx ? sx * (b.w / 2 + 0.03) : t), z = b.z + (sz ? sz * (b.d / 2 + 0.03) : t);
+          out.push([round2(x), round2(y), round2(z), ry, round2(ww), wh, night && r() < 0.38 ? 1 : 0]);
+        }
+      }
+    }
+    return out;
   }
 
-  return { BUILDINGS, LOT, SOLDIER, GUNS, ARENA, CITY, ASSETS, LANDSCAPE, tex, terrainHeight };
+  return { BUILDINGS, LOT, SOLDIER, GUNS, ARENA, CITY, ASSETS, URBAN, tex, cityLayout, windowsOf };
 });

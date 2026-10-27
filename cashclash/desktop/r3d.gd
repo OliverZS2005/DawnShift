@@ -12,15 +12,6 @@ var _mats := {}
 func _ready() -> void:
 	var f = FileAccess.open("res://models.json", FileAccess.READ)
 	M = JSON.parse_string(f.get_as_text())
-	# Work out the terrain and grass for the city and every fight map now, on worker threads, so
-	# neither the city nor the first fight waits for it. (Same arguments city3d.gd and arena3d.gd use.)
-	var LS = M.LANDSCAPE
-	var city_bare = 1.5 * float(M.CITY.lot) + float(M.CITY.road)
-	_prewarm(LS.flatCity, [city_bare, city_bare], [2000])
-	var seeds = []
-	for m in M.ARENA.themes.size():
-		seeds.append(1000 + m)
-	_prewarm(LS.flatArena, [LS.flatArena[0] - 2, LS.flatArena[1] - 2], seeds)
 
 # ---------- Assets ----------
 func asset(rel: String) -> String:
@@ -138,23 +129,34 @@ func environment(sky_name: String, exposure: float, _unused := Color.BLACK) -> E
 	e.ssao_enabled = true
 	e.ssao_radius = 1.2
 	e.ssao_intensity = 1.6
+	# GTA IV-style bloom: bright sky and highlights bleed a soft glow
 	e.glow_enabled = true
-	e.glow_intensity = 0.6
-	e.glow_bloom = 0.05
-	e.glow_hdr_threshold = 1.2
-	# aerial perspective: distant hills fade into the sky's haze colour. Depth fog rather than
-	# exponential: it leaves the arena itself clear and works the same in the OpenGL fallback.
+	e.glow_intensity = 0.8
+	e.glow_bloom = 0.12
+	e.glow_hdr_threshold = 1.0
+	# city smog: distant blocks fade into the haze. Depth fog (rather than exponential) matches the web's
+	# curve and works the same in the OpenGL fallback.
+	var haze = Color(M.URBAN.haze[sky_name])
 	e.fog_enabled = true
 	e.fog_mode = Environment.FOG_MODE_DEPTH
-	e.fog_light_color = Color(M.LANDSCAPE.haze[sky_name])
+	e.fog_light_color = haze
 	e.fog_density = 1.0
-	e.fog_depth_begin = 60.0
-	e.fog_depth_end = 650.0
-	e.fog_depth_curve = 1.6
+	e.fog_depth_begin = 15.0
+	e.fog_depth_end = 330.0
+	e.fog_depth_curve = 1.7
 	e.fog_sky_affect = 0.0
-	# colour grade: a little extra saturation (the web version also adds warmth and a vignette)
+	# Colour grade in the spirit of GTA IV (same idea as GRADE in render3d.js): washed-out colour, more
+	# contrast, and a per-channel tone curve that warms the shadows to sepia and the highlights to cream.
 	e.adjustment_enabled = true
-	e.adjustment_saturation = 1.12
+	e.adjustment_saturation = 0.76
+	e.adjustment_contrast = 1.1
+	var curve = Gradient.new()
+	curve.set_color(0, Color(0.035, 0.026, 0.018))
+	curve.set_color(1, Color(1.0, 0.975, 0.88))
+	curve.add_point(0.5, Color(0.53, 0.5, 0.455))
+	var lut = GradientTexture1D.new()
+	lut.gradient = curve
+	e.adjustment_color_correction = lut
 	# Vulkan (Forward+) only; the OpenGL fallback ignores these. (No SDFGI: outdoors it darkened the
 	# shade more than it added bounce light, and it's the costliest effect on weaker graphics cards.)
 	# Bounce light and contact shading from what's on screen, and reflections on smooth floors.
@@ -164,10 +166,10 @@ func environment(sky_name: String, exposure: float, _unused := Color.BLACK) -> E
 	e.ssr_enabled = true
 	e.ssr_max_steps = 48
 	e.ssr_fade_out = 1.5
-	# Thin volumetric haze: the air catches the sunlight (soft light shafts past walls and trees).
+	# Thin volumetric haze: the air catches the sunlight (soft light shafts between the buildings).
 	e.volumetric_fog_enabled = true
-	e.volumetric_fog_density = 0.006
-	e.volumetric_fog_albedo = Color(M.LANDSCAPE.haze[sky_name])
+	e.volumetric_fog_density = 0.005
+	e.volumetric_fog_albedo = haze
 	e.volumetric_fog_anisotropy = 0.55
 	e.volumetric_fog_length = 90.0
 	e.volumetric_fog_sky_affect = 0.0
@@ -291,292 +293,225 @@ func viewport(fov: float) -> Dictionary:
 	world.add_child(we)
 	return {"container": c, "viewport": vp, "world": world, "camera": cam, "env": we}
 
-# ---------- Landscape: rolling hills, mountains, wind-blown grass, trees ----------
-# Same maths as terrainHeight() in ../models.js, so both versions raise identical hills.
-# Four octaves of smoothed value noise (hash and interpolation inlined: this runs ~100k times per build).
-func _fbm(x: float, z: float) -> float:
-	var s = 0.0
-	var a = 0.5
-	for o in 4:
-		var i = floor(x)
-		var j = floor(z)
-		var fx = x - i
-		var fz = z - j
-		var u = fx * fx * (3 - 2 * fx)
-		var w = fz * fz * (3 - 2 * fz)
-		var h = sin(i * 127.1 + j * 311.7) * 43758.5453
-		var ha = h - floor(h)
-		h = sin((i + 1) * 127.1 + j * 311.7) * 43758.5453
-		var hb = h - floor(h)
-		h = sin(i * 127.1 + (j + 1) * 311.7) * 43758.5453
-		var hc = h - floor(h)
-		h = sin((i + 1) * 127.1 + (j + 1) * 311.7) * 43758.5453
-		var hd = h - floor(h)
-		s += a * (ha + (hb - ha) * u + (hc - ha) * w + (ha - hb - hc + hd) * u * w)
-		x *= 2
-		z *= 2
-		a *= 0.5
-	return s
-
-func terrain_height(x: float, z: float, flat: Array) -> float:
-	var L = M.LANDSCAPE
-	var dx = max(0.0, abs(x) - flat[0])
-	var dz = max(0.0, abs(z) - flat[1])
-	var r = min(1.0, sqrt(dx * dx + dz * dz) / L.ramp)
-	var y = -0.05
-	if r > 0: # zero on the level ground, so skip the noise there
-		y += r * r * (3 - 2 * r) * _fbm(x * L.hillScale + 11, z * L.hillScale + 7) * L.hills * 2
-	var m = clamp((sqrt(x * x + z * z) - L.mountainStart) / 120.0, 0.0, 1.0)
-	if m > 0:
-		var f = _fbm(x * L.mountainScale + 3, z * L.mountainScale + 5)
-		y += f * f * L.mountains * 2 * m
-	return y
-
-const GRASS_SHADER = """
-shader_type spatial;
-render_mode cull_disabled;
-void vertex() {
-	vec3 ip = MODEL_MATRIX[3].xyz;
-	float k = VERTEX.y * VERTEX.y;
-	float gust = sin(TIME * 1.5 + ip.x * 0.19 + ip.z * 0.13) * 0.65 + sin(TIME * 3.4 + ip.x * 1.1 + ip.z * 0.8) * 0.22;
-	vec3 wind = vec3(1.0, 0.0, 0.42) * (gust + 0.35) * k * 0.42;
-	VERTEX += inverse(mat3(MODEL_MATRIX)) * wind;
-}
-void fragment() {
-	// both sides lit like the ground beneath (Godot would flip the back face's normal downward: black blades)
-	NORMAL = normalize((VIEW_MATRIX * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
-	ALBEDO = COLOR.rgb;
-	ROUGHNESS = 0.82;
-	// thin blades let light through: they glow when the sun is behind them (Vulkan renderer)
-	BACKLIGHT = COLOR.rgb * 0.6;
-}
-"""
-
+# ---------- City blocks: GTA-style streets around the arena or the business ----------
+# The layout comes from models.json (LAYOUT, written from cityLayout() in ../models.js), so the web and
+# desktop versions build the same streets. windows_of() is a port of windowsOf() (tests/parity checks it).
 var _rng_state := 1
 func _rng() -> float:
 	_rng_state = (_rng_state * 16807) % 2147483647
 	return _rng_state / 2147483647.0
 
-# One grass blade, 1 unit tall: a tapering strip, dark at the root and sunlit at the tip.
-var _blade: ArrayMesh = null
-func _grass_blade() -> ArrayMesh:
-	if _blade:
-		return _blade
-	var st = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var segs = 4
-	var rows = []
-	for i in segs + 1:
-		var y = float(i) / segs
-		var w = 0.045 * (1 - y * 0.9)
-		var bend = y * y * 0.12
-		var k = pow(y, 1.4)
-		var c = Color(0.035, 0.09, 0.015).lerp(Color(0.32, 0.5, 0.1), k)
-		rows.append([Vector3(-w, y, bend), Vector3(w, y, bend), c])
-	for i in segs:
-		var a = rows[i]
-		var b = rows[i + 1]
-		for v in [[a[0], a[2]], [a[1], a[2]], [b[0], b[2]], [a[1], a[2]], [b[1], b[2]], [b[0], b[2]]]:
-			st.set_color(v[1])
-			st.set_normal(Vector3.UP) # up-facing normals: soft, sky-lit grass
-			st.add_vertex(v[0])
-	_blade = st.commit()
-	return _blade
+# Windows on the sides of a building you can see from the middle: [x, y, z, rotationY, width, height, lit].
+func windows_of(b: Dictionary, night: bool) -> Array:
+	var U = M.URBAN
+	_rng_state = int(b.seed)
+	var out = []
+	var sides = [[0, -1, float(b.w), 0.0], [0, 1, float(b.w), PI], [-1, 0, float(b.d), -PI / 2], [1, 0, float(b.d), PI / 2]]
+	for sd in sides:
+		var sx = sd[0]
+		var sz = sd[1]
+		if sx * -float(b.x) + sz * -float(b.z) < -1: # faces away from the middle
+			continue
+		var length = sd[2]
+		var n = maxi(1, int(floor((length - 1.4) / 3.1)))
+		var step = length / n
+		for f in int(b.floors):
+			var shop = f == 0
+			var y = 1.55 if shop else f * float(U.storey) + 1.75
+			var ww = min(step - 0.8, 2.6) if shop else 1.25
+			var wh = 2.1 if shop else 1.65
+			for k in n:
+				var t = -length / 2 + step * (k + 0.5)
+				var x = float(b.x) + (sx * (float(b.w) / 2 + 0.03) if sx else t)
+				var z = float(b.z) + (sz * (float(b.d) / 2 + 0.03) if sz else t)
+				out.append([snappedf(x, 0.01), snappedf(y, 0.01), snappedf(z, 0.01), sd[3], snappedf(ww, 0.01), wh, 1 if night and _rng() < 0.38 else 0])
+	return out
 
-# flat: half-extents of the level ground; bare: half-extents with no grass (paving).
-# Returns {group, flat, grass}.
-# Built meshes are cached (terrain per level-ground size, grass per seed): rebuilding takes seconds.
-var _terrain_cache := {}
-var _grass_cache := {}
-func landscape(flat: Array, bare: Array, seed: int) -> Dictionary:
+# Adds a box to a SurfaceTool batch: UVs in metres / tu across and / tv up (textures keep their real
+# size, and a painted window grid lines up with the floors); `color` tints a shared material.
+const _FACES = [[Vector3.RIGHT, Vector3.UP], [Vector3.LEFT, Vector3.UP], [Vector3.BACK, Vector3.UP], [Vector3.FORWARD, Vector3.UP], [Vector3.UP, Vector3.FORWARD], [Vector3.DOWN, Vector3.BACK]]
+func _box_into(st: SurfaceTool, size: Vector3, c: Vector3, tu: float, tv: float, color := Color.WHITE) -> void:
+	var h = size / 2
+	for f in _FACES:
+		var n: Vector3 = f[0]
+		var v: Vector3 = f[1]
+		var u = v.cross(n) # to the right, seen from outside
+		var hn = abs(n.dot(h))
+		var hu = abs(u.dot(h))
+		var hv = abs(v.dot(h))
+		var su = (tv if n.y == 0 else tu)
+		var corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]]
+		var pts = []
+		for k in corners:
+			pts.append([c + n * hn + u * hu * k[0] + v * hv * k[1], Vector2((k[0] + 1) * hu / tu, -(k[1] + 1) * hv / su)])
+		for i in [0, 2, 1, 0, 3, 2]: # clockwise from outside: Godot's front faces
+			st.set_color(color)
+			st.set_normal(n)
+			st.set_uv(pts[i][1])
+			st.add_vertex(pts[i][0])
+
+# Painted facade for distant buildings: 4 windows by 4 floors per tile (12.4 m x 13.2 m), and a matching
+# glow map of lit windows for night.
+var _grids := {}
+func _window_grid(kind: String) -> ImageTexture:
+	if _grids.has(kind):
+		return _grids[kind]
+	var img = Image.create(256, 256, false, Image.FORMAT_RGBA8)
+	img.fill(Color("#d9d6d0") if kind == "map" else Color.BLACK)
+	_rng_state = 11 if kind == "map" else 23
+	if kind == "map":
+		for i in 900: # grime
+			var g = Color("#d9d6d0").darkened(_rng() * 0.08)
+			img.fill_rect(Rect2i(int(_rng() * 256), int(_rng() * 256), 2 + int(_rng() * 6), 2 + int(_rng() * 10)), g)
+	for fy in 4:
+		for fx in 4:
+			var r = Rect2i(fx * 64 + 17, fy * 64 + 14, 30, 36)
+			if kind == "map":
+				var g = (34 + int(_rng() * 18)) / 255.0
+				img.fill_rect(r, Color(g, g + 0.024, g + 0.047))
+				img.fill_rect(Rect2i(r.position, Vector2i(30, 10)), Color(g + 0.08, g + 0.1, g + 0.13))
+			elif _rng() < 0.36:
+				img.fill_rect(r, Color("#ffcf86") if _rng() < 0.7 else Color("#cfe3ff"))
+	img.generate_mipmaps()
+	_grids[kind] = ImageTexture.create_from_image(img)
+	return _grids[kind]
+
+func _batch(batches: Dictionary, key: String, mat: Material) -> SurfaceTool:
+	if not batches.has(key):
+		var st = SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		batches[key] = {"st": st, "mat": mat}
+	return batches[key].st
+
+# The streets, sidewalks, buildings (real windows up close, painted ones further out), rooftop water
+# tanks, the skyline in the haze, and street furniture.
+func city(where: String, night: bool) -> Node3D:
 	var group = Node3D.new()
-	var t = _terrain(flat)
+	var L = M.LAYOUT[where]
+	var batches = {}
 	var ground = MeshInstance3D.new()
-	ground.mesh = t.mesh
-	ground.material_override = t.material
+	var pm = PlaneMesh.new(); pm.size = Vector2(1000, 1000)
+	ground.mesh = pm
+	ground.position.y = -0.04
+	ground.material_override = pbr("asphalt", Color("#8d8c88"), 7.0, 0.0, Color("#3d3e40"))
 	group.add_child(ground)
-	var gkey = "%s|%s|%d" % [flat, bare, seed]
-	if not _grass_cache.has(gkey):
-		var buf = _grass_buffers[gkey] if _grass_buffers.has(gkey) else _grass_buffer(t, bare, seed)
-		_grass_buffers.erase(gkey)
+	var pav = pbr("pavers", Color("#b7b1a7"), 2.5, 0.0, Color("#77746f"))
+	for s in L.sidewalks:
+		_box_into(_batch(batches, "pav", pav), Vector3(s[2] - s[0], 0.15, s[3] - s[1]), Vector3((s[0] + s[2]) / 2, 0.075, (s[1] + s[3]) / 2), 2.5, 2.5)
+	var far = StandardMaterial3D.new()
+	far.albedo_texture = _window_grid("map")
+	far.vertex_color_use_as_albedo = true
+	far.vertex_color_is_srgb = true
+	far.roughness = 0.85
+	far.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	if night:
+		far.emission_enabled = true
+		far.emission = Color.WHITE
+		far.emission_texture = _window_grid("glow")
+		far.emission_energy_multiplier = 1.1
+	var trim = pbr("concrete_wall", Color("#a9a49b"), 2.5, 0.0, Color("#8a857d"))
+	var tank_mat = flat(Color("#5e4a3a"), 0.9, 0.0)
+	var shops = [pbr("shutter", Color("#8d8f8c"), 2.5, 0.0, Color("#4a4c4b")), pbr("plaster", Color("#5a514a"), 2.5, 0.0, Color("#4a443e"))]
+	var windows = []
+	for b in L.buildings:
+		var w = float(b.w)
+		var d = float(b.d)
+		var h = float(b.h)
+		var c = Vector3(float(b.x), 0, float(b.z))
+		if not b.near:
+			_box_into(_batch(batches, "far", far), Vector3(w, h, d), c + Vector3(0, h / 2, 0), 12.4, 13.2, Color(b.tint))
+			continue
+		var k = "+" if b.shade else "" # buildings near the middle cast shadows; batched separately
+		_box_into(_batch(batches, b.tex + b.tint + k, pbr(b.tex, Color(b.tint), 2.5, 0.0, Color(b.tint))), Vector3(w, h, d), c + Vector3(0, h / 2, 0), 2.5, 2.5)
+		var shop = int(b.seed) % 2
+		_box_into(_batch(batches, "shop%d%s" % [shop, k], shops[shop]), Vector3(w + 0.12, 3.25, d + 0.12), c + Vector3(0, 1.625, 0), 2.5, 2.5) # storefronts
+		_box_into(_batch(batches, "trim" + k, trim), Vector3(w + 0.3, 0.35, d + 0.3), c + Vector3(0, 3.42, 0), 2.5, 2.5) # ledge over the shops
+		_box_into(_batch(batches, "trim" + k, trim), Vector3(w + 0.5, 0.5, d + 0.5), c + Vector3(0, h - 0.1, 0), 2.5, 2.5) # cornice
+		if b.tank: # a timber water tank on legs, New York style
+			var t = c + Vector3((int(b.seed) % 3 - 1) * w * 0.2, h, ((int(b.seed) >> 2) % 3 - 1) * d * 0.2)
+			for l in [[-0.9, -0.9], [0.9, -0.9], [-0.9, 0.9], [0.9, 0.9]]:
+				_box_into(_batch(batches, "tank", tank_mat), Vector3(0.18, 2.2, 0.18), t + Vector3(l[0], 1.1, l[1]), 1, 1)
+			for part in [[1.6, 1.6, 3.2, 3.8], [0.0, 1.75, 1.1, 5.95]]:
+				var mi = MeshInstance3D.new()
+				var cm = CylinderMesh.new(); cm.top_radius = part[0]; cm.bottom_radius = part[1]; cm.height = part[2]; cm.radial_segments = 14
+				mi.mesh = cm
+				mi.material_override = tank_mat
+				mi.position = t + Vector3(0, part[3], 0)
+				group.add_child(mi)
+		windows.append_array(windows_of(b, night))
+	for t in L.skyline:
+		_box_into(_batch(batches, "far", far), Vector3(float(t.w), float(t.h), float(t.d)), Vector3(float(t.x), float(t.h) / 2, float(t.z)), 12.4, 13.2, Color(t.tint))
+	for key in batches:
+		var mi = MeshInstance3D.new()
+		mi.mesh = batches[key].st.commit()
+		mi.material_override = batches[key].mat
+		if not key.ends_with("+"):
+			mi.set_meta("no_shadow", true)
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		group.add_child(mi)
+	# real windows: a painted frame of four bars (the bottom one a deeper sill) with the glass set back
+	# inside it, reflective panes, and warm lit panes at night (three MultiMeshes)
+	var frame_mat = flat(Color("#b9b2a5"), 0.7, 0.0)
+	var glass_mat = flat(Color("#232b31"), 0.12, 0.6)
+	var lit_mat = flat(Color("#2a2216"), 0.3, 0.0, Color("#ffbf6e"), 0.75)
+	var lists = {"frame": windows, "glass": windows.filter(func(w): return w[6] == 0), "lit": windows.filter(func(w): return w[6] == 1)}
+	for kind in lists:
+		var list = lists[kind]
+		if list.is_empty():
+			continue
 		var mm = MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.use_colors = true
-		mm.mesh = _grass_blade()
-		mm.instance_count = buf.size() / 16
-		mm.buffer = buf
-		_grass_cache[gkey] = mm
-	var grass = MultiMeshInstance3D.new()
-	grass.multimesh = _grass_cache[gkey]
-	grass.material_override = t.grass_material
-	grass.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	grass.set_meta("no_shadow", true)
-	group.add_child(grass)
-	# trees on the hills
-	var L = M.LANDSCAPE
-	_rng_state = seed + 17
-	for i in int(L.trees):
-		var a = _rng() * TAU
-		var d = 36 + pow(_rng(), 0.7) * 170
-		var x = cos(a) * d
-		var z = sin(a) * d
-		var tname = "pine" if _rng() < 0.55 else "tree"
-		var sc = 0.9 + _rng() * 0.9 + d / 260.0
-		var rot = _rng() * TAU
-		var o = prop(tname)
-		if o:
-			o.position = Vector3(x, _ground_at(t, x, z) - 0.1, z)
-			o.rotation.y = rot
-			o.scale *= sc
-			group.add_child(o)
-	return {"group": group, "flat": flat, "grass": grass}
-
-# Height of the terrain mesh itself (linear across its triangles), so nothing floats above it.
-func _ground_at(t: Dictionary, x: float, z: float) -> float:
-	var n: int = t.n
-	var gx = clamp((x / t.size + 0.5) * n, 0.0, n - 0.001)
-	var gz = clamp((z / t.size + 0.5) * n, 0.0, n - 0.001)
-	var i = int(gx)
-	var j = int(gz)
-	var fx = gx - i
-	var fz = gz - j
-	var h: PackedFloat32Array = t.heights
-	var a = j * (n + 1) + i
-	if fx + fz <= 1.0:
-		return h[a] + (h[a + 1] - h[a]) * fx + (h[a + n + 1] - h[a]) * fz
-	return h[a + n + 2] + (h[a + n + 1] - h[a + n + 2]) * (1 - fx) + (h[a + 1] - h[a + n + 2]) * (1 - fz)
-
-var _jobs := {}
-var _grass_buffers := {}
-# Quitting while a job still runs would free what it reads (and crash): let them finish first.
-func _exit_tree() -> void:
-	for job in _jobs.values():
-		WorkerThreadPool.wait_for_task_completion(job.id)
-	_jobs.clear()
-
-func _prewarm(flat: Array, bare: Array, seeds: Array) -> void:
-	var job = {"grass": {}}
-	job.id = WorkerThreadPool.add_task(func():
-		job.heights = _height_grid(flat)
-		job.arrays = _terrain_arrays(job.heights)
-		var t = {"heights": job.heights, "n": int(M.LANDSCAPE.segments), "size": float(M.LANDSCAPE.size)}
-		for sd in seeds:
-			job.grass["%s|%s|%d" % [flat, bare, sd]] = _grass_buffer(t, bare, sd))
-	_jobs[str(flat)] = job
-
-func _height_grid(flat: Array) -> PackedFloat32Array:
-	var n = int(M.LANDSCAPE.segments)
-	var size = float(M.LANDSCAPE.size)
-	var heights = PackedFloat32Array()
-	heights.resize((n + 1) * (n + 1))
-	for j in n + 1:
-		for i in n + 1:
-			heights[j * (n + 1) + i] = terrain_height(-size / 2 + size * i / n, -size / 2 + size * j / n, flat)
-	return heights
-
-# The terrain grid's mesh arrays: vertex colour grass (white: the texture shows), rock on steep
-# slopes, snow on the high peaks. Pure maths, so it can run on a worker thread.
-func _terrain_arrays(heights: PackedFloat32Array) -> Array:
-	var n = int(M.LANDSCAPE.segments)
-	var size = float(M.LANDSCAPE.size)
-	var verts = PackedVector3Array()
-	var normals = PackedVector3Array()
-	var colors = PackedColorArray()
-	var index = PackedInt32Array()
-	verts.resize((n + 1) * (n + 1)); normals.resize(verts.size()); colors.resize(verts.size())
-	var rock = Color("#8c8478")
-	var snow = Color("#f4f6f8")
-	for j in n + 1:
-		for i in n + 1:
-			var h = heights[j * (n + 1) + i]
-			var hl = heights[j * (n + 1) + max(i - 1, 0)]
-			var hr = heights[j * (n + 1) + min(i + 1, n)]
-			var hd = heights[max(j - 1, 0) * (n + 1) + i]
-			var hu = heights[min(j + 1, n) * (n + 1) + i]
-			var nrm = Vector3(hl - hr, 2 * size / n, hd - hu).normalized()
-			var slope = 1 - nrm.y
-			var k = j * (n + 1) + i
-			verts[k] = Vector3(-size / 2 + size * i / n, h, -size / 2 + size * j / n)
-			normals[k] = nrm
-			colors[k] = Color.WHITE.lerp(rock, smoothstep(0.18, 0.42, slope)).lerp(snow, smoothstep(55.0, 75.0, h) * (1 - slope * 0.8))
-	index.resize(n * n * 6)
-	var o = 0
-	for j in n:
-		for i in n:
-			var a = j * (n + 1) + i
-			index[o] = a; index[o + 1] = a + 1; index[o + 2] = a + n + 1
-			index[o + 3] = a + 1; index[o + 4] = a + n + 2; index[o + 5] = a + n + 1
-			o += 6
-	var arrays = []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = verts
-	arrays[Mesh.ARRAY_NORMAL] = normals
-	arrays[Mesh.ARRAY_COLOR] = colors
-	arrays[Mesh.ARRAY_INDEX] = index
-	return arrays
-
-func _terrain(flat: Array) -> Dictionary:
-	var key = str(flat)
-	if _terrain_cache.has(key):
-		return _terrain_cache[key]
-	var L = M.LANDSCAPE
-	var n = int(L.segments)
-	var size = float(L.size)
-	var heights: PackedFloat32Array
-	var arrays: Array
-	if _jobs.has(key):
-		WorkerThreadPool.wait_for_task_completion(_jobs[key].id)
-		heights = _jobs[key].heights
-		arrays = _jobs[key].arrays
-		_grass_buffers.merge(_jobs[key].grass)
-		_jobs.erase(key)
-	else:
-		heights = _height_grid(flat)
-		arrays = _terrain_arrays(heights)
-	var mesh = ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	var gm = pbr("grass", Color("#8fbf6a"), 4.0, 0.0, Color("#5f8a4a")).duplicate()
-	gm.vertex_color_use_as_albedo = true
-	var sm = ShaderMaterial.new()
-	var sh = Shader.new()
-	sh.code = GRASS_SHADER
-	sm.shader = sh
-	_terrain_cache[key] = {"mesh": mesh, "material": gm, "grass_material": sm, "heights": heights, "n": n, "size": size}
-	return _terrain_cache[key]
-
-# Wind-blown grass blades for one MultiMesh (swayed in GRASS_SHADER), as its raw instance buffer:
-# per blade a 3x4 transform (row-major) and a colour. Pure maths, so it can run on a worker thread.
-func _grass_buffer(t: Dictionary, bare: Array, seed: int) -> PackedFloat32Array:
-	var L = M.LANDSCAPE
-	var want = int(L.grass.high)
-	var lo = float(L.grass.height[0])
-	var span = float(L.grass.height[1]) - lo
-	var radius = float(L.grass.radius)
-	var buf = PackedFloat32Array()
-	buf.resize(want * 16)
-	var st = seed # Park-Miller, kept local so jobs on different threads don't share state
-	var placed = 0
-	var tries = 0
-	while placed < want and tries < want * 3:
-		tries += 1
-		var r = []
-		for k in 7:
-			st = (st * 16807) % 2147483647
-			r.append(st / 2147483647.0)
-		var a = r[0] * TAU
-		var d = sqrt(r[1]) * radius
-		var x = cos(a) * d
-		var z = sin(a) * d * 0.85
-		if abs(x) < bare[0] and abs(z) < bare[1]:
+		mm.mesh = BoxMesh.new()
+		mm.instance_count = list.size() * (4 if kind == "frame" else 1)
+		for i in list.size():
+			var w = list[i]
+			var ww = float(w[4])
+			var wh = float(w[5])
+			var rot = Basis(Vector3.UP, float(w[3]))
+			var pos = Vector3(float(w[0]), float(w[1]), float(w[2]))
+			if kind != "frame":
+				mm.set_instance_transform(i, Transform3D(rot * Basis.from_scale(Vector3(ww, wh, 0.04)), pos + rot * Vector3(0, 0, -0.02)))
+				continue
+			var bars = [[0, wh / 2 + 0.055, ww + 0.22, 0.11, 0.18], [0, -wh / 2 - 0.05, ww + 0.34, 0.1, 0.26], [-ww / 2 - 0.055, 0, 0.11, wh, 0.18], [ww / 2 + 0.055, 0, 0.11, wh, 0.18]]
+			for k in 4:
+				var bar = bars[k]
+				mm.set_instance_transform(i * 4 + k, Transform3D(rot * Basis.from_scale(Vector3(bar[2], bar[3], bar[4])), pos + rot * Vector3(bar[0], bar[1], 0)))
+		var mmi = MultiMeshInstance3D.new()
+		mmi.multimesh = mm
+		mmi.material_override = {"frame": frame_mat, "glass": glass_mat, "lit": lit_mat}[kind]
+		mmi.set_meta("no_shadow", true)
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		group.add_child(mmi)
+	# street lamps (the nearest few light up at night), parked cars, hydrants and bins
+	var lights = 0
+	for d in L.lamps + L.cars + L.props:
+		var o = prop(d.model)
+		if o == null:
 			continue
-		var b = Basis(Vector3.UP, r[3] * TAU).scaled(Vector3(1 + r[4] * 0.6, lo + r[2] * span, 1))
-		var y = _ground_at(t, x, z) - 0.03
-		var c = Color.from_hsv(0.22 + r[5] * 0.07, 0.55 + r[6] * 0.3, 0.55 + fmod(r[6] * 7.31, 1.0) * 0.35)
-		var o = placed * 16
-		buf[o] = b.x.x; buf[o + 1] = b.y.x; buf[o + 2] = b.z.x; buf[o + 3] = x
-		buf[o + 4] = b.x.y; buf[o + 5] = b.y.y; buf[o + 6] = b.z.y; buf[o + 7] = y
-		buf[o + 8] = b.x.z; buf[o + 9] = b.y.z; buf[o + 10] = b.z.z; buf[o + 11] = z
-		buf[o + 12] = c.r; buf[o + 13] = c.g; buf[o + 14] = c.b; buf[o + 15] = 1.0
-		placed += 1
-	buf.resize(placed * 16)
-	return buf
+		o.position = Vector3(d.p[0], d.p[1], d.p[2])
+		o.rotation.y = d.ry
+		group.add_child(o)
+		if d.get("light", false) and night and lights < 6:
+			lights += 1
+			var l = OmniLight3D.new()
+			l.light_color = Color("#ffd49a"); l.light_energy = 3.0; l.omni_range = 22
+			l.position = Vector3(d.p[0], 5.3, d.p[2])
+			group.add_child(l)
+	return group
+
+# Real-world finishes for the guns (the source models are toy-coloured): gunmetal, black polymer, oiled
+# wood and olive drab, picked from each part's original colour. Same rule as gunFinish() in render3d.js.
+func gun_finish(m: StandardMaterial3D) -> void:
+	var c = m.albedo_color
+	var l = (max(c.r, max(c.g, c.b)) + min(c.r, min(c.g, c.b))) / 2 # HSL lightness
+	var sat = 0.0 if c.s == 0 else (max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b))) / (1 - abs(2 * l - 1) + 0.00001)
+	var f
+	if sat > 0.3 and c.h > 0.03 and c.h < 0.13: f = [Color("#4a2e1c"), 0.65, 0.0] # orange/brown: wood
+	elif sat > 0.35: f = [Color("#3b3f33"), 0.6, 0.15] # any bright colour: olive drab
+	elif l > 0.45: f = [Color("#45484c"), 0.34, 0.85] # light grey: gunmetal
+	else: f = [Color("#171819"), 0.52, 0.2] # dark: black polymer
+	m.albedo_color = f[0]
+	m.roughness = f[1]
+	m.metallic = f[2]
+	m.albedo_texture = null
+	m.emission_enabled = false
