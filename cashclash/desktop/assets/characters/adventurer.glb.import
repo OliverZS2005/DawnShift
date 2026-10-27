@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://barb6bloa41fj"
-path="res://.godot/imported/astronaut.glb-45073f9c8dd9d0cd8a83664755109340.scn"
+uid="uid://bocusirrw6ma5"
+path="res://.godot/imported/adventurer.glb-ef2dc178905d09fe74a857a4b32c8454.scn"
 
 [deps]
 
-source_file="res://assets/characters/astronaut.glb"
-dest_files=["res://.godot/imported/astronaut.glb-45073f9c8dd9d0cd8a83664755109340.scn"]
+source_file="res://assets/characters/adventurer.glb"
+dest_files=["res://.godot/imported/adventurer.glb-ef2dc178905d09fe74a857a4b32c8454.scn"]
 
 [params]
 

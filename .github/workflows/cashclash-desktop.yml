@@ -1,5 +1,6 @@
-# Builds the Cash Clash desktop app (Godot) for Windows, Mac and Linux on every change to Cash Clash.
-# Download the builds from the workflow run's "Artifacts" section.
+# Builds the Cash Clash desktop app (Godot) for Windows, Mac and Linux on every change to Cash Clash,
+# and publishes them as the "cashclash-latest" release (Releases page). A release, unlike workflow
+# artifacts, doesn't count against the account's Actions storage quota.
 name: Cash Clash desktop
 
 on:
@@ -7,6 +8,9 @@ on:
     branches: [claude/optimistic-dirac-563sig]
     paths: ['cashclash/**', '.github/workflows/cashclash-desktop.yml']
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 concurrency:
   group: cashclash-desktop
@@ -56,20 +60,34 @@ jobs:
           godot --headless --path . --export-release "macOS" build/mac/CashClash.zip
           ls -la build/*
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: CashClash-Windows
-          path: cashclash/desktop/build/windows/CashClash.exe
-          if-no-files-found: error
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.run_number }}
+        run: |
+          mkdir -p out
+          cp build/windows/CashClash.exe out/CashClash-Windows.exe
+          cp build/linux/CashClash.x86_64 out/CashClash-Linux.x86_64
+          cp build/mac/CashClash.zip out/CashClash-Mac.zip
+          cat > notes.md <<'EOF'
+          Cash Clash for your computer. Pick the file for your system:
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: CashClash-Linux
-          path: cashclash/desktop/build/linux/CashClash.x86_64
-          if-no-files-found: error
+          | Computer | File |
+          |---|---|
+          | Windows | `CashClash-Windows.exe` |
+          | Mac (Apple chip or Intel) | `CashClash-Mac.zip` |
+          | Linux | `CashClash-Linux.x86_64` |
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: CashClash-macOS
-          path: cashclash/desktop/build/mac/CashClash.zip
-          if-no-files-found: error
+          **Windows:** open the `.exe`. If Windows says it protected your PC, click **More info → Run anyway**.
+
+          **Mac:** unzip it, then right-click **Cash Clash** and choose **Open**, then **Open** again (it isn't signed with a paid Apple certificate).
+
+          **Linux:** make it executable (`chmod +x CashClash-Linux.x86_64`) and run it.
+
+          Singleplayer works offline. For multiplayer and syncing with the web version, join a Cash Clash server from the Play tab.
+          EOF
+          gh release delete cashclash-latest --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
+          gh release create cashclash-latest out/* -R "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "Cash Clash desktop (build $RUN)" \
+            --notes-file notes.md

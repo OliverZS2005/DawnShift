@@ -1,5 +1,5 @@
 # First-person 3D fight view for the desktop app: your weapon in hand, the opponent as an animated
-# soldier, photo-textured map themes with decorations, tracers, muzzle flashes and explosions.
+# fighter, photo-textured map themes with decorations, tracers, muzzle flashes and explosions.
 # Mirrors createArena() in ../render3d.js; layout data comes from models.json.
 extends Control
 
@@ -101,14 +101,18 @@ func _build_map(m: int) -> void:
 	var floor = MeshInstance3D.new()
 	var pm = PlaneMesh.new(); pm.size = Vector2(45, 28)
 	floor.mesh = pm
-	floor.material_override = R3D.pbr(th.floorTex, Color.WHITE, float(th.floorTile), 0.0, Color("#6e6a63"))
+	floor.material_override = R3D.pbr(th.floorTex, Color(th.get("floorTint", "#ffffff")), float(th.floorTile), 0.0, Color("#6e6a63"))
 	map_root.add_child(floor)
-	var outer = MeshInstance3D.new()
-	var om = PlaneMesh.new(); om.size = Vector2(240, 240)
-	outer.mesh = om
-	outer.position.y = -0.03
-	outer.material_override = R3D.pbr(th.outerTex, Color("#bbbbbb"), 5.0, 0.0, Color("#4a4a48"))
-	map_root.add_child(outer)
+	# a paved apron around the arena, then open country: hills, grass, trees, mountains
+	var LS = R3D.M.LANDSCAPE
+	var apron = MeshInstance3D.new()
+	var om = PlaneMesh.new(); om.size = Vector2(2 * LS.flatArena[0] - 4, 2 * LS.flatArena[1] - 4)
+	apron.mesh = om
+	apron.position.y = -0.02
+	apron.material_override = R3D.pbr(th.outerTex, Color("#bbbbbb"), 5.0, 0.0, Color("#4a4a48"))
+	map_root.add_child(apron)
+	var land = R3D.landscape(LS.flatArena, [LS.flatArena[0] - 2, LS.flatArena[1] - 2], 1000 + m)
+	map_root.add_child(land.group)
 	var line = R3D.flat(Color(th.line), 0.55)
 	for e in [[45, 0.14, 0, -13.93], [45, 0.14, 0, 13.93], [0.14, 28, -22.43, 0], [0.14, 28, 22.43, 0]]:
 		map_root.add_child(R3D.box(Vector3(e[0], 0.012, e[1]), line, Vector3(e[2], 0.007, e[3])))
@@ -148,8 +152,10 @@ func _build_map(m: int) -> void:
 		var o = R3D.prop(d.model)
 		if o == null:
 			continue
-		o.position = Vector3(d.p[0], d.p[1], d.p[2])
+		o.position = Vector3(d.p[0], R3D.terrain_height(d.p[0], d.p[2], R3D.M.LANDSCAPE.flatArena), d.p[2])
 		o.rotation.y = d.ry
+		if d.has("s"):
+			o.scale *= float(d.s)
 		map_root.add_child(o)
 		if d.get("light", false) and th.lampsOn and lights < 6:
 			lights += 1
@@ -199,7 +205,8 @@ func _make_char(team: int) -> Dictionary:
 	ring.material_override = R3D.flat(R3D.TEAM[team], 0.5, 0.0, R3D.TEAM[team], 3.0)
 	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(ring)
-	var ps = R3D.scene(R3D.M.ASSETS.characters.soldier)
+	var F = R3D.M.ASSETS.fighter
+	var ps = R3D.scene(R3D.M.ASSETS.characters[F.model])
 	if ps == null: # fallback: the procedural soldier
 		var b = R3D.build(R3D.M.SOLDIER, R3D.TEAM[team])
 		root.add_child(b.root)
@@ -209,14 +216,10 @@ func _make_char(team: int) -> Dictionary:
 	var model: Node3D = ps.instantiate()
 	model.rotation.y = PI / 2 # Quaternius characters face +Z; the game's forward is +X
 	root.add_child(model)
-	# The model carries a whole armory in its hands: hide it all; the equipped one is shown in update().
-	ch.gear = {}
-	for gname in R3D.M.ASSETS.characterGear:
-		var found = model.find_children(gname, "", true, false)
-		if found.size():
-			ch.gear[gname] = found[0]
-			found[0].visible = false
-	# Per-fighter materials; the uniform is dyed in the team colour.
+	for h in F.hide:
+		for n in model.find_children(h, "", true, false):
+			n.visible = false
+	# Per-fighter materials; the tunic is dyed in the team colour.
 	for mi in model.find_children("*", "MeshInstance3D", true, false):
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		for s in mi.mesh.get_surface_count():
@@ -226,40 +229,65 @@ func _make_char(team: int) -> Dictionary:
 			m = m.duplicate()
 			mi.set_surface_override_material(s, m)
 			ch.mats.append(m)
-			if str(m.resource_name) in R3D.M.ASSETS.uniform:
-				m.albedo_color = m.albedo_color.lerp(R3D.TEAM[team], 0.8)
+			if str(m.resource_name) in F.uniform:
+				m.albedo_color = m.albedo_color.lerp(R3D.TEAM[team].darkened(0.45), 0.85)
 	# Sized once it's in the scene (see _fit_height): skinned meshes report misleading bounds.
 	ch.model = model
 	ch.skel = _find(model, "Skeleton3D")
 	ch.needs_fit = true
+	# the gun hangs from the right wrist (oriented in _fit_height, once the pose is applied)
+	if ch.skel:
+		var att = BoneAttachment3D.new()
+		att.bone_name = F.hand
+		ch.skel.add_child(att)
+		ch.gun_holder = Node3D.new()
+		att.add_child(ch.gun_holder)
 	# animations: find clips by name suffix (e.g. "CharacterArmature|Run_Gun")
 	var ap: AnimationPlayer = _find(model, "AnimationPlayer")
 	if ap:
 		ch.anim = ap
-		for key in R3D.M.ASSETS.clips:
-			var want = R3D.M.ASSETS.clips[key]
+		for key in F.clips:
+			var want = F.clips[key]
 			for nm in ap.get_animation_list():
 				if nm == want or nm.ends_with("|" + want) or nm.ends_with("/" + want):
 					ch.clips[key] = nm
 					ap.get_animation(nm).loop_mode = Animation.LOOP_NONE if key in ["hit", "death"] else Animation.LOOP_LINEAR
-		if not ch.clips.has("idle") and ch.clips.has("idleAlt"): ch.clips.idle = ch.clips.idleAlt
-		if not ch.clips.has("run") and ch.clips.has("runAlt"): ch.clips.run = ch.clips.runAlt
 		_play(ch, "idle", 0.0)
 	return ch
 
-# Scales the character so its head bone sits at an adult's head height (feet to head base ~1.5 m).
+# Scales the character so its head bone sits at an adult's head height (feet to head base ~1.5 m),
+# then lines the hand-held gun up with where he aims in the aiming pose.
 func _fit_height(ch: Dictionary) -> void:
 	ch.needs_fit = false
 	var sk: Skeleton3D = ch.skel
 	if sk == null:
 		return
+	if ch.anim:
+		ch.anim.advance(0.0)
 	var hb = sk.find_bone("Head")
-	var fb = sk.find_bone("FootL")
+	var fb = sk.find_bone("Foot.L")
+	if fb < 0:
+		fb = sk.find_bone("FootL")
 	if hb < 0 or fb < 0:
 		return
 	var d = (sk.global_transform * sk.get_bone_global_pose(hb)).origin.y - (sk.global_transform * sk.get_bone_global_pose(fb)).origin.y
 	if d > 0.0001:
 		ch.model.scale *= 1.5 / d
+	var wb = sk.find_bone(R3D.M.ASSETS.fighter.hand)
+	if ch.gun_holder and wb >= 0:
+		# gun models point down -Z; turn that to the body's forward (+X of the root)
+		var hand: Transform3D = sk.global_transform * sk.get_bone_global_pose(wb)
+		var want = ch.root.global_transform.basis.orthonormalized() * Basis(Vector3.UP, -PI / 2)
+		ch.gun_holder.basis = hand.basis.orthonormalized().inverse() * want
+		ch.gun_holder.scale = Vector3.ONE / hand.basis.get_scale().x
+
+# Which run to play: forward, back or a sideways strafe, from movement relative to where he aims.
+func _run_clip(ang: float, vel: Vector3) -> String:
+	var fwd = cos(ang) * vel.x + sin(ang) * vel.z
+	var side = -sin(ang) * vel.x + cos(ang) * vel.z
+	if abs(fwd) >= abs(side):
+		return "run" if fwd >= 0 else "back"
+	return "right" if side > 0 else "left"
 
 func _play(ch: Dictionary, key: String, blend := 0.18) -> void:
 	if ch.anim == null or not ch.clips.has(key) or ch.current == key:
@@ -356,6 +384,33 @@ func _puff(pos: Vector3, color: Color, size: float, life: float, rise: float) ->
 func _set_viewmodel(id: String) -> void:
 	vm_id = id
 	raise_k = 0.0
+	var wrap = await _posed_gun(id, VM_LEN[id])
+	if vm_id != id:
+		wrap.queue_free()
+		return
+	for mi in wrap.find_children("*", "MeshInstance3D", true, false):
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	if vm_gun:
+		vm_gun.queue_free()
+	vm_gun = wrap
+	vm_hold.add_child(wrap)
+
+# Puts the equipped gun in the opponent's hand (the same models as the first-person view).
+func _set_fighter_gun(ch: Dictionary, id: String) -> void:
+	var length = float(R3D.M.ASSETS.fighter.gunLen[id])
+	var gun = await _posed_gun(id, length)
+	if ch.gun_id != id or not is_instance_valid(ch.gun_holder):
+		gun.queue_free()
+		return
+	if ch.gun:
+		ch.gun.queue_free()
+	gun.position = Vector3(0, -0.03, -length * 0.3) # grip in the hand, barrel ahead
+	ch.gun = gun
+	ch.gun_holder.add_child(gun)
+
+# A gun model held the way the soldier holds it in his aiming animation, barrel straightened to point
+# down -Z, centred and scaled to `length` metres. Barrel direction and roll come from the artist's pose.
+func _posed_gun(id: String, length: float) -> Node3D:
 	var wrap = Node3D.new()
 	var orient = Node3D.new()
 	wrap.add_child(orient)
@@ -368,13 +423,13 @@ func _set_viewmodel(id: String) -> void:
 		var ap: AnimationPlayer = _find(body, "AnimationPlayer")
 		if ap:
 			for nm in ap.get_animation_list():
-				if nm.ends_with("|" + R3D.M.ASSETS.clips.shoot) or nm.ends_with("/" + R3D.M.ASSETS.clips.shoot):
+				if nm.ends_with("|" + R3D.M.ASSETS.gunPose) or nm.ends_with("/" + R3D.M.ASSETS.gunPose):
 					ap.play(nm)
 					ap.seek(0.0, true)
 		await get_tree().process_frame # let the skeleton and bone attachments take the pose
 		await get_tree().process_frame
 		var found = body.find_children(R3D.M.ASSETS.characterGuns[id], "", true, false)
-		if found.size() and vm_id == id:
+		if found.size():
 			var node: Node3D = found[0]
 			var rel: Transform3D = body.global_transform.affine_inverse() * node.global_transform
 			gun = node.duplicate()
@@ -387,28 +442,20 @@ func _set_viewmodel(id: String) -> void:
 			if d.z < 0:
 				d = -d
 			gun.basis = Basis(Quaternion(d, Vector3.BACK)) * rot
-			for mi in gun.find_children("*", "MeshInstance3D", true, false):
-				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			orient.add_child(gun)
 			orient.rotation.y = PI # his forward (+Z) -> camera forward (-Z)
 		body.queue_free()
-	if vm_id != id:
-		wrap.queue_free()
-		return
 	if gun == null: # fallback: procedural gun (built facing +X)
 		gun = R3D.build(R3D.M.GUNS[id]).root
 		orient.add_child(gun)
 		orient.rotation.y = PI / 2
 	var box = R3D.aabb(wrap)
 	orient.position = -box.get_center()
-	var k = VM_LEN[id] / max(0.001, max(box.size.x, max(box.size.y, box.size.z)))
+	var k = length / max(0.001, max(box.size.x, max(box.size.y, box.size.z)))
 	wrap.scale = Vector3.ONE * k
-	wrap.set_meta("len", VM_LEN[id])
+	wrap.set_meta("len", length)
 	wrap.set_meta("h", box.size.y * k)
-	if vm_gun:
-		vm_gun.queue_free()
-	vm_gun = wrap
-	vm_hold.add_child(wrap)
+	return wrap
 
 # Where the opponent's name tag goes on screen, or null when they're off-screen or behind you.
 func foe_tag():
@@ -473,7 +520,7 @@ func update(view: Dictionary, you: int, names: Array, dt: float, pitch := 0.0, r
 	vm_flare.scale = Vector3.ONE * (0.8 + randf() * 0.6)
 	my_flash.position = mp + Vector3(cos(ang) * 0.9, EYE - 0.2, sin(ang) * 0.9)
 	my_flash.light_energy = 4.0 if vm_flare.visible else 0.0
-	# ----- the opponent: animated soldier -----
+	# ----- the opponent: animated fighter -----
 	var s = view.u[1 - you]
 	var ch = _ensure_char(1)
 	var wp = to_world(float(s.x), float(s.y))
@@ -481,12 +528,8 @@ func update(view: Dictionary, you: int, names: Array, dt: float, pitch := 0.0, r
 		_fit_height(ch)
 	if ch.gun_id != s.g.id:
 		ch.gun_id = s.g.id
-		if ch.has("gear"):
-			for g in ch.gear.values():
-				g.visible = false
-			ch.gun = ch.gear.get(R3D.M.ASSETS.characterGuns[s.g.id])
-			if ch.gun:
-				ch.gun.visible = true
+		if ch.has("model"):
+			_set_fighter_gun(ch, s.g.id)
 		else:
 			if ch.gun:
 				ch.gun.queue_free()
@@ -514,12 +557,11 @@ func update(view: Dictionary, you: int, names: Array, dt: float, pitch := 0.0, r
 			else: ch.root.rotation.z = PI / 2 * 0.95
 	else:
 		ch.dead = false
-		_play(ch, "run" if moving else ("shoot" if ch.shoot_t > 0 and ch.clips.has("shoot") else "idle"))
-		if ch.anim and ch.current == "run":
-			var fwd = cos(float(s.ang)) * vel.x + sin(float(s.ang)) * vel.z
-			ch.anim.speed_scale = (-1.0 if fwd < -0.3 * sp else 1.0) * min(1.35, sp / 4.0)
-		elif ch.anim:
-			ch.anim.speed_scale = 1.0
+		# forward, backward or strafing runs, depending on how they move relative to their aim
+		var key = _run_clip(float(s.ang), vel) if moving else ("shoot" if ch.shoot_t > 0 and ch.clips.has("shoot") else "idle")
+		_play(ch, key if ch.clips.has(key) else ("run" if moving else "idle"))
+		if ch.anim:
+			ch.anim.speed_scale = clamp(sp / 4.2, 0.6, 1.3) if moving else 1.0
 	for m in ch.mats:
 		m.emission_enabled = ch.hit_t > 0
 		m.emission = Color("#ff2020")
@@ -527,7 +569,10 @@ func update(view: Dictionary, you: int, names: Array, dt: float, pitch := 0.0, r
 	var fwd3 = Vector3(cos(float(s.ang)), 0, sin(float(s.ang)))
 	var muzzle = wp + fwd3 * 0.8 + Vector3(0, 1.3, 0)
 	if ch.gun and ch.gun.is_inside_tree():
-		muzzle = ch.gun.global_position + fwd3 * (0.45 if ch.has("gear") else float(ch.gun.get_meta("len", 0.4)))
+		if ch.has("model"): # posed guns point down -Z
+			muzzle = ch.gun.global_position - ch.gun.global_basis.z.normalized() * float(ch.gun.get_meta("len", 0.4)) * 0.5
+		else:
+			muzzle = ch.gun.global_position + fwd3 * float(ch.gun.get_meta("len", 0.4))
 	ch.flash.position = muzzle; ch.flare.position = muzzle
 	ch.flash.light_energy = 4.0 if ch.flash_t > 0 else 0.0
 	ch.flare.visible = ch.flash_t > 0

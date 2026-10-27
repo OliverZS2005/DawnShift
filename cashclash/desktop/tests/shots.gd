@@ -38,6 +38,18 @@ func _ready() -> void:
 		_save(out + "/g_fight%d.png" % m)
 		main.arena.visible = false
 		Game.in_battle = false
+	# close-up of the opponent (held in place) to check the fighter and the gun in his hand
+	var rv = Game.sp.rivals[5]
+	Game.in_battle = true
+	Game.match_started.emit({"mp": false, "rival": rv, "opp_name": rv.name, "you": 0, "pot": {"win": rv.money * 0.1, "lose": t.money * 0.1}})
+	main.arena.A = CC.new_arena(t, CC.rival_loadout(rv), 0)
+	for i in 60:
+		var u = main.arena.A.units
+		u[0].x = 300; u[0].y = 400; u[1].x = 360; u[1].y = 420
+		main.arena.yaw = atan2(20, 60) + 0.15
+		main.arena.pitch = 0.05
+		await get_tree().process_frame
+	_save(out + "/g_char.png")
 	get_tree().quit()
 
 func _wait(frames: int) -> void:

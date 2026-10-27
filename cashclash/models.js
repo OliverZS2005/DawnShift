@@ -200,16 +200,20 @@
     skies: { day: 'sky/day.hdr', sunset: 'sky/sunset.hdr', dusk: 'sky/dusk.hdr', night: 'sky/night.hdr' },
     models: Object.fromEntries(['crate', 'military_crate', 'barrel', 'barrier', 'street_lamp', 'trash_can', 'hydrant', 'utility_box',
       'plastic_crate', 'covered_car', 'shrub', 'bench', 'tree', 'pine'].map(n => [n, `models/${n}.glb`])),
-    characters: { soldier: 'characters/soldier.glb', astronaut: 'characters/astronaut.glb' },
+    characters: { soldier: 'characters/soldier.glb', adventurer: 'characters/adventurer.glb' },
     textures: ['concrete_floor', 'corrugated', 'metal_plate', 'marble', 'asphalt', 'brick', 'grass', 'pavers', 'slate', 'plaster', 'concrete_wall', 'roof', 'shutter'],
-    heights: { tree: 5.5, pine: 7.5, soldier: 1.8, astronaut: 1.8 },
-    // Character animation clips (names end with these, e.g. "CharacterArmature|Run_Gun").
-    clips: { idle: 'Idle_Gun', idleAlt: 'Idle_Shoot', run: 'Run_Gun', runAlt: 'Run', shoot: 'Idle_Shoot', hit: 'HitReact', death: 'Death' },
-    // The soldier model holds a whole armory in its hands; we show only the node for the equipped weapon.
+    heights: { tree: 5.5, pine: 7.5, soldier: 1.8, adventurer: 1.8 },
+    // The fighters: realistically proportioned adventurers (Quaternius). The guns they hold come from
+    // the soldier model. Clips are picked by movement relative to where they aim (strafing runs).
+    fighter: {
+      model: 'adventurer', hand: 'Wrist.R', uniform: ['Green', 'LightGreen'], hide: [],
+      clips: { idle: 'Idle_Gun_Pointing', run: 'Run_Shoot', back: 'Run_Back', left: 'Run_Left', right: 'Run_Right', shoot: 'Idle_Gun_Shoot', hit: 'HitRecieve', death: 'Death' },
+      gunLen: { pistol: 0.32, smg: 0.55, shotgun: 0.85, sniper: 1.0, rocket: 1.0 },
+    },
+    // The guns: nodes in the soldier model, taken in the pose of his aiming clip (names end with it,
+    // e.g. "CharacterArmature|Idle_Shoot") so barrel and roll come from the artist's pose.
+    gunPose: 'Idle_Shoot',
     characterGuns: { pistol: 'Pistol', smg: 'SMG', shotgun: 'Shotgun', sniper: 'Sniper_2', rocket: 'RocketLauncher' },
-    // Every weapon/tool node in the soldier model (all hidden except the equipped one).
-    characterGear: ['Revolver', 'Sniper', 'Revolver_Small', 'Pistol', 'SMG', 'GrenadeLauncher', 'ShortCannon', 'Shotgun', 'Sniper_2', 'RocketLauncher', 'AK', 'Shovel', 'Knife_1', 'Knife_2'],
-    uniform: ['Character_Main'], // materials tinted with the team colour
   };
   // Texture path for a material set: tex('brick', 'diff') -> 'textures/brick_diff.jpg'
   const tex = (name, map) => `textures/${name}_${map}.jpg`;
@@ -288,5 +292,32 @@
     return out;
   })();
 
-  return { BUILDINGS, LOT, SOLDIER, GUNS, ARENA, CITY, ASSETS, tex };
+  // ---------- Landscape (rolling hills, mountains, grass, trees around the arena and the city) ----------
+  // terrainHeight() is deterministic so the desktop port (r3d.gd) builds exactly the same hills.
+  const LANDSCAPE = {
+    size: 640, segments: 220,
+    flatArena: [27, 18], flatCity: [26, 26], // half-extents (m) of the level ground around the play area
+    ramp: 22, hills: 6, hillScale: 0.017, mountains: 150, mountainScale: 0.0045, mountainStart: 110,
+    grass: { high: 70000, medium: 26000, low: 8000, radius: 75, height: [0.35, 0.85] },
+    trees: 110,
+    haze: { day: '#c6d6e4', sunset: '#e7b892', dusk: '#a58fa6', night: '#1d2436' }, // aerial-perspective fog colour per sky
+  };
+  const hash2 = (i, j) => { const s = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return s - Math.floor(s); };
+  function vnoise(x, z) {
+    const i = Math.floor(x), j = Math.floor(z), fx = x - i, fz = z - j, u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
+    const a = hash2(i, j), b = hash2(i + 1, j), c = hash2(i, j + 1), d = hash2(i + 1, j + 1);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  }
+  function fbm(x, z) { let s = 0, a = 0.5, f = 1; for (let o = 0; o < 4; o++) { s += a * vnoise(x * f, z * f); f *= 2; a *= 0.5; } return s; }
+  // Ground height (m) at x,z; `flat` = half-extents of the level area in the middle.
+  function terrainHeight(x, z, flat) {
+    const L = LANDSCAPE, dx = Math.max(0, Math.abs(x) - flat[0]), dz = Math.max(0, Math.abs(z) - flat[1]);
+    const r = Math.min(1, Math.hypot(dx, dz) / L.ramp), ramp = r * r * (3 - 2 * r);
+    const hills = fbm(x * L.hillScale + 11, z * L.hillScale + 7) * L.hills * 2;
+    const m = Math.min(1, Math.max(0, (Math.hypot(x, z) - L.mountainStart) / 120));
+    const f = fbm(x * L.mountainScale + 3, z * L.mountainScale + 5);
+    return ramp * hills + f * f * L.mountains * 2 * m - 0.05;
+  }
+
+  return { BUILDINGS, LOT, SOLDIER, GUNS, ARENA, CITY, ASSETS, LANDSCAPE, tex, terrainHeight };
 });

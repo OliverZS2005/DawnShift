@@ -6403,7 +6403,7 @@
   },
   "characters": {
    "soldier": "characters/soldier.glb",
-   "astronaut": "characters/astronaut.glb"
+   "adventurer": "characters/adventurer.glb"
   },
   "textures": [
    "concrete_floor",
@@ -6424,42 +6424,76 @@
    "tree": 5.5,
    "pine": 7.5,
    "soldier": 1.8,
-   "astronaut": 1.8
+   "adventurer": 1.8
   },
-  "clips": {
-   "idle": "Idle_Gun",
-   "idleAlt": "Idle_Shoot",
-   "run": "Run_Gun",
-   "runAlt": "Run",
-   "shoot": "Idle_Shoot",
-   "hit": "HitReact",
-   "death": "Death"
+  "fighter": {
+   "model": "adventurer",
+   "hand": "Wrist.R",
+   "uniform": [
+    "Green",
+    "LightGreen"
+   ],
+   "hide": [],
+   "clips": {
+    "idle": "Idle_Gun_Pointing",
+    "run": "Run_Shoot",
+    "back": "Run_Back",
+    "left": "Run_Left",
+    "right": "Run_Right",
+    "shoot": "Idle_Gun_Shoot",
+    "hit": "HitRecieve",
+    "death": "Death"
+   },
+   "gunLen": {
+    "pistol": 0.32,
+    "smg": 0.55,
+    "shotgun": 0.85,
+    "sniper": 1,
+    "rocket": 1
+   }
   },
+  "gunPose": "Idle_Shoot",
   "characterGuns": {
    "pistol": "Pistol",
    "smg": "SMG",
    "shotgun": "Shotgun",
    "sniper": "Sniper_2",
    "rocket": "RocketLauncher"
-  },
-  "characterGear": [
-   "Revolver",
-   "Sniper",
-   "Revolver_Small",
-   "Pistol",
-   "SMG",
-   "GrenadeLauncher",
-   "ShortCannon",
-   "Shotgun",
-   "Sniper_2",
-   "RocketLauncher",
-   "AK",
-   "Shovel",
-   "Knife_1",
-   "Knife_2"
+  }
+ },
+ "LANDSCAPE": {
+  "size": 640,
+  "segments": 220,
+  "flatArena": [
+   27,
+   18
   ],
-  "uniform": [
-   "Character_Main"
-  ]
+  "flatCity": [
+   26,
+   26
+  ],
+  "ramp": 22,
+  "hills": 6,
+  "hillScale": 0.017,
+  "mountains": 150,
+  "mountainScale": 0.0045,
+  "mountainStart": 110,
+  "grass": {
+   "high": 70000,
+   "medium": 26000,
+   "low": 8000,
+   "radius": 75,
+   "height": [
+    0.35,
+    0.85
+   ]
+  },
+  "trees": 110,
+  "haze": {
+   "day": "#c6d6e4",
+   "sunset": "#e7b892",
+   "dusk": "#a58fa6",
+   "night": "#1d2436"
+  }
  }
 }

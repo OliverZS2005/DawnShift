@@ -55,11 +55,10 @@ func _set_level(lv: int) -> void:
 	v.world.add_child(sun_light)
 	for c in world.get_children():
 		c.queue_free()
-	var ground = MeshInstance3D.new()
-	var pm = PlaneMesh.new(); pm.size = Vector2(500, 500)
-	ground.mesh = pm
-	ground.material_override = R3D.pbr("grass", Color("#8fbf6a"), 4.0, 0.0, Color("#5f8a4a"))
-	world.add_child(ground)
+	# the business sits on level ground in open country: hills, wind-blown grass, trees, mountains
+	var flat = R3D.M.LANDSCAPE.flatCity
+	var bare = 1.5 * L + float(R3D.M.CITY.road)
+	world.add_child(R3D.landscape(flat, [bare, bare], 2000).group)
 	# roads with lane markings
 	var asphalt = R3D.pbr("asphalt", Color("#a8a8a8"), 4.0, 0.0, Color("#45464a"))
 	var paint = R3D.flat(Color("#efe9d2"), 0.7)
@@ -78,7 +77,7 @@ func _set_level(lv: int) -> void:
 		var o = R3D.prop(d.model)
 		if o == null:
 			continue
-		o.position = Vector3(d.p[0], d.p[1], d.p[2])
+		o.position = Vector3(d.p[0], R3D.terrain_height(d.p[0], d.p[2], flat), d.p[2])
 		o.rotation.y = d.ry
 		if d.has("s"):
 			o.scale *= float(d.s)
@@ -100,8 +99,9 @@ func _set_level(lv: int) -> void:
 			mat.emission_enabled = true
 			mat.emission = Color("#ffcf80")
 			mat.emission_energy_multiplier = 0.35
-		world.add_child(R3D.box(Vector3(w, h, w), mat, Vector3(cos(a) * r, h / 2, sin(a) * r)))
-		world.add_child(R3D.box(Vector3(w + 0.4, 0.5, w + 0.4), R3D.flat(Color("#3d4148"), 0.7, 0.4), Vector3(cos(a) * r, h + 0.25, sin(a) * r)))
+		var base = R3D.terrain_height(cos(a) * r, sin(a) * r, flat) - 1
+		world.add_child(R3D.box(Vector3(w, h, w), mat, Vector3(cos(a) * r, base + h / 2, sin(a) * r)))
+		world.add_child(R3D.box(Vector3(w + 0.4, 0.5, w + 0.4), R3D.flat(Color("#3d4148"), 0.7, 0.4), Vector3(cos(a) * r, base + h + 0.25, sin(a) * r)))
 	R3D.shadows(world)
 	for l in lots:
 		l.key = ""

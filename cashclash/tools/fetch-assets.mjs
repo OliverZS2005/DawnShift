@@ -35,7 +35,7 @@ const TEXTURES = {
 };
 const SKIES = { day: 'kloofendal_48d_partly_cloudy_puresky', sunset: 'qwantani_sunset_puresky', dusk: 'qwantani_dusk_2_puresky', night: 'rogland_clear_night' };
 // From the npm package's library/lowpoly/. (Poly Haven's photo-scanned trees are tens of MB each.)
-const CHARACTERS = { soldier: 'soldier.glb', astronaut: 'astronaut.glb' };
+const CHARACTERS = { soldier: 'soldier.glb', adventurer: 'adventurer.glb' };
 const PACKAGE_MODELS = { tree: 'tree_oak.glb', pine: 'tree_pine.glb' };
 
 const get = async url => { const r = await fetch(url, { headers: UA }); if (!r.ok) throw new Error(`${r.status} ${url}`); return Buffer.from(await r.arrayBuffer()); };

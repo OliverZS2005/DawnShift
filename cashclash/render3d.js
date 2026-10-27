@@ -137,7 +137,7 @@
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(fov, 1, 0.1, 500);
+    const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(fov, 1, 0.1, 900);
     const composer = new THREE.EffectComposer(renderer);
     composer.addPass(new THREE.RenderPass(scene, camera));
     const ao = new THREE.GTAOPass(scene, camera, 256, 256);
@@ -148,6 +148,7 @@
     const bloom = new THREE.UnrealBloomPass(new THREE.Vector2(256, 256), 0.4, 0.5, 1.6);
     composer.addPass(bloom);
     composer.addPass(new THREE.OutputPass());
+    composer.addPass(new THREE.ShaderPass(GRADE));
     const smaa = new THREE.SMAAPass(256, 256); composer.addPass(smaa);
     // 3 = everything on, 2 = no ambient occlusion, 1 = also lower resolution, 0 = also no post effects.
     // ?quality=low|medium|high in the URL pins it.
@@ -161,6 +162,7 @@
     if (pinned !== undefined) setTier(pinned);
     return {
       renderer, scene, camera, composer, bloom, ao,
+      get tier() { return tier; },
       render(dt) {
         const cw = canvas.clientWidth, ch = canvas.clientHeight;
         if (!cw || !ch) return;
@@ -177,6 +179,20 @@
       },
     };
   }
+  // Colour grade after tone mapping: a little extra saturation and warmth, and a soft vignette.
+  const GRADE = {
+    uniforms: { tDiffuse: { value: null }, saturation: { value: 1.12 }, warmth: { value: 0.025 }, vignette: { value: 0.28 } },
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `uniform sampler2D tDiffuse; uniform float saturation, warmth, vignette; varying vec2 vUv;
+      void main() {
+        vec4 c = texture2D(tDiffuse, vUv);
+        float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+        c.rgb = mix(vec3(l), c.rgb, saturation) + vec3(warmth, warmth * 0.4, -warmth);
+        float d = length(vUv - 0.5) * 1.35;
+        c.rgb *= 1.0 - vignette * smoothstep(0.45, 1.05, d);
+        gl_FragColor = c;
+      }`,
+  };
   // Sky + image-based lighting from an HDRI (with a flat-colour fallback).
   // `current()` says whether this sky is still wanted once it has loaded (the map may have changed meanwhile).
   async function applySky(view, name, exposure, current = () => true) {
@@ -213,14 +229,103 @@
     return (softTex = new THREE.CanvasTexture(c));
   }
 
+  // ---------- Landscape: rolling hills, mountains, wind-blown grass, trees ----------
+  // Built around the arena or the city. terrainHeight() comes from models.js, so the desktop app
+  // (r3d.gd) raises exactly the same hills.
+  const LS = M.LANDSCAPE;
+  let bladeGeo = null;
+  // One grass blade, 1 unit tall: a tapering strip, dark at the root and sunlit at the tip.
+  function grassBlade() {
+    if (bladeGeo) return bladeGeo;
+    const pos = [], col = [], nor = [], idx = [], segs = 4;
+    for (let i = 0; i <= segs; i++) {
+      const y = i / segs, w = 0.045 * (1 - y * 0.9), bend = y * y * 0.12;
+      pos.push(-w, y, bend, w, y, bend);
+      const c0 = [0.035, 0.09, 0.015], c1 = [0.32, 0.5, 0.1], k = Math.pow(y, 1.4);
+      for (let s2 = 0; s2 < 2; s2++) col.push(c0[0] + (c1[0] - c0[0]) * k, c0[1] + (c1[1] - c0[1]) * k, c0[2] + (c1[2] - c0[2]) * k);
+      nor.push(0, 1, 0, 0, 1, 0); // up-facing normals: soft, sky-lit grass instead of flat-lit cards
+      if (i < segs) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    }
+    bladeGeo = new THREE.BufferGeometry();
+    bladeGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    bladeGeo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    bladeGeo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    bladeGeo.setIndex(idx);
+    return bladeGeo;
+  }
+  // flat: half-extents of the level ground; bare: half-extents of an area with no grass (paving);
+  // returns { group, height(x, z), update(t, tier) }
+  function buildLandscape(flat, bare, seed) {
+    const group = new THREE.Group(), h = (x, z) => M.terrainHeight(x, z, flat);
+    // terrain: grass, rock on steep slopes, snow on the high peaks
+    const geo = new THREE.PlaneGeometry(LS.size, LS.size, LS.segments, LS.segments); geo.rotateX(-PI / 2);
+    const p = geo.attributes.position, uv = geo.attributes.uv;
+    for (let i = 0; i < p.count; i++) { p.setY(i, h(p.getX(i), p.getZ(i))); uv.setXY(i, uv.getX(i) * LS.size / 4, uv.getY(i) * LS.size / 4); }
+    geo.computeVertexNormals();
+    const n = geo.attributes.normal, cols = [], grass = new THREE.Color('#ffffff'), rock = new THREE.Color('#8c8478'), snow = new THREE.Color('#f4f6f8'), c = new THREE.Color();
+    for (let i = 0; i < p.count; i++) {
+      const slope = 1 - n.getY(i), y = p.getY(i);
+      c.copy(grass).lerp(rock, THREE.MathUtils.smoothstep(slope, 0.18, 0.42)).lerp(snow, THREE.MathUtils.smoothstep(y, 55, 75) * (1 - slope * 0.8));
+      cols.push(c.r, c.g, c.b);
+    }
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+    const ground = new THREE.Mesh(geo, pbr('grass', { tint: '#8fbf6a', fallback: '#5f8a4a' }).clone());
+    ground.material.vertexColors = true; ground.receiveShadow = true; group.add(ground);
+    // wind-blown grass: one instanced draw call, swayed in the vertex shader
+    const time = { value: 0 }, r = rng(seed), max = LS.grass.high;
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.82, metalness: 0 });
+    mat.onBeforeCompile = sh => {
+      sh.uniforms.uTime = time;
+      sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        #ifdef USE_INSTANCING
+          vec3 ip = instanceMatrix[3].xyz;
+          float k = position.y * position.y;
+          float gust = sin(uTime * 1.5 + ip.x * 0.19 + ip.z * 0.13) * 0.65 + sin(uTime * 3.4 + ip.x * 1.1 + ip.z * 0.8) * 0.22;
+          vec3 wind = vec3(1.0, 0.0, 0.42) * (gust + 0.35) * k * 0.42;
+          transformed += inverse(mat3(instanceMatrix)) * wind;
+        #endif`);
+      // both sides lit like the ground beneath (a back face would get a downward normal: black blades)
+      sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
+        normal = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);`);
+    };
+    const blades = new THREE.InstancedMesh(grassBlade(), mat, max);
+    blades.receiveShadow = true; blades.frustumCulled = false;
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), v = new THREE.Vector3(), tint = new THREE.Color();
+    let placed = 0;
+    for (let tries = 0; placed < max && tries < max * 3; tries++) {
+      const a = r() * PI * 2, d = Math.sqrt(r()) * LS.grass.radius, x = Math.cos(a) * d, z = Math.sin(a) * d * 0.85;
+      if (Math.abs(x) < bare[0] && Math.abs(z) < bare[1]) continue;
+      const tall = LS.grass.height[0] + r() * (LS.grass.height[1] - LS.grass.height[0]);
+      q.setFromAxisAngle(v.set(0, 1, 0), r() * PI * 2); sc.set(1 + r() * 0.6, tall, 1);
+      m4.compose(v.set(x, h(x, z) - 0.03, z), q, sc); blades.setMatrixAt(placed, m4);
+      blades.setColorAt(placed, tint.setHSL(0.22 + r() * 0.07, 0.55 + r() * 0.3, 0.55 + r() * 0.35));
+      placed++;
+    }
+    blades.count = placed; group.add(blades);
+    // trees on the hills
+    let tseed = seed + 17; const tr = rng(tseed);
+    for (let i = 0; i < LS.trees; i++) {
+      const a = tr() * PI * 2, d = 36 + Math.pow(tr(), 0.7) * 170, x = Math.cos(a) * d, z = Math.sin(a) * d;
+      const name = tr() < 0.55 ? 'pine' : 'tree', s = 0.9 + tr() * 0.9 + d / 260, rot = tr() * PI * 2;
+      prop(name).then(o => { if (!o) return; o.position.set(x, h(x, z) - 0.1, z); o.rotation.y = rot; o.scale.multiplyScalar(s); group.add(o); });
+    }
+    const counts = [LS.grass.low, LS.grass.medium, LS.grass.medium, LS.grass.high];
+    return {
+      group, height: h,
+      update(t, tier) { time.value = t; blades.count = Math.min(placed, counts[tier] ?? placed); },
+    };
+  }
+  const rng = seed => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
   // ---------- Characters ----------
   const findClip = (clips, name) => clips.find(c => c.name === name || c.name.endsWith('|' + name));
+  const F = A.fighter;
   async function makeCharacter(team) {
-    const g = await loadGLB(A.characters.soldier);
+    const g = await loadGLB(A.characters[F.model]);
     const root = new THREE.Group();
     // a glowing team ring under the feet makes the two sides readable at a glance
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.56, 40), new THREE.MeshBasicMaterial({ color: new THREE.Color(TEAM[team]).multiplyScalar(2), transparent: true, opacity: 0.85, toneMapped: false }));
-    ring.rotation.x = -PI / 2; ring.position.y = 0.02; root.add(ring);
+    ring.rotation.x = -PI / 2; ring.position.y = 0.03; root.add(ring);
     const ch = { root, team, actions: {}, current: null, mixer: null, gunHolder: null, gunId: null, tintMats: [], hitT: 0, flashT: 0, prev: null, dead: false };
     if (!g) { // fallback: the procedural soldier
       const b = build(M.SOLDIER, TEAM[team]); root.add(b.root);
@@ -231,33 +336,42 @@
     const model = THREE.SkeletonUtils.clone(g.scene);
     model.rotation.y = PI / 2; // Quaternius characters face +Z; the game's forward is +X
     root.add(model);
-    // The model carries a whole armory in its hands: hide it all; setGun() shows the equipped one.
-    ch.gear = {};
-    model.traverse(o => { if (A.characterGear.includes(o.name)) { ch.gear[o.name] = o; o.visible = false; } });
-    // Clone materials per fighter and dye the uniform in the team colour.
+    // per-fighter materials; the tunic is dyed in the team colour
     ch.allMats = [];
     model.traverse(o => {
       if (!o.isMesh) return;
+      if (F.hide.includes(o.name)) { o.visible = false; return; }
       o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false;
       o.material = Array.isArray(o.material) ? o.material.map(m => m.clone()) : o.material.clone();
       for (const m of [].concat(o.material)) {
         ch.allMats.push(m);
-        if (A.uniform.includes(m.name)) { m.color.lerp(new THREE.Color(TEAM[team]), 0.8); ch.tintMats.push(m); }
+        if (F.uniform.includes(m.name)) { m.color.lerp(new THREE.Color(TEAM[team]).multiplyScalar(0.55), 0.85); ch.tintMats.push(m); }
       }
     });
     ch.mixer = new THREE.AnimationMixer(model);
-    for (const [key, name] of Object.entries(A.clips)) { const clip = findClip(g.animations, name); if (clip) ch.actions[key] = ch.mixer.clipAction(clip); }
-    ch.actions.idle = ch.actions.idle || ch.actions.idleAlt; ch.actions.run = ch.actions.run || ch.actions.runAlt;
+    for (const [key, name] of Object.entries(F.clips)) { const clip = findClip(g.animations, name); if (clip) ch.actions[key] = ch.mixer.clipAction(clip); }
     for (const k of ['hit', 'death']) if (ch.actions[k]) { ch.actions[k].setLoop(THREE.LoopOnce, 1); ch.actions[k].clampWhenFinished = true; }
     play(ch, 'idle', 0);
     ch.mixer.update(0); root.updateMatrixWorld(true);
-    // Scale to a real person's height, measuring only the posed (skinned) body so held gear doesn't count.
+    // scale to a real person's height, measuring the posed (skinned) body
     const box = new THREE.Box3();
     model.traverse(o => { if (o.isSkinnedMesh) box.expandByObject(o, true); });
     if (box.isEmpty()) box.setFromObject(model, true);
     const tall = box.max.y - box.min.y;
-    if (tall > 0.01) model.scale.multiplyScalar(A.heights.soldier / tall);
+    if (tall > 0.01) model.scale.multiplyScalar(A.heights[F.model] / tall);
     root.updateMatrixWorld(true);
+    // the gun hangs from the right wrist, lined up with where he aims in the aiming pose
+    const handName = THREE.PropertyBinding.sanitizeNodeName(F.hand); // the loader strips the '.' from 'Wrist.R'
+    let hand = null; model.traverse(o => { if (!hand && o.isBone && o.name === handName) hand = o; });
+    const holder = new THREE.Group();
+    if (hand) {
+      hand.add(holder);
+      const hw = hand.getWorldQuaternion(new THREE.Quaternion()), rw = root.getWorldQuaternion(new THREE.Quaternion());
+      // gun models point down -Z; turn that to the body's forward (+X of the root)
+      holder.quaternion.copy(hw.invert().multiply(rw).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -PI / 2)));
+      holder.scale.setScalar(1 / hand.getWorldScale(new THREE.Vector3()).x);
+    } else { holder.position.set(0.42, 1.25, 0.12); root.add(holder); }
+    ch.gunHolder = holder;
     return ch;
   }
   function play(ch, key, fade = 0.18) {
@@ -266,30 +380,25 @@
     if (ch.current) ch.current.fadeOut(fade);
     ch.current = a; ch.currentKey = key;
   }
-  // Shows the equipped weapon: the matching node in the soldier's hands, or a procedural gun (fallback).
-  function setGun(ch, id) {
-    ch.gunId = id;
-    if (ch.gear) {
-      for (const o of Object.values(ch.gear)) o.visible = false;
-      ch.gunNode = ch.gear[A.characterGuns[id]] || null;
-      if (ch.gunNode) ch.gunNode.visible = true;
-      return;
-    }
-    if (ch.gun) ch.gunHolder.remove(ch.gun);
-    ch.gun = build(M.GUNS[id]).root; ch.gun.userData.len = { pistol: 0.25, smg: 0.5, shotgun: 0.75, sniper: 1.0, rocket: 1.0 }[id];
-    ch.gunHolder.add(ch.gun);
+  // Which run to play: forward, back or a sideways strafe, from movement relative to where he aims.
+  function runClip(ang, vx, vz) {
+    const fwd = Math.cos(ang) * vx + Math.sin(ang) * vz, side = -Math.sin(ang) * vx + Math.cos(ang) * vz;
+    return Math.abs(fwd) >= Math.abs(side) ? (fwd >= 0 ? 'run' : 'back') : (side > 0 ? 'right' : 'left');
   }
-  const gunBox = new THREE.Box3(), gunCenter = new THREE.Vector3(), gunSize = new THREE.Vector3();
-  // Where bullets leave the barrel: the far end of the held weapon along the facing direction.
+  // Puts the equipped gun in the fighter's hand (same models as the first-person view).
+  async function setGun(ch, id) {
+    ch.gunId = id;
+    const len = F.gunLen[id], gun = await makeViewmodel(id, len);
+    if (ch.gunId !== id) return;
+    if (ch.gun) ch.gunHolder.remove(ch.gun);
+    gun.position.set(0, -0.03, -len * 0.3); // grip in the hand, barrel ahead
+    gun.traverse(c => { if (c.isMesh) c.castShadow = true; });
+    ch.gun = gun; ch.gunHolder.add(gun);
+  }
+  // Where bullets leave the barrel.
   function muzzleOf(ch, ang, out) {
-    const fx = Math.cos(ang), fz = Math.sin(ang);
-    if (ch.gunNode) {
-      gunBox.setFromObject(ch.gunNode); gunBox.getCenter(gunCenter); gunBox.getSize(gunSize);
-      const half = (Math.abs(gunSize.x * fx) + Math.abs(gunSize.z * fz)) / 2;
-      return out.set(gunCenter.x + fx * half, gunCenter.y, gunCenter.z + fz * half);
-    }
-    if (ch.gun) { ch.gun.updateMatrixWorld(true); return ch.gun.localToWorld(out.set(ch.gun.userData.len, 0.05, 0)); }
-    return out.set(ch.root.position.x + fx * 0.8, 1.3, ch.root.position.z + fz * 0.8);
+    if (ch.gun) { ch.gun.updateMatrixWorld(true); return ch.gun.localToWorld(out.set(0, 0, -(ch.gun.userData.len || 0.5) / (ch.gun.scale.x || 1) * 0.5)); }
+    return out.set(ch.root.position.x + Math.cos(ang) * 0.8, 1.3, ch.root.position.z + Math.sin(ang) * 0.8);
   }
 
   // ---------- First-person weapon ----------
@@ -297,13 +406,13 @@
   // read how the gun sits relative to his body (he faces +Z), and turn that so his forward becomes the
   // camera's forward (-Z). Barrel direction and roll come straight from the artist's pose.
   const VM_LEN = { pistol: 0.24, smg: 0.44, shotgun: 0.62, sniper: 0.62, rocket: 0.62 };
-  async function makeViewmodel(id) {
+  async function makeViewmodel(id, length = VM_LEN[id]) {
     const wrap = new THREE.Group(), orient = new THREE.Group(); wrap.add(orient);
     const g = await loadGLB(A.characters.soldier);
     let gun = null;
     if (g) {
       const body = THREE.SkeletonUtils.clone(g.scene), mixer = new THREE.AnimationMixer(body);
-      const clip = findClip(g.animations, A.clips.shoot) || findClip(g.animations, A.clips.idleAlt);
+      const clip = findClip(g.animations, A.gunPose);
       if (clip) { mixer.clipAction(clip).play(); mixer.update(0); }
       body.updateMatrixWorld(true);
       let node = null; body.traverse(o => { if (!node && o.name === A.characterGuns[id]) node = o; });
@@ -326,9 +435,9 @@
     orient.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(orient), size = box.getSize(new THREE.Vector3());
     orient.position.copy(box.getCenter(new THREE.Vector3())).negate();
-    const k = VM_LEN[id] / Math.max(0.001, size.x, size.y, size.z);
+    const k = length / Math.max(0.001, size.x, size.y, size.z);
     wrap.scale.setScalar(k);
-    wrap.userData.len = VM_LEN[id]; wrap.userData.h = size.y * k; // height decides how low it's held
+    wrap.userData.len = length; wrap.userData.h = size.y * k; // height decides how low it's held
     return wrap;
   }
 
@@ -340,7 +449,7 @@
     const view = makeView(canvas, 64, vmScene), { scene, camera } = view;
     camera.near = 0.05; camera.rotation.order = 'YXZ';
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let mapIndex = -1, mapGroup = null, sunLight = null, mapToken = 0, frameDt = 1 / 60;
+    let mapIndex = -1, mapGroup = null, sunLight = null, mapToken = 0, frameDt = 1 / 60, clock = 0, land = null;
     const chars = [null, null], pending = [null, null];
     const tracers = [], seen = [], puffs = [];
     const tracerGeo = new THREE.BoxGeometry(1.1, 0.035, 0.035), rocketGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.6, 12);
@@ -365,12 +474,14 @@
       const grp = mapGroup = new THREE.Group(); mapIndex = m; scene.add(grp);
       const th = M.ARENA.themes[m], walls = CC.MAPS[m].walls, Hh = M.ARENA.wallHeight;
       applySky(view, th.sky, th.exposure, () => token === mapToken).then(() => { vmScene.environment = scene.environment; });
-      scene.fog = new THREE.Fog(new THREE.Color(th.sun).multiplyScalar(0.35), 60, 140);
+      scene.fog = new THREE.FogExp2(LS.haze[th.sky], 0.0042); // distant hills fade into the sky
       if (sunLight) scene.remove(sunLight, sunLight.target);
       sunLight = sun(scene, th.sun, th.sunI, 32);
       // floors
       const floor = new THREE.Mesh(tiledPlane(45, 28, th.floorTile), pbr(th.floorTex, { tint: th.floorTint || '#ffffff', fallback: '#6e6a63' })); floor.receiveShadow = true; grp.add(floor);
-      const outer = new THREE.Mesh(tiledPlane(240, 240, 5), pbr(th.outerTex, { tint: '#bbbbbb', fallback: '#4a4a48' })); outer.position.y = -0.03; outer.receiveShadow = true; grp.add(outer);
+      // a paved apron around the arena, then open country: hills, grass, trees, mountains
+      const apron = new THREE.Mesh(tiledPlane(2 * LS.flatArena[0] - 4, 2 * LS.flatArena[1] - 4, 5), pbr(th.outerTex, { tint: '#bbbbbb', fallback: '#4a4a48' })); apron.position.y = -0.02; apron.receiveShadow = true; grp.add(apron);
+      land = buildLandscape(LS.flatArena, [LS.flatArena[0] - 2, LS.flatArena[1] - 2], 1000 + m); grp.add(land.group);
       const lineMat = new THREE.MeshStandardMaterial({ color: th.line, roughness: 0.55 });
       for (const [w, d, x, z] of [[45, 0.14, 0, -13.93], [45, 0.14, 0, 13.93], [0.14, 28, -22.43, 0], [0.14, 28, 22.43, 0]]) {
         const l = new THREE.Mesh(new THREE.BoxGeometry(w, 0.012, d), lineMat); l.position.set(x, 0.007, z); l.receiveShadow = true; grp.add(l);
@@ -404,7 +515,7 @@
       for (const d of th.decor) {
         prop(d.model).then(o => {
           if (!o || token !== mapToken) return;
-          o.position.set(...d.p); o.rotation.y = d.ry; if (d.s) o.scale.multiplyScalar(d.s); grp.add(o);
+          o.position.set(d.p[0], land ? land.height(d.p[0], d.p[2]) : 0, d.p[2]); o.rotation.y = d.ry; if (d.s) o.scale.multiplyScalar(d.s); grp.add(o);
           if (d.light && th.lampsOn && lights++ < 6) { const l = new THREE.PointLight('#ffd8a0', 60, 22, 2); l.position.set(d.p[0], 5.2, d.p[2]); grp.add(l); }
         });
       }
@@ -465,7 +576,8 @@
       // v: { m, u: [{x,y,hp,mhp,ang,g:{id,ammo,rl}}], b: [[x,y,big,vx,vy]], fx: [[x,y,r,t]] }; you: your index;
       // names: [you, opponent]; pitch: where you look up/down (visual only: the fight is on a flat plane)
       update(v, you, names, dt, pitch = 0) {
-        frameDt = dt;
+        frameDt = dt; clock += dt;
+        if (land) land.update(clock, view.tier);
         events.hitEnemy = events.hurt = events.shot = false;
         if (v.m !== mapIndex) buildMap(v.m);
         // ----- you: the camera -----
@@ -524,10 +636,10 @@
           if (s.hp <= 0) { if (!ch.dead) { ch.dead = true; if (ch.actions.death) play(ch, 'death', 0.1); else ch.root.rotation.z = PI / 2 * 0.95; } }
           else if (ch.mixer) {
             ch.dead = false;
-            play(ch, moving ? 'run' : ch.shootT > 0 && ch.actions.shoot ? 'shoot' : 'idle');
-            // running away from where they aim plays the run backwards instead of moonwalking
-            const fwd = Math.cos(s.ang) * vx + Math.sin(s.ang) * vz;
-            if (ch.actions.run) ch.actions.run.timeScale = moving ? (fwd < -0.3 * sp ? -1 : 1) * Math.min(1.35, sp / 4) : 1;
+            // forward, backward or strafing runs, depending on how they move relative to their aim
+            const key = moving ? runClip(s.ang, vx, vz) : ch.shootT > 0 && ch.actions.shoot ? 'shoot' : 'idle';
+            play(ch, ch.actions[key] ? key : moving ? 'run' : 'idle');
+            if (moving && ch.current) ch.current.timeScale = Math.max(0.6, Math.min(1.3, sp / 4.2));
           } else if (ch.procedural) {
             ch.walk = (ch.walk || 0) + sp * dt * 3.2;
             const sw = moving ? Math.sin(ch.walk) * 0.55 : 0; ch.legs.legL.rotation.z = sw; ch.legs.legR.rotation.z = -sw;
@@ -582,7 +694,7 @@
     const view = makeView(canvas, 40), { scene, camera } = view;
     const L = M.CITY.lot, ray = new THREE.Raycaster();
     const lots = [], coins = [], world = new THREE.Group();
-    let level = 0, sunLight, crate = null, hover = -1, t = 0, running = false, last = 0, token = 0;
+    let level = 0, sunLight, crate = null, hover = -1, t = 0, running = false, last = 0, token = 0, land = null;
     let yaw = 0.62, pitch = 0.56, dist = 52, drag = null, tycoon = null;
     scene.add(world);
     const lotPos = i => [(1 - Math.floor(i / 3)) * L, ((i % 3) - 1) * L];
@@ -605,11 +717,12 @@
     function setLevel(lv) {
       level = lv; const th = M.CITY.levels[lv - 1], night = th.lampsOn, my = ++token;
       applySky(view, th.sky, th.exposure, () => my === token);
-      scene.fog = new THREE.Fog(new THREE.Color(th.sun).multiplyScalar(0.3), 90, 260);
+      scene.fog = new THREE.FogExp2(LS.haze[th.sky], 0.0036); // distant hills fade into the sky
       if (sunLight) scene.remove(sunLight, sunLight.target);
       sunLight = sun(scene, th.sun, th.sunI, 24);
       world.clear();
-      const ground = new THREE.Mesh(tiledPlane(500, 500, 4), pbr('grass', { tint: '#8fbf6a', fallback: '#5f8a4a' })); ground.receiveShadow = true; world.add(ground);
+      // the business sits on level ground in open country: hills, wind-blown grass, trees, mountains
+      land = buildLandscape(LS.flatCity, [1.5 * L + M.CITY.road, 1.5 * L + M.CITY.road], 2000); world.add(land.group);
       // roads with lane markings, on a grid between and around the lots
       const asphalt = pbr('asphalt', { tint: '#a8a8a8', fallback: '#45464a' }), paint = new THREE.MeshStandardMaterial({ color: '#efe9d2', roughness: 0.7 });
       const span = L * 3 + M.CITY.road;
@@ -624,7 +737,7 @@
       // street furniture, cars, trees, lamps
       for (const d of M.CITY.props) prop(d.model).then(o => {
         if (!o || my !== token) return;
-        o.position.set(...d.p); o.rotation.y = d.ry; if (d.s) o.scale.multiplyScalar(d.s); world.add(o);
+        o.position.set(d.p[0], land.height(d.p[0], d.p[2]), d.p[2]); o.rotation.y = d.ry; if (d.s) o.scale.multiplyScalar(d.s); world.add(o);
         if (d.light && night) { const l = new THREE.PointLight('#ffd49a', 70, 20, 2); l.position.set(d.p[0], 5.3, d.p[2]); world.add(l); }
       });
       // skyline: photo-textured towers with lit windows at night
@@ -635,9 +748,10 @@
         const mat = pbr(M.CITY.skylineTex[k % 3], { tint: ['#c9c2b6', '#d8d8d8', '#b9bcc2'][k % 3], fallback: '#8b96a6' }).clone();
         if (night) { mat.emissiveMap = winTex; mat.emissive = new THREE.Color('#ffcf80'); mat.emissiveIntensity = 0.9; }
         const tower = new THREE.Mesh(tiledBox(w, h, w, 8), mat);
-        tower.position.set(Math.cos(ang) * r, h / 2, Math.sin(ang) * r); world.add(tower);
+        const tx = Math.cos(ang) * r, tz = Math.sin(ang) * r, base = land.height(tx, tz) - 1;
+        tower.position.set(tx, base + h / 2, tz); world.add(tower);
         const roof = new THREE.Mesh(new THREE.BoxGeometry(w + 0.4, 0.5, w + 0.4), new THREE.MeshStandardMaterial({ color: '#3d4148', roughness: 0.7, metalness: 0.4 }));
-        roof.position.set(tower.position.x, h + 0.25, tower.position.z); world.add(roof);
+        roof.position.set(tx, base + h + 0.25, tz); world.add(roof);
       }
       for (const l of lots) l.key = ''; // rebuild buildings for the new look
     }
@@ -675,6 +789,7 @@
       if (!drag) yaw += dt * 0.025;
       camera.position.set(Math.cos(yaw) * Math.cos(pitch) * dist, Math.sin(pitch) * dist, Math.sin(yaw) * Math.cos(pitch) * dist);
       camera.lookAt(0, 1.5, 0);
+      if (land) land.update(t, view.tier);
       lots.forEach((l, i) => { animate(l.anims, t); l.pad.material.emissive.set(i === hover ? '#3a5a8a' : '#000'); l.pad.material.emissiveIntensity = i === hover ? 0.6 : 0; });
       if (crate) { crate.root.rotation.y = t * 1.5; crate.root.position.y = 0.6 + Math.sin(t * 3) * 0.2; }
       // coins float up from earning buildings (faster with more income; green during a boom)

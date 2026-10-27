@@ -16,7 +16,7 @@ A money tycoon with a first-person arena shooter. Win a battle and you take 10% 
 The HUD shows your health and ammo, the opponent's name and health, what's at stake, and a minimap. The opponent only appears on the minimap while you can see them, or for a moment after they fire.
 
 ## Graphics
-Both the web and desktop versions are fully 3D: animated soldiers, photo-scanned props and materials, real HDRI skies, shadows, ambient occlusion and bloom. The tycoon tab shows your business as a 3D city you can rotate, zoom and click to buy.
+Both the web and desktop versions are fully 3D: realistically proportioned animated fighters (they run, back-pedal and strafe), photo-scanned props and materials, real HDRI skies, shadows, ambient occlusion and bloom. Fights and your business sit in open country: rolling hills, wind-blown grass, trees and mountains that fade into the haze, with a warm colour grade. The tycoon tab shows your business as a 3D city you can rotate, zoom and click to buy.
 - `models.js` describes every scene once (buildings, arena themes, decoration and prop placement). `render3d.js` (web, Three.js) and `desktop/r3d.gd`, `city3d.gd`, `arena3d.gd` (Godot) both build from it, so the two versions look the same.
 - The art is CC0 and lives in `desktop/assets/` (credits in `desktop/assets/CREDITS.md`). The HUD fonts are under the SIL Open Font License.
 - The web page loads that art over HTTP, so play it through a server (`npm start`). If you open `index.html` straight from disk it still works, with simple shapes instead.
@@ -32,7 +32,7 @@ Both the web and desktop versions are fully 3D: animated soldiers, photo-scanned
 
 ## Desktop app (Godot)
 The desktop version lives in [`desktop/`](desktop/). It's a Godot 4.3 project with the same game, the same save format and the same multiplayer protocol, so desktop and web players fight each other on the same servers.
-- **Download:** every change builds Windows, Mac and Linux versions with the *Cash Clash desktop* GitHub workflow. Open the latest run and download from **Artifacts**. The Mac build isn't signed with a paid certificate, so right-click it and choose **Open** the first time.
+- **Download:** every change builds Windows, Mac and Linux versions with the *Cash Clash desktop* GitHub workflow and publishes them as the [cashclash-latest release](https://github.com/OliverZS2005/ClaudeCodeIsTuff/releases/tag/cashclash-latest). The Mac build isn't signed with a paid certificate, so right-click it and choose **Open** the first time.
 - **Run from source:** open `desktop/project.godot` in Godot 4.3+ and press Play.
 - `desktop/rules.gd` is a port of `shared.js`. CI fails if the two ever calculate different numbers (`tests/parity.gd` vs. `tests/parity.js`).
 

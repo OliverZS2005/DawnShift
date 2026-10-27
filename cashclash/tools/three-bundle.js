@@ -9,6 +9,7 @@ import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 
-window.THREE = Object.assign({}, THREE_CORE, { GLTFLoader, RGBELoader, EffectComposer, RenderPass, GTAOPass, UnrealBloomPass, OutputPass, SMAAPass, SkeletonUtils });
+window.THREE = Object.assign({}, THREE_CORE, { GLTFLoader, RGBELoader, EffectComposer, RenderPass, GTAOPass, UnrealBloomPass, OutputPass, SMAAPass, ShaderPass, SkeletonUtils });
