@@ -537,6 +537,7 @@ function openArena(opts) {
   G = { ...opts, over: false, buf: [], pending: [], seq: 0 };
   if (!opts.mp) { G.you = 0; G.oppName = opts.rival.name; G.A = CC.newArena(SP.tycoon, CC.rivalLoadout(opts.rival)); G.pot = { win: opts.rival.money * CC.STEAL, lose: SP.tycoon.money * CC.STEAL }; G.yaw = G.A.units[0].ang; }
   G.pitch = 0; G.started = performance.now(); G.foeSeen = -1e9;
+  showCity(); // pauses the 3D city behind the fight (closeArena's render() brings it back)
   $('#arenaWrap').style.display = 'block'; $('#result').style.display = 'none'; $('#keys').classList.remove('gone');
   lockMouse(); // works when the fight started from a click; otherwise the prompt asks for one
   if (!arena3d) arena3d = R3D.createArena(cv);
