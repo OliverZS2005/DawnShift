@@ -526,4 +526,48 @@ func city(where: String, night: bool) -> Node3D:
 			l.light_color = Color("#ffd49a"); l.light_energy = 3.0; l.omni_range = 22
 			l.position = Vector3(d.p[0], 5.3, d.p[2])
 			group.add_child(l)
+	# traffic driving round the middle; tick_city() moves it
+	var cars = []
+	for c in L.traffic.cars:
+		var o = prop(c.model)
+		if o != null:
+			group.add_child(o)
+			cars.append([o, c])
+	group.set_meta("traffic", [L.traffic, cars])
+	tick_city(group, 0.0)
 	return group
+
+# Moves a city()'s traffic to time t (seconds).
+func tick_city(group: Node3D, t: float) -> void:
+	var tr = group.get_meta("traffic")
+	for pair in tr[1]:
+		var p = traffic_at(tr[0], pair[1], t)
+		pair[0].position = Vector3(p.x, 0, p.y)
+		pair[0].rotation.y = p.z
+
+# Where a traffic car is at time t: (x, z, rotation y). It drives a rectangle with rounded corners,
+# clockwise seen from above; cars face +Z. Mirrors trafficAt() in ../models.js.
+func traffic_at(traffic: Dictionary, c: Dictionary, t: float) -> Vector3:
+	var hx = float(traffic.half[0])
+	var hz = float(traffic.half[1])
+	var R = float(traffic.turn)
+	var ax = hx - R
+	var az = hz - R
+	var arc = PI * R / 2
+	var legs = [2 * ax, arc, 2 * az, arc, 2 * ax, arc, 2 * az, arc]
+	var P = 0.0
+	for l in legs:
+		P += l
+	var d = fposmod(float(c.phase) * P + float(c.speed) * t, P)
+	var k = 0
+	while d > legs[k]:
+		d -= legs[k]
+		k += 1
+	var corners = [[ax, -az], [ax, az], [-ax, az], [-ax, -az]]
+	var starts = [[-ax, -hz], [hx, -az], [ax, hz], [-hx, az]]
+	var dirs = [[1, 0], [0, 1], [-1, 0], [0, -1]]
+	var i = k >> 1
+	if k % 2 == 0:
+		return Vector3(starts[i][0] + dirs[i][0] * d, starts[i][1] + dirs[i][1] * d, atan2(dirs[i][0], dirs[i][1]))
+	var a = -PI / 2 + i * PI / 2 + d / R
+	return Vector3(corners[i][0] + cos(a) * R, corners[i][1] + sin(a) * R, atan2(-sin(a), cos(a)))

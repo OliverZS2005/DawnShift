@@ -69,12 +69,16 @@ func _ready() -> void:
 		tab_btns[t[0]] = b
 		hb.add_child(b)
 
-	# The 3D city sits above the Tycoon tab's cards and stays alive between re-renders.
+	# The 3D city (walked in first person) sits above the Tycoon tab's cards and stays alive between re-renders.
 	city = preload("res://city3d.gd").new()
 	city.custom_minimum_size.y = 320
 	city.visible = false
 	city.lot_clicked.connect(func(i): Game.act({"type": "buy", "id": CC.BUILDINGS[i].id}); render())
-	city.crate_clicked.connect(func(): Game.act({"type": "claim"}); render())
+	city.upgrade_clicked.connect(func(i): Game.act({"type": "bup", "id": CC.BUILDINGS[i].id}); render())
+	city.crate_clicked.connect(func():
+		if CC.event_on(Game.tycoon(), "crate"):
+			Game.act({"type": "claim"})
+			render())
 	root.add_child(city)
 
 	var scroll = ScrollContainer.new()
@@ -115,7 +119,7 @@ func _ready() -> void:
 	Game.changed.connect(func(): dirty = true)
 	Game.toast.connect(show_toast)
 	Game.news.connect(func(m): if tab == "battle": show_toast(m))
-	Game.match_started.connect(func(info): arena.open(info))
+	Game.match_started.connect(func(info): city.release(); arena.open(info))
 	get_viewport().size_changed.connect(func(): dirty = true)
 	render()
 
@@ -131,7 +135,7 @@ func _process(dt: float) -> void:
 		queue_lbl.text = Game.net.get("queue_text", "") if Game.mode == "mp" else Game.sp_queue_status()
 	city.visible = tab == "tycoon" and not arena.visible
 	if city.visible:
-		city.custom_minimum_size.y = max(260.0, size.y * 0.42)
+		city.custom_minimum_size.y = max(340.0, size.y * 0.62)
 		city.update_city(t)
 	# The Play tab has text fields, so it only re-renders when something actually changes.
 	rerender_acc += dt

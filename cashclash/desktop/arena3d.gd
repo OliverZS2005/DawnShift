@@ -6,6 +6,8 @@ extends Control
 var v: Dictionary
 var map_index := -1
 var map_root: Node3D
+var streets: Node3D
+var clock := 0.0
 var sun_light: DirectionalLight3D
 var chars := [null, null]
 var tracers := []
@@ -114,7 +116,8 @@ func _build_map(m: int) -> void:
 	apron.position.y = -0.02
 	apron.material_override = R3D.pbr(th.outerTex, Color("#bbbbbb"), 5.0, 0.0, Color("#4a4a48"))
 	map_root.add_child(apron)
-	map_root.add_child(R3D.city("arena", th.lampsOn))
+	streets = R3D.city("arena", th.lampsOn)
+	map_root.add_child(streets)
 	var line = R3D.flat(Color(th.line), 0.55)
 	for e in [[45, 0.14, 0, -13.93], [45, 0.14, 0, 13.93], [0.14, 28, -22.43, 0], [0.14, 28, 22.43, 0]]:
 		map_root.add_child(R3D.box(Vector3(e[0], 0.012, e[1]), line, Vector3(e[2], 0.007, e[3])))
@@ -498,6 +501,8 @@ func update(view: Dictionary, you: int, names: Array, dt: float, pitch := 0.0, r
 	events.hit_enemy = false; events.hurt = false; events.shot = false
 	if int(view.m) != map_index:
 		_build_map(int(view.m))
+	clock += dt
+	R3D.tick_city(streets, clock)
 	# ----- you: the camera -----
 	var s0 = view.u[you]
 	var mp = to_world(float(s0.x), float(s0.y))
