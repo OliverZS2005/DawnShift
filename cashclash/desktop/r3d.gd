@@ -155,6 +155,22 @@ func environment(sky_name: String, exposure: float, _unused := Color.BLACK) -> E
 	# colour grade: a little extra saturation (the web version also adds warmth and a vignette)
 	e.adjustment_enabled = true
 	e.adjustment_saturation = 1.12
+	# Vulkan (Forward+) only; the OpenGL fallback ignores these. (No SDFGI: outdoors it darkened the
+	# shade more than it added bounce light, and it's the costliest effect on weaker graphics cards.)
+	# Bounce light and contact shading from what's on screen, and reflections on smooth floors.
+	e.ssil_enabled = true
+	e.ssil_radius = 4.0
+	e.ssil_intensity = 0.8
+	e.ssr_enabled = true
+	e.ssr_max_steps = 48
+	e.ssr_fade_out = 1.5
+	# Thin volumetric haze: the air catches the sunlight (soft light shafts past walls and trees).
+	e.volumetric_fog_enabled = true
+	e.volumetric_fog_density = 0.006
+	e.volumetric_fog_albedo = Color(M.LANDSCAPE.haze[sky_name])
+	e.volumetric_fog_anisotropy = 0.55
+	e.volumetric_fog_length = 90.0
+	e.volumetric_fog_sky_affect = 0.0
 	return e
 
 func sun(color: Color, energy: float) -> DirectionalLight3D:
@@ -331,6 +347,8 @@ void fragment() {
 	NORMAL = normalize((VIEW_MATRIX * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
 	ALBEDO = COLOR.rgb;
 	ROUGHNESS = 0.82;
+	// thin blades let light through: they glow when the sun is behind them (Vulkan renderer)
+	BACKLIGHT = COLOR.rgb * 0.6;
 }
 """
 

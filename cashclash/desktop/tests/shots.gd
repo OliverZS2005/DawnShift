@@ -1,5 +1,6 @@
 # Screenshots of the desktop app's 3D views (needs a display, e.g. xvfb-run):
 #   godot --path cashclash/desktop res://tests/shots.tscn -- <output dir>
+# Without a graphics card, Mesa's software Vulkan driver (lavapipe, package mesa-vulkan-drivers) works.
 extends Node
 
 func _ready() -> void:

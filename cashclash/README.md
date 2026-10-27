@@ -33,6 +33,7 @@ Both the web and desktop versions are fully 3D: realistically proportioned anima
 ## Desktop app (Godot)
 The desktop version lives in [`desktop/`](desktop/). It's a Godot 4.3 project with the same game, the same save format and the same multiplayer protocol, so desktop and web players fight each other on the same servers.
 - **Download:** every change builds Windows, Mac and Linux versions with the *Cash Clash desktop* GitHub workflow and publishes them as the [cashclash-latest release](https://github.com/OliverZS2005/ClaudeCodeIsTuff/releases/tag/cashclash-latest). The Mac build isn't signed with a paid certificate, so right-click it and choose **Open** the first time.
+- **Graphics:** the desktop app renders with Vulkan (Forward+; Macs run it through MoltenVK), which adds screen-space bounce light, reflections on smooth floors, volumetric haze and light shining through the grass. A computer with no Vulkan support at all falls back to OpenGL with simpler lighting instead of refusing to start.
 - **Run from source:** open `desktop/project.godot` in Godot 4.3+ and press Play.
 - `desktop/rules.gd` is a port of `shared.js`. CI fails if the two ever calculate different numbers (`tests/parity.gd` vs. `tests/parity.js`).
 

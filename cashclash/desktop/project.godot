@@ -19,8 +19,14 @@ window/size/viewport_height=800
 window/stretch/aspect="expand"
 
 [rendering]
-; Forward+ gives ambient occlusion, glow and better shadows; PCs without Vulkan/D3D12 fall back to OpenGL.
+; Vulkan everywhere (Forward+): global illumination, volumetric fog, reflections, ambient occlusion,
+; glow and soft shadows. Macs run Vulkan through MoltenVK. Only a PC with no Vulkan support at all
+; falls back to OpenGL (simpler lighting) instead of refusing to start.
 renderer/rendering_method="forward_plus"
+rendering_device/driver="vulkan"
+rendering_device/driver.windows="vulkan"
+rendering_device/driver.linuxbsd="vulkan"
+rendering_device/driver.macos="vulkan"
 rendering_device/fallback_to_opengl3=true
 anti_aliasing/quality/msaa_3d=2
 lights_and_shadows/directional_shadow/size=4096
