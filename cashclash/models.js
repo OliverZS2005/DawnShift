@@ -196,10 +196,13 @@
   // ---------- Downloaded art (desktop/assets, see tools/fetch-assets.mjs) ----------
   // Paths are relative to the assets folder: the web loads `desktop/assets/<path>`, Godot `res://assets/<path>`.
   // Poly Haven models are real-world size (metres). Others are scaled to `heights` at load time.
+  // real cars (Grab3D, repainted by fetch-assets.mjs): models/car_<name>.glb, nose towards +Z
+  const CARS = ['car_sedan', 'car_sedan2', 'car_wagon', 'car_van', 'car_suv', 'car_taxi'];
   const ASSETS = {
     skies: { day: 'sky/day.hdr', sunset: 'sky/sunset.hdr', dusk: 'sky/dusk.hdr', night: 'sky/night.hdr' },
     models: Object.fromEntries(['crate', 'military_crate', 'barrel', 'barrier', 'street_lamp', 'trash_can', 'hydrant', 'utility_box',
-      'plastic_crate', 'covered_car', 'shrub', 'bench'].map(n => [n, `models/${n}.glb`])),
+      'plastic_crate', 'covered_car', 'shrub', 'bench', 'drill_press', 'generator', 'compressor', 'cash_register', 'box', ...CARS]
+      .map(n => [n, `models/${n}.glb`])),
     characters: { hoodie: 'characters/hoodie.glb', jacket: 'characters/jacket.glb', denim: 'characters/denim.glb' },
     // realistic guns (OpenGameArt, CC0), already turned barrel-forward (-Z) and centred by tools/guns.py
     guns: { pistol: 'guns/pistol.glb', smg: 'guns/smg.glb', shotgun: 'guns/shotgun.glb', sniper: 'guns/sniper.glb', rocket: 'guns/rocket.glb' },
@@ -262,6 +265,9 @@
   // 3x3 lots, `lot` metres apart, with roads between them. Lot i sits at x = (1 - floor(i/3)) * lot, z = (i % 3 - 1) * lot.
   const CITY = {
     lot: 10, pad: 7.6, road: 2.4,
+    // each owned lot's production line: a conveyor (metres; speed in m/s) along its front edge, fed by
+    // machines (one more per milestone, up to 3) and ending in a till
+    line: { length: 6.2, height: 0.85, speed: 0.9, machines: ['drill_press', 'generator', 'compressor'] },
     // Sky and light change as your business level rises (index = level - 1).
     levels: [
       { sky: 'day', exposure: 1.0, sun: '#fff1d6', sunI: 3.0, lampsOn: false },
@@ -286,7 +292,7 @@
       out.push({ model: furniture[i % furniture.length], p: [+x.toFixed(2), 0, +z.toFixed(2)], ry: side < 2 ? (side ? PI : 0) : (side === 2 ? -PI / 2 : PI / 2) });
     }
     // parked cars
-    for (const [x, z, ry] of [[-1.5 * L - 2.4, -6, 0], [1.5 * L + 2.6, 7, PI], [4, 1.5 * L + 2.6, PI / 2]]) out.push({ model: 'covered_car', p: [x, 0, z], ry });
+    [[-1.5 * L - 2.4, -6, 0], [1.5 * L + 2.6, 7, PI], [4, 1.5 * L + 2.6, PI / 2]].forEach(([x, z, ry], i) => out.push({ model: CARS[i * 2], p: [x, 0, z], ry }));
     return out;
   })();
 
@@ -359,7 +365,7 @@
     for (let i = 0; i < 12; i++) { // parked cars along the kerb
       const side = i % 4, along = -0.8 + r() * 1.6, off = (side < 2 ? Cz : Cx) + U.street - U.sidewalk - 1.4;
       const [x, z] = side < 2 ? [along * Cx, (side ? 1 : -1) * off] : [(side === 2 ? 1 : -1) * off, along * Cz];
-      cars.push({ model: 'covered_car', p: [round2(x), 0, round2(z)], ry: round2(side < 2 ? PI / 2 : 0) });
+      cars.push({ model: i === 5 ? 'covered_car' : pick(CARS), p: [round2(x), 0, round2(z)], ry: round2((side < 2 ? PI / 2 : 0) + (r() < 0.5 ? PI : 0)) });
     }
     const stuff = ['hydrant', 'trash_can', 'trash_can', 'utility_box', 'plastic_crate', 'barrel'];
     for (let i = 0; i < 18; i++) {
@@ -404,8 +410,26 @@
       else manholes.push([round2(x), round2(z)]);
     }
     const r4 = a => a.map(round2);
-    return { buildings, sidewalks: sidewalks.map(r4), lamps, cars, props, skyline, dashes: dashes.map(r4), stripes: stripes.map(r4), stains, manholes };
+    // traffic: a few cars driving laps of the street around the middle, in its inner lane
+    const traffic = { half: [round2(Cx + U.street / 2 - 1.6), round2(Cz + U.street / 2 - 1.6)], turn: 5, cars: [] };
+    for (let i = 0; i < 5; i++) traffic.cars.push({ model: CARS[(i * 2 + 1) % CARS.length], phase: round2(i / 5 + r() * 0.08), speed: round2(8 + r() * 4) });
+    return { buildings, sidewalks: sidewalks.map(r4), lamps, cars, props, skyline, dashes: dashes.map(r4), stripes: stripes.map(r4), stains, manholes, traffic };
+  }
+  // Where traffic car `c` is at time `t` (s): [x, z, rotationY] on a rectangle with rounded corners
+  // (half-extents `half`, corner radius `turn`), driven clockwise seen from above. Cars face +Z.
+  function trafficAt(traffic, c, t) {
+    const [hx, hz] = traffic.half, R = traffic.turn, ax = hx - R, az = hz - R, arc = PI * R / 2;
+    const legs = [2 * ax, arc, 2 * az, arc, 2 * ax, arc, 2 * az, arc], P = legs.reduce((a, b) => a + b, 0);
+    let d = ((c.phase * P + c.speed * t) % P + P) % P, k = 0;
+    while (d > legs[k]) { d -= legs[k]; k++; }
+    // straights: along +X at z = -hz, along +Z at x = hx, along -X at z = hz, along -Z at x = -hx
+    const corners = [[ax, -az], [ax, az], [-ax, az], [-ax, -az]], starts = [[-ax, -hz], [hx, -az], [ax, hz], [-hx, az]];
+    const dirs = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+    const i = k >> 1;
+    if (k % 2 === 0) { const [x, z] = starts[i], [dx, dz] = dirs[i]; return [x + dx * d, z + dz * d, Math.atan2(dx, dz)]; }
+    const a = -PI / 2 + i * PI / 2 + d / R, [cx, cz] = corners[i]; // around the corner's centre
+    return [cx + Math.cos(a) * R, cz + Math.sin(a) * R, Math.atan2(-Math.sin(a), Math.cos(a))];
   }
 
-  return { BUILDINGS, LOT, SOLDIER, GUNS, ARENA, CITY, ASSETS, URBAN, tex, cityLayout };
+  return { BUILDINGS, LOT, SOLDIER, GUNS, ARENA, CITY, ASSETS, URBAN, tex, cityLayout, trafficAt };
 });

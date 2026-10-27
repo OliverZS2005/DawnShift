@@ -316,7 +316,8 @@
   }
   // The streets (wet asphalt, lane paint, crossings, stains, manholes), sidewalks, buildings with photo
   // facades (storefronts, ledges, cornices and roof tanks up close), the skyline in the haze, and street
-  // furniture. Returns the group. `detail` false (the lowest quality) leaves out the small stuff.
+  // furniture, and traffic driving round the middle. Returns the group; call group.userData.tick(t) each
+  // frame to move the traffic. `detail` false (the lowest quality) leaves out the small stuff.
   function buildCity(where, night, detail = true) {
     const group = new THREE.Group(), L = M.cityLayout(where), batches = new Map(), T = U.facadeTile;
     const add = (key, mat, geo) => { if (!batches.has(key)) batches.set(key, { mat, geos: [] }); batches.get(key).geos.push(geo); };
@@ -363,6 +364,10 @@
       if (!o) return; o.position.set(...d.p); o.rotation.y = d.ry; group.add(o);
       if (d.light && night && lights++ < 6) { const l = new THREE.PointLight('#ffd49a', 60, 22, 2); l.position.set(d.p[0], 5.3, d.p[2]); group.add(l); }
     });
+    // traffic (positions from models.js trafficAt(), so the desktop app drives the same cars)
+    const cars = [];
+    for (const c of L.traffic.cars) prop(c.model).then(o => { if (o) { group.add(o); cars.push([o, c]); } });
+    group.userData.tick = t => { for (const [o, c] of cars) { const [x, z, ry] = M.trafficAt(L.traffic, c, t); o.position.set(x, 0, z); o.rotation.y = ry; } };
     return group;
   }
 
@@ -414,6 +419,7 @@
     ch.current = a; ch.currentKey = key;
   }
   const wrapAng = a => { while (a > PI) a -= 2 * PI; while (a < -PI) a += 2 * PI; return a; };
+  const TWIST = 1.15; // most the upper body turns from the legs to aim (radians, about 65 degrees)
   // ----- posing helpers (world space) -----
   const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3();
   function turnBone(b, q) { // rotate bone b by world rotation q
@@ -438,7 +444,7 @@
   // out in front of the chest and put both hands on it. `aim` is the game angle (0 = +X).
   function poseAim(ch, aim, recoil) {
     const B = ch.bones; if (!B.spine[2] || !B.R[2]) return;
-    const twist = Math.max(-1.8, Math.min(1.8, wrapAng(aim - ch.legs)));
+    const twist = Math.max(-TWIST, Math.min(TWIST, wrapAng(aim - ch.legs)));
     for (const sb of B.spine) turnBone(sb, _q.setFromAxisAngle(UP, -twist / 3));
     const d = new THREE.Vector3(Math.cos(aim), 0, Math.sin(aim)), rt = new THREE.Vector3(-Math.sin(aim), 0, Math.cos(aim));
     const chest = B.spine[2].getWorldPosition(new THREE.Vector3()), hold = F.hold[ch.gunId] || F.hold.pistol, len = F.gunLen[ch.gunId] || 0.4;
@@ -496,7 +502,7 @@
     const view = makeView(canvas, 64, vmScene), { scene, camera } = view;
     camera.near = 0.05; camera.rotation.order = 'YXZ';
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let mapIndex = -1, mapGroup = null, sunLight = null, mapToken = 0, frameDt = 1 / 60, clock = 0;
+    let mapIndex = -1, mapGroup = null, sunLight = null, mapToken = 0, frameDt = 1 / 60, clock = 0, streets = null;
     const chars = [null, null], pending = [null, null];
     const tracers = [], seen = [], puffs = [];
     const tracerGeo = new THREE.BoxGeometry(1.1, 0.035, 0.035), rocketGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.6, 12);
@@ -529,7 +535,7 @@
       // a paved courtyard around the arena, walled in by city blocks
       const [cx, cz] = U.arena.clear;
       const apron = new THREE.Mesh(tiledPlane(2 * cx, 2 * cz, 5), pbr(th.outerTex, { tint: '#bbbbbb', fallback: '#4a4a48' })); apron.position.y = -0.02; apron.receiveShadow = true; grp.add(apron);
-      grp.add(buildCity('arena', th.lampsOn, view.tier > 0));
+      streets = buildCity('arena', th.lampsOn, view.tier > 0); grp.add(streets);
       const lineMat = new THREE.MeshStandardMaterial({ color: th.line, roughness: 0.55 });
       for (const [w, d, x, z] of [[45, 0.14, 0, -13.93], [45, 0.14, 0, 13.93], [0.14, 28, -22.43, 0], [0.14, 28, 22.43, 0]]) {
         const l = new THREE.Mesh(new THREE.BoxGeometry(w, 0.012, d), lineMat); l.position.set(x, 0.007, z); l.receiveShadow = true; grp.add(l);
@@ -625,6 +631,7 @@
       // names: [you, opponent]; pitch: where you look up/down (visual only: the fight is on a flat plane)
       update(v, you, names, dt, pitch = 0) {
         frameDt = dt; clock += dt;
+        if (streets) streets.userData.tick(clock);
         events.hitEnemy = events.hurt = events.shot = false;
         if (v.m !== mapIndex) buildMap(v.m);
         // ----- you: the camera -----
@@ -701,12 +708,13 @@
             ch.gunHolder.visible = ch.deathT < 0.12;
           } else {
             if (ch.dead) { ch.dead = false; ch.fall.rotation.z = 0; ch.fall.position.x = 0; ch.gunHolder.visible = true; }
-            // legs go where they're moving (backpedalling when that's behind where they aim); standing
-            // still, the feet only turn once the body would twist too far
+            // legs go where they're moving, but the upper body only twists so far to keep aiming (no strafe
+            // clips): moving sideways, the legs point partway between the two; moving away from the aim,
+            // they backpedal. Standing still, the feet only turn once the body would twist too far.
             let legsTo = ch.legs;
             if (moving) {
-              const mv = Math.atan2(vz, vx), back = Math.abs(wrapAng(mv - s.ang)) > 1.75, key = sp > 2.6 ? 'run' : 'walk';
-              legsTo = back ? mv + PI : mv;
+              const mv = Math.atan2(vz, vx), rel = wrapAng(mv - s.ang), back = Math.abs(rel) > 1.95, key = sp > 2.6 ? 'run' : 'walk';
+              legsTo = back ? s.ang + Math.max(-TWIST, Math.min(TWIST, wrapAng(mv + PI - s.ang))) : s.ang + Math.max(-TWIST, Math.min(TWIST, rel));
               play(ch, ch.actions[key] ? key : 'run');
               if (ch.current) ch.current.timeScale = (back ? -1 : 1) * Math.max(0.6, Math.min(1.4, sp / (key === 'run' ? 4.4 : 1.5)));
             } else {
@@ -762,36 +770,53 @@
     };
   }
 
-  // ---------- City (tycoon view) ----------
+  // ---------- Tycoon: walk around your business in first person ----------
+  // The 3x3 lots sit on a plaza in the middle of the city. Click the view to take the mouse, walk with
+  // WASD, look at a lot and press E to buy one more or R to upgrade it (handlers.describe() says what
+  // that costs). Every owned lot runs a production line: machines drop boxes onto a conveyor that
+  // carries them to a till, faster the more that building earns.
+  const LINE = M.CITY.line, EYE_T = 1.62;
+  let beltTex = null;
+  function belt() { // dark rubber with raised ribs, tiled along the conveyor
+    if (beltTex) return beltTex;
+    const c = document.createElement('canvas'); c.width = 64; c.height = 64; const x = c.getContext('2d');
+    x.fillStyle = '#1b1c1e'; x.fillRect(0, 0, 64, 64); x.fillStyle = '#2c2e31'; x.fillRect(0, 0, 10, 64);
+    beltTex = new THREE.CanvasTexture(c); beltTex.wrapS = beltTex.wrapT = THREE.RepeatWrapping; beltTex.colorSpace = THREE.SRGBColorSpace; beltTex.repeat.set(LINE.length / 0.6, 1);
+    return beltTex;
+  }
   function createCity(canvas, handlers) {
-    const view = makeView(canvas, 40), { scene, camera } = view;
-    const L = M.CITY.lot, ray = new THREE.Raycaster();
+    const view = makeView(canvas, 70), { scene, camera } = view;
+    camera.near = 0.05; camera.rotation.order = 'YXZ';
+    const L = M.CITY.lot, P = M.CITY.pad, ray = new THREE.Raycaster(), [cx, cz] = U.city.clear;
     const lots = [], coins = [], world = new THREE.Group();
-    let level = 0, sunLight, crate = null, hover = -1, t = 0, running = false, last = 0, token = 0;
-    let yaw = 0.62, pitch = 0.56, dist = 52, drag = null, tycoon = null;
+    let level = 0, sunLight, crate = null, aim = -1, t = 0, running = false, last = 0, token = 0, tycoon = null, streets = null;
+    const me = { x: 0, z: 1.5 * L + 2.2, yaw: 0, pitch: -0.08, walk: 0 }, keys = {};
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
     scene.add(world);
     const lotPos = i => [(1 - Math.floor(i / 3)) * L, ((i % 3) - 1) * L];
     for (let i = 0; i < 9; i++) {
       const [x, z] = lotPos(i);
-      const pad = new THREE.Mesh(tiledBox(M.CITY.pad, 0.2, M.CITY.pad, 2), pbr('pavers', { fallback: '#b9b5ac' }).clone());
+      const pad = new THREE.Mesh(tiledBox(P, 0.2, P, 2), pbr('pavers', { fallback: '#b9b5ac' }).clone());
       pad.position.set(x, 0.1, z); pad.receiveShadow = true; pad.userData.lot = i; scene.add(pad);
       const holder = new THREE.Group(); holder.position.set(x, 0.2, z); scene.add(holder);
-      lots.push({ pad, holder, key: '', anims: [], x, z });
+      lots.push({ pad, holder, key: '', anims: [], x, z, line: null });
     }
-    const coinGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.05, 24);
+    const coinGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.03, 20);
     const coinMat = new THREE.MeshStandardMaterial({ color: '#f5c542', metalness: 1, roughness: 0.2, transparent: true });
+    const steel = new THREE.MeshStandardMaterial({ color: '#3d4045', metalness: 0.75, roughness: 0.4 });
+    const beltMat = new THREE.MeshStandardMaterial({ map: belt(), roughness: 0.85 });
+    let boxModel = null; prop('box').then(o => { boxModel = o; });
 
     function setLevel(lv) {
       level = lv; const th = M.CITY.levels[lv - 1], night = th.lampsOn, my = ++token;
       applySky(view, th.sky, th.exposure, () => my === token);
-      scene.fog = new THREE.FogExp2(U.haze[th.sky], U.fog * 0.55); // smog (thinner: this camera sits further back)
+      scene.fog = new THREE.FogExp2(U.haze[th.sky], U.fog); // city smog: distant blocks fade out
       if (sunLight) scene.remove(sunLight, sunLight.target);
-      sunLight = sun(scene, th.sun, th.sunI, 24);
+      sunLight = sun(scene, th.sun, th.sunI, 26);
       world.clear();
       // the business takes up a paved plaza in the middle of the city
-      const [cx, cz] = U.city.clear;
       const plaza = new THREE.Mesh(tiledPlane(2 * cx, 2 * cz, 2.5), pbr('pavers', { tint: '#a9a399', fallback: '#77746f' })); plaza.receiveShadow = true; world.add(plaza);
-      world.add(buildCity('city', night, view.tier > 0));
+      streets = buildCity('city', night, view.tier > 0); world.add(streets);
       // roads with lane markings, on a grid between and around the lots
       const asphalt = pbr('asphalt', { tint: '#a8a8a8', fallback: '#45464a' }), paint = new THREE.MeshStandardMaterial({ color: '#efe9d2', roughness: 0.7 });
       const span = L * 3 + M.CITY.road;
@@ -811,20 +836,44 @@
       });
       for (const l of lots) l.key = ''; // rebuild buildings for the new look
     }
+    // A production line along the lot's front edge: `machines` machines on stands feeding a conveyor that
+    // runs into a till. Boxes on the belt are pooled; spawn() and tick() in frame() move them.
+    function productionLine(i, machines) {
+      const g = new THREE.Group(), half = LINE.length / 2, y = LINE.height, z = P / 2 - 0.55;
+      const part = (w, h, d, x, py, pz, mat) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, py, pz); shadows(m); g.add(m); return m; };
+      const table = (w, d, x, pz) => { // steel top on four legs
+        part(w, 0.05, d, x, y - 0.075, pz, steel);
+        for (const sx of [-1, 1]) for (const sz of [-1, 1]) part(0.05, y - 0.1, 0.05, x + sx * (w / 2 - 0.05), (y - 0.1) / 2, pz + sz * (d / 2 - 0.05), steel);
+      };
+      part(LINE.length, 0.05, 0.62, 0, y, z, beltMat);                                                  // belt
+      for (const s of [-1, 1]) part(LINE.length + 0.1, 0.16, 0.06, 0, y + 0.02, z + s * 0.34, steel); // side rails
+      for (let k = 0; k <= 4; k++) for (const s of [-1, 1]) part(0.06, y, 0.06, -half + k * LINE.length / 4, y / 2, z + s * 0.3, steel); // legs
+      const stands = [];
+      for (let k = 0; k < machines; k++) {
+        const mx = -half + 0.7 + k * 1.7, model = LINE.machines[(i + k) % LINE.machines.length];
+        table(1.1, 0.9, mx, z - 0.85);
+        prop(model).then(o => { if (o) { o.position.set(mx, y - 0.05, z - 0.85); o.rotation.y = PI; g.add(o); } });
+        stands.push(mx);
+      }
+      table(0.8, 0.8, half + 0.45, z);                                                                   // the till's table
+      prop('cash_register').then(o => { if (o) { o.position.set(half + 0.45, y, z); o.rotation.y = -PI / 2; g.add(o); } });
+      return { group: g, stands, z, items: [], until: Math.random() };
+    }
     function refreshLot(i, tyc) {
       const b = CC.BUILDINGS[i], lot = lots[i];
       const n = CC.owned(tyc, b.id), lv = CC.bLevel(tyc, b.id), unl = CC.unlocked(tyc, b);
       const ms = [25, 50, 100, 200].filter(m => n >= m).length;
       const key = [unl, n > 0, ms, Math.min(lv, 6), level].join('|');
       if (lot.key === key) return;
-      lot.key = key; lot.holder.clear(); lot.anims = [];
+      lot.key = key; lot.holder.clear(); lot.anims = []; lot.line = null;
       const add = (model, x, z, s) => { const m = build(model); m.root.position.set(x, 0, z); m.root.scale.setScalar(s); lot.holder.add(m.root); lot.anims.push(...m.anims); };
       if (!unl) add(M.LOT.locked, 0, 0, 1);
       else if (!n) add(M.LOT.forSale, 0, 0, 1);
       else {
-        add(M.BUILDINGS[b.id], 0, 0, 1);
-        // each milestone (25/50/100/200 owned) adds a smaller branch on the lot
-        [[2.9, 2.9], [2.9, -2.9], [-2.9, 2.9], [-2.9, -2.9]].slice(0, ms).forEach(([x, z]) => add(M.BUILDINGS[b.id], x, z, 0.3));
+        add(M.BUILDINGS[b.id], 0, -0.9, 0.85);
+        // each milestone (25/50/100/200 owned) adds a smaller branch along the back of the lot
+        [[-2.9, -2.9], [2.9, -2.9], [-2.9, -0.6], [2.9, -0.6]].slice(0, ms).forEach(([x, z]) => add(M.BUILDINGS[b.id], x, z, 0.3));
+        lot.line = productionLine(i, Math.min(3, 1 + ms)); lot.holder.add(lot.line.group);
       }
       // upgrade levels gild the lot
       const k = Math.min(1, lv / 6);
@@ -836,65 +885,98 @@
       if (tyc.level !== level) setLevel(tyc.level);
       for (let i = 0; i < 9; i++) refreshLot(i, tyc);
       const crateOn = CC.eventOn(tyc, 'crate');
-      if (crateOn && !crate) { crate = build(M.LOT.crate); crate.root.position.set(L * 1.5 + 3.5, 0.5, 0); crate.root.userData.crate = true; scene.add(crate.root); }
+      if (crateOn && !crate) { crate = build(M.LOT.crate); crate.root.position.set(0, 0.5, 1.5 * L + 0.6); crate.root.userData.crate = true; scene.add(crate.root); }
       if (!crateOn && crate) { scene.remove(crate.root); crate = null; }
     }
-    function frame(now) {
-      if (!running) return;
-      const dt = Math.min(0.05, (now - last) / 1000 || 0); last = now; t += dt;
-      if (!drag) yaw += dt * 0.025;
-      camera.position.set(Math.cos(yaw) * Math.cos(pitch) * dist, Math.sin(pitch) * dist, Math.sin(yaw) * Math.cos(pitch) * dist);
-      camera.lookAt(0, 1.5, 0);
-      lots.forEach((l, i) => { animate(l.anims, t); l.pad.material.emissive.set(i === hover ? '#3a5a8a' : '#000'); l.pad.material.emissiveIntensity = i === hover ? 0.6 : 0; });
-      if (crate) { crate.root.rotation.y = t * 1.5; crate.root.position.y = 0.6 + Math.sin(t * 3) * 0.2; }
-      // coins float up from earning buildings (faster with more income; green during a boom)
-      if (tycoon) {
-        const boom = CC.eventOn(tycoon, 'boom');
-        for (let i = 0; i < 9; i++) {
-          const inc = CC.bIncome(tycoon, CC.BUILDINGS[i]);
-          if (inc > 0 && Math.random() < dt * Math.min(4, 0.4 + Math.log10(inc + 1) * 0.35) * (boom ? 2.5 : 1)) {
-            let c = coins.find(c => !c.visible);
-            if (!c) { c = new THREE.Mesh(coinGeo, coinMat.clone()); c.rotation.x = PI / 2; coins.push(c); scene.add(c); }
-            c.visible = true; c.userData.t = 0; c.material.color.set(boom ? '#4ade80' : '#f5c542');
-            c.position.set(lots[i].x + (Math.random() - .5) * 3, 2.5 + Math.random() * 2, lots[i].z + (Math.random() - .5) * 3);
-          }
-        }
-      }
-      for (const c of coins) if (c.visible) {
-        c.userData.t += dt; c.position.y += dt * 1.6; c.rotation.z += dt * 5; c.material.opacity = 1 - c.userData.t / 1.6;
-        if (c.userData.t > 1.6) c.visible = false;
-      }
-      view.render(dt);
-      requestAnimationFrame(frame);
+    function coin(x, y, z, boom) {
+      let c = coins.find(c => !c.visible);
+      if (!c) { c = new THREE.Mesh(coinGeo, coinMat.clone()); c.rotation.x = PI / 2; coins.push(c); scene.add(c); }
+      c.visible = true; c.userData.t = 0; c.material.color.set(boom ? '#4ade80' : '#f5c542'); c.position.set(x, y, z);
     }
-    function pickAt(e) {
-      const r = canvas.getBoundingClientRect();
-      ray.setFromCamera({ x: ((e.clientX - r.left) / r.width) * 2 - 1, y: -((e.clientY - r.top) / r.height) * 2 + 1 }, camera);
+    // walking: inside the plaza, not through the lots
+    function move(dt) {
+      const f = (keys.w || keys.arrowup ? 1 : 0) - (keys.s || keys.arrowdown ? 1 : 0), s = (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0);
+      if (!f && !s) return 0;
+      const speed = keys.shift ? 7 : 4.2, len = Math.hypot(f, s), sin = Math.sin(me.yaw), cos = Math.cos(me.yaw);
+      me.x += (-sin * f + cos * s) / len * speed * dt; me.z += (-cos * f - sin * s) / len * speed * dt;
+      const lim = cx - 0.6; me.x = Math.max(-lim, Math.min(lim, me.x)); me.z = Math.max(-lim, Math.min(lim, me.z));
+      for (const l of lots) { // push out of a lot along the shallower side
+        const h = P / 2 + 0.35, dx = me.x - l.x, dz = me.z - l.z;
+        if (Math.abs(dx) < h && Math.abs(dz) < h) { if (h - Math.abs(dx) < h - Math.abs(dz)) me.x = l.x + Math.sign(dx || 1) * h; else me.z = l.z + Math.sign(dz || 1) * h; }
+      }
+      return speed;
+    }
+    // what's under the crosshair (a lot index, 'crate', or -1), within reach
+    function aimed() {
+      ray.setFromCamera({ x: 0, y: 0 }, camera); ray.far = 9;
       const targets = lots.map(l => l.pad).concat(lots.map(l => l.holder)).concat(crate ? [crate.root] : []);
       for (const h of ray.intersectObjects(targets, true)) {
         let o = h.object;
         while (o && !o.userData.crate && o.userData.lot === undefined && !lots.some(l => l.holder === o)) o = o.parent;
         if (!o) continue;
         if (o.userData.crate) return 'crate';
-        if (o.userData.lot !== undefined) return o.userData.lot;
-        return lots.findIndex(l => l.holder === o);
+        return o.userData.lot !== undefined ? o.userData.lot : lots.findIndex(l => l.holder === o);
       }
       return -1;
     }
-    canvas.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, yaw, pitch, moved: false }; });
-    addEventListener('pointermove', e => {
-      if (drag) { const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true; yaw = drag.yaw + dx * 0.006; pitch = Math.min(1.25, Math.max(0.22, drag.pitch + dy * 0.004)); }
-      else if (e.target === canvas) { const p = pickAt(e); hover = typeof p === 'number' ? p : -1; canvas.style.cursor = p === -1 ? 'grab' : 'pointer'; }
+    function frame(now) {
+      if (!running) return;
+      const dt = Math.min(0.05, (now - last) / 1000 || 0); last = now; t += dt;
+      const speed = move(dt); me.walk += speed * dt * 1.9;
+      const bob = reduceMotion || !speed ? 0 : Math.abs(Math.cos(me.walk)) * 0.04;
+      camera.position.set(me.x, EYE_T + bob, me.z); camera.rotation.set(me.pitch, me.yaw, 0); camera.updateMatrixWorld(true);
+      if (crate && Math.hypot(me.x - crate.root.position.x, me.z - crate.root.position.z) < 1.6) handlers.onCrate(); // walk into it to claim
+      const a = aimed(); if (a !== aim) { aim = a; handlers.onAim(a); }
+      if (streets) streets.userData.tick(t);
+      lots.forEach((l, i) => { animate(l.anims, t); l.pad.material.emissive.set(i === aim ? '#3a5a8a' : '#000'); l.pad.material.emissiveIntensity = i === aim ? 0.5 : 0; });
+      if (crate) { crate.root.rotation.y = t * 1.5; crate.root.position.y = 0.6 + Math.sin(t * 3) * 0.2; }
+      // production lines: boxes come off the machines and ride the belt to the till (more income, more boxes)
+      beltMat.map.offset.x -= dt * LINE.speed / 0.6; // 0.6 m between ribs
+      const boom = tycoon && CC.eventOn(tycoon, 'boom');
+      lots.forEach((l, i) => {
+        const line = l.line; if (!line) return;
+        const inc = tycoon ? CC.bIncome(tycoon, CC.BUILDINGS[i]) : 0, half = LINE.length / 2;
+        line.until -= dt * Math.min(3, 0.35 + Math.log10(inc + 1) * 0.3) * (boom ? 2 : 1);
+        if (line.until <= 0 && boxModel) {
+          line.until = 1;
+          let it = line.items.find(o => !o.visible);
+          if (!it) { it = boxModel.clone(true); it.scale.setScalar(0.55); line.items.push(it); line.group.add(it); }
+          it.visible = true; it.position.set(line.stands[Math.floor(Math.random() * line.stands.length)], LINE.height + 0.03, line.z); it.rotation.y = Math.random() * 0.4 - 0.2;
+        }
+        for (const it of line.items) if (it.visible) {
+          it.position.x += LINE.speed * dt;
+          if (it.position.x > half + 0.1) { it.visible = false; coin(l.x + half + 0.45, LINE.height + 1, l.z + line.z, boom); }
+        }
+      });
+      for (const c of coins) if (c.visible) {
+        c.userData.t += dt; c.position.y += dt * 1.2; c.rotation.z += dt * 6; c.material.opacity = 1 - c.userData.t / 1.2;
+        if (c.userData.t > 1.2) c.visible = false;
+      }
+      view.render(dt);
+      requestAnimationFrame(frame);
+    }
+    // mouse look (pointer lock) and keys
+    const locked = () => document.pointerLockElement === canvas;
+    canvas.addEventListener('click', () => { if (!locked()) canvas.requestPointerLock(); else if (typeof aim === 'number' && aim >= 0) handlers.onLot(aim); });
+    addEventListener('mousemove', e => {
+      if (!locked()) return;
+      me.yaw -= e.movementX * 0.0022; me.pitch = Math.max(-1.3, Math.min(1.3, me.pitch - e.movementY * 0.0022));
     });
-    addEventListener('pointerup', e => {
-      if (drag && !drag.moved && e.target === canvas) { const p = pickAt(e); if (p === 'crate') handlers.onCrate(); else if (p >= 0) handlers.onLot(p); }
-      drag = null;
+    const typing = () => /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName);
+    addEventListener('keydown', e => {
+      if (!running || typing()) return;
+      const k = e.key.toLowerCase();
+      if (['w', 'a', 's', 'd', 'shift', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) { keys[k] = true; if (locked()) e.preventDefault(); }
+      if (k === 'e' && typeof aim === 'number' && aim >= 0) handlers.onLot(aim);
+      if (k === 'r' && typeof aim === 'number' && aim >= 0) handlers.onUpgrade(aim);
     });
-    canvas.addEventListener('wheel', e => { e.preventDefault(); dist = Math.min(95, Math.max(24, dist + e.deltaY * 0.04)); }, { passive: false });
+    addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+    addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
     return {
       update,
       start() { if (!running) { running = true; last = performance.now(); requestAnimationFrame(frame); } },
-      stop() { running = false; },
+      stop() { running = false; for (const k in keys) keys[k] = false; if (locked()) document.exitPointerLock(); },
+      place(x, z, yaw = me.yaw, pitch = me.pitch) { Object.assign(me, { x, z, yaw, pitch }); }, // for tests and screenshots
     };
   }
 

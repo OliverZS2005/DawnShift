@@ -35,6 +35,7 @@ var vm_flare: MeshInstance3D
 var vm_flare_t := 0.0
 var my_flash: OmniLight3D
 const VM_SCALE = 0.2
+const TWIST = 1.15 # most the opponent's upper body turns from the legs to aim (radians, about 65 degrees)
 const VM_LEN = {"pistol": 0.24, "smg": 0.44, "shotgun": 0.62, "sniper": 0.62, "rocket": 0.62}
 
 func _init() -> void:
@@ -319,7 +320,7 @@ func _pose_aim(ch: Dictionary, aim: float, recoil: float) -> void:
 	var xf = sk.global_transform
 	var inv = xf.affine_inverse()
 	var up = (inv.basis * Vector3.UP).normalized()
-	var twist = clamp(wrapf(aim - ch.legs, -PI, PI), -1.8, 1.8)
+	var twist = clamp(wrapf(aim - ch.legs, -PI, PI), -TWIST, TWIST)
 	for b in B.spine:
 		_turn_bone(sk, b, Quaternion(up, -twist / 3))
 	var d = Vector3(cos(aim), 0, sin(aim))
@@ -595,14 +596,16 @@ func update(view: Dictionary, you: int, names: Array, dt: float, pitch := 0.0, r
 		if ch.dead:
 			ch.dead = false
 			ch.fall.rotation.z = 0; ch.fall.position.x = 0; ch.gun_holder.visible = true
-		# legs go where they're moving (backpedalling when that's behind where they aim); standing still,
-		# the feet only turn once the body would twist too far
+		# legs go where they're moving, but the upper body only twists so far to keep aiming (no strafe
+		# clips): moving sideways, the legs point partway between the two; moving away from the aim, they
+		# backpedal. Standing still, the feet only turn once the body would twist too far.
 		var legs_to = ch.legs
 		if moving:
 			var mv = atan2(vel.z, vel.x)
-			var back = abs(wrapf(mv - float(s.ang), -PI, PI)) > 1.75
+			var rel = wrapf(mv - float(s.ang), -PI, PI)
+			var back = abs(rel) > 1.95
 			var key = "run" if sp > 2.6 else "walk"
-			legs_to = mv + PI if back else mv
+			legs_to = float(s.ang) + (clamp(wrapf(mv + PI - float(s.ang), -PI, PI), -TWIST, TWIST) if back else clamp(rel, -TWIST, TWIST))
 			_play(ch, key if ch.clips.has(key) else "run")
 			if ch.anim:
 				ch.anim.speed_scale = (-1.0 if back else 1.0) * clamp(sp / (4.4 if key == "run" else 1.5), 0.6, 1.4)

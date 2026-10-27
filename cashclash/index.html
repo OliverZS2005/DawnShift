@@ -105,9 +105,15 @@
   #result b { font-weight: 800; font-size: 84px; letter-spacing: .04em; line-height: .9; }
   #result span { font-family: var(--f-num); font-weight: 500; font-size: 18px; }
   @media (prefers-reduced-motion: reduce) { #hitmark.on, #vignette.on { animation-duration: .01s; } #keys, #crosshair i, #arenaWrap .meter > i { transition: none; } }
-  #cityWrap { position: relative; height: 44vh; min-height: 260px; display: none; border-bottom: 1px solid var(--line); }
-  #city { width: 100%; height: 100%; display: block; touch-action: none; }
+  #cityWrap { position: relative; height: 66vh; min-height: 340px; display: none; border-bottom: 1px solid var(--line); }
+  #city { width: 100%; height: 100%; display: block; touch-action: none; cursor: pointer; }
   #cityHint { position: absolute; left: 16px; bottom: 10px; background: #0b0d12aa; border-radius: 8px; padding: 4px 10px; font-size: 12px; pointer-events: none; }
+  /* first-person tycoon: a centre dot and what the lot you're looking at costs */
+  #cityDot { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: #F2EFE8; box-shadow: 0 0 0 1px #0b0d10aa; pointer-events: none; }
+  #cityPrompt { position: absolute; left: 50%; top: calc(50% + 28px); transform: translateX(-50%); background: rgba(11,13,16,.78); color: #F2EFE8; border-radius: 2px; padding: 6px 12px; font: 600 15px/1.45 'Barlow Condensed', 'Arial Narrow', sans-serif; letter-spacing: .02em; text-align: center; pointer-events: none; white-space: nowrap; }
+  #cityPrompt:empty { display: none; }
+  #cityPrompt kbd { font: 700 12px 'JetBrains Mono', ui-monospace, monospace; background: #F2EFE8; color: #0b0d10; border-radius: 2px; padding: 0 5px; margin-right: 6px; }
+  #cityPrompt .no { color: #B9B4AA; }
   #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--panel2); border: 1px solid var(--gold); padding: 10px 16px; border-radius: 10px; display: none; z-index: 20; }
   .log { max-height: 180px; overflow: auto; font-size: 13px; }
   .log div { padding: 3px 0; border-bottom: 1px dashed var(--line); }
@@ -134,7 +140,7 @@
     <button data-tab="reboot">🔄 Reboot</button>
   </nav>
 </header>
-<div id="cityWrap"><canvas id="city"></canvas><div id="cityHint" class="muted">Drag to look around · scroll to zoom · click a lot to buy</div></div>
+<div id="cityWrap"><canvas id="city"></canvas><div id="cityDot"></div><div id="cityPrompt"></div><div id="cityHint" class="muted">Click to walk around your business · WASD to move, Shift to run · look at a lot: E buys, R upgrades · Esc frees the mouse</div></div>
 <main id="view"></main>
 <div id="arenaWrap">
   <canvas id="cv"></canvas>
@@ -656,9 +662,23 @@ function minimap(s, me, op) {
 }
 
 // ---------- 3D city (tycoon view) ----------
+let cityAim = -1;
+// What the lot under the crosshair would cost (shown under the centre dot).
+function cityPrompt() {
+  const el = $('#cityPrompt'); if (!el) return;
+  if (cityAim === 'crate') { el.innerHTML = 'Golden crate · walk into it to claim'; return; }
+  if (cityAim < 0) { el.innerHTML = ''; return; }
+  const t = T(), b = BUILDINGS[cityAim];
+  if (!CC.unlocked(t, b)) { el.innerHTML = `${esc(b.name)} <span class="no">· reach ${esc(CC.LEVELS[b.unlock - 1])} to unlock</span>`; return; }
+  const buy = CC.bCost(t, b), up = CC.bUpCost(t, b), n = CC.owned(t, b.id);
+  el.innerHTML = `<b>${esc(b.name)}</b> ×${n}<br><kbd>E</kbd>Buy ${fmt(buy)}${t.money < buy ? ' <span class="no">(not enough)</span>' : ''}` +
+    (n ? `&nbsp;&nbsp;<kbd>R</kbd>Upgrade ${fmt(up)}${t.money < up ? ' <span class="no">(not enough)</span>' : ''}` : '');
+}
 const city = R3D.createCity($('#city'), {
-  onLot: i => { const b = BUILDINGS[i]; act({ type: 'buy', id: b.id }); if (mode === 'sp') render(); },
-  onCrate: () => { act({ type: 'claim' }); if (mode === 'sp') render(); },
+  onLot: i => { act({ type: 'buy', id: BUILDINGS[i].id }); if (mode === 'sp') render(); cityPrompt(); },
+  onUpgrade: i => { act({ type: 'bup', id: BUILDINGS[i].id }); if (mode === 'sp') render(); cityPrompt(); },
+  onCrate: () => { if (CC.eventOn(T(), 'crate')) { act({ type: 'claim' }); if (mode === 'sp') render(); } },
+  onAim: i => { cityAim = i; cityPrompt(); },
 });
 function showCity() {
   const on = tab === 'tycoon' && !G;
@@ -678,7 +698,7 @@ setInterval(() => {
   for (const r of SP.rivals) { const news = CC.tickRival(r, dt); if (news && mode === 'sp' && tab === 'battle') toast('📰 ' + news); }
   if ((eventT += dt) >= 1) { eventT = 0; const ev = CC.rollEvent(SP.tycoon); if (ev && mode === 'sp') eventToast(ev); }
   updateMoney();
-  if (tab === 'tycoon' && !G) city.update(T());
+  if (tab === 'tycoon' && !G) { city.update(T()); if (cityAim !== -1) cityPrompt(); }
   if ((saveT += dt) > 5) { saveT = 0; saveSP(); }
   if ((renderT += dt) > 1 && (tab === 'tycoon' || tab === 'armory' || tab === 'reboot') && !G) { renderT = 0; render(); }
 }, 100);

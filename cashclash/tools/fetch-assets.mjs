@@ -4,10 +4,11 @@
 //   * Poly Haven (https://polyhaven.com): photo-scanned props, PBR textures and HDRI skies
 //   * OpenGameArt (https://opengameart.org) CC0 gun models, converted with Blender (tools/guns.py)
 //   * ambientCG (https://ambientcg.com) photographed building facades, by day and at night (CC0)
+//   * Grab3D (https://grab3d.com) CC0 cars, repainted in real car colours
 //   * Microsoft Rocketbox (https://github.com/microsoft/Microsoft-Rocketbox, MIT licence): realistic people
 //     and their animations. Converting those from FBX needs Blender on the PATH (tools/people.py).
 // The downloaded files are committed, so you only need this to change or refresh the art.
-// Pass a section name to redo just that part: models, textures, skies, facades, guns, people, fonts.
+// Pass a section name to redo just that part: models, textures, skies, facades, cars, guns, people, fonts.
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -24,15 +25,20 @@ const UA = { 'User-Agent': 'CashClash-asset-fetch/1.0 (+https://github.com/Olive
 
 // Poly Haven scans are film-quality; these budgets keep them small enough for a web game.
 const TEX_SIZE = 512;                                    // max texture size inside models
-const SIMPLIFY = { shrub: 0.12, bench: 0.5, street_lamp: 0.15, barrier: 0.1, plastic_crate: 0.2, hydrant: 0.3, covered_car: 0.35 }; // keep this fraction of triangles
+const SIMPLIFY = { shrub: 0.12, bench: 0.5, street_lamp: 0.15, barrier: 0.1, plastic_crate: 0.2, hydrant: 0.3, covered_car: 0.35,
+  drill_press: 0.25, generator: 0.25, compressor: 0.25, cash_register: 0.4, box: 0.2 }; // keep this fraction of triangles
 // Some scans ship two versions side by side (clean and weathered): keep one, centred on the origin.
 const ONE_VARIANT = { hydrant: /_aged/, trash_can: /_rust/, military_crate: /_b$/ };
+const RECENTRE = ['compressor']; // modelled away from the origin
 // name in the game -> Poly Haven asset id
 const MODELS = {
   crate: 'wooden_crate_01', military_crate: 'old_military_crate', barrel: 'barrel_03', barrier: 'concrete_road_barrier',
   street_lamp: 'street_lamp_01', trash_can: 'metal_trash_can', hydrant: 'fire_hydrant', utility_box: 'utility_box_01',
   plastic_crate: 'plastic_crate_01', covered_car: 'covered_car',
   shrub: 'shrub_01', bench: 'modular_street_seating',
+  // the tycoon's production lines: machines, the boxes they turn out, and the till at the end
+  drill_press: 'drill_press_01', generator: 'portable_generator', compressor: 'old_military_compressor',
+  cash_register: 'CashRegister_01', box: 'cardboard_box_01',
 };
 const TEXTURES = {
   concrete_floor: 'concrete_floor_worn_001', corrugated: 'corrugated_iron', metal_plate: 'metal_plate', marble: 'marble_01',
@@ -46,6 +52,16 @@ const FACADES = {
   brick2: { day: 'Facade020A', night: 'Facade020B', res: '2K' },
   concrete: { day: 'Facade019A', night: 'Facade019B', res: '2K' },
   tower: { day: 'Facade012', night: 'Facade015', res: '1K' },
+};
+// Cars (Grab3D slug -> paint). Their paint is baked into a pastel texture: the dominant body colour is
+// re-tinted to a real car colour (keeping the shading), the glass made dark and reflective, rims chrome.
+const CARS = {
+  sedan: { slug: '1990s-sedan', paint: '#1f2d45' },        // navy
+  sedan2: { slug: '1980s-sedan', paint: '#5a1a1d' },       // maroon
+  wagon: { slug: '1990s-station-wagon', paint: '#a3a7aa' }, // silver
+  van: { slug: '1990s-delivery-van', paint: '#e4e3de' },    // white
+  suv: { slug: '1990s-suv', paint: '#151617' },            // black
+  taxi: { slug: '1990s-taxi', paint: '#e8b10d' },          // taxi yellow
 };
 const SKIES = { day: 'kloofendal_48d_partly_cloudy_puresky', sunset: 'qwantani_sunset_puresky', dusk: 'qwantani_dusk_2_puresky', night: 'rogland_clear_night' };
 // The guns (OpenGameArt pages, all CC0). file: the download; model: the file inside it to convert;
@@ -79,7 +95,7 @@ async function writeGlb(doc, rel, ratio, texSize = TEX_SIZE, drop) {
   // meshopt/quantization: Godot can't read them. unlit: those materials would ignore the scene's lighting.
   for (const ext of doc.getRoot().listExtensionsUsed()) if (/meshopt|quantization|unlit/i.test(ext.extensionName)) ext.dispose();
   if (drop) for (const n of doc.getRoot().listNodes()) if (drop.test(n.getName())) n.dispose();
-  const steps = drop ? [center({ pivot: 'below' }), dedup(), prune()] : [dedup(), prune()];
+  const steps = drop || RECENTRE.includes(path.basename(rel, '.glb')) ? [center({ pivot: 'below' }), dedup(), prune()] : [dedup(), prune()];
   if (ratio) steps.push(weld(), simplify({ simplifier: MeshoptSimplifier, ratio, error: 0.04 })); // props are seen from metres away
   steps.push(textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [texSize, texSize], quality: 82 }));
   await doc.transform(...steps);
@@ -121,6 +137,44 @@ if (want('facades')) {
     const night = await set(f.night, '1K');
     await jpg(night('Color'), 1024, `textures/facade_${name}_night.jpg`);
     if (fs.existsSync(night('Emission'))) await jpg(night('Emission'), 1024, `textures/facade_${name}_emit.jpg`);
+  }
+}
+
+if (want('cars')) {
+  console.log('Cars (Grab3D, repainted)');
+  const hsl = (r, g, b) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+    if (!d) return [0, 0, l]; const s = d / (1 - Math.abs(2 * l - 1));
+    const h = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return [h / 6, s, l]; };
+  const rgb = (h, s, l) => { const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h * 6) % 2 - 1)), m = l - c / 2;
+    const [r, g, b] = [[c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x]][Math.floor(h * 6) % 6]; return [r + m, g + m, b + m]; };
+  for (const [name, car] of Object.entries(CARS)) {
+    const raw = path.join(TMP, `car-${name}.glb`);
+    fs.writeFileSync(raw, await get(`https://grab3d.com/dl/${car.slug}/${car.slug}.glb`));
+    const doc = await io.read(raw), hex = car.paint.replace('#', ''), target = hsl(...[0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16) / 255));
+    for (const m of doc.getRoot().listMaterials()) {
+      const n = m.getName();
+      if (/glass/.test(n)) m.setBaseColorFactor([0.035, 0.045, 0.055, 1]).setRoughnessFactor(0.04).setMetallicFactor(0.55);
+      else if (/rim/.test(n)) m.setMetallicFactor(1).setRoughnessFactor(0.16);
+      else if (/_paint_/.test(n)) m.setBaseColorFactor([...rgb(...target), 1]);
+      else if (/tire/.test(n)) m.setBaseColorFactor([0.32, 0.32, 0.33, 1]); // black rubber, not grey
+      if (/body_pbr/.test(n)) m.setRoughnessFactor(0.5); // glossier paint (scales the texture's roughness)
+      const tex = /body_pbr/.test(n) && m.getBaseColorTexture();
+      if (!tex) continue;
+      // find the body colour (the most common saturated hue) and move those pixels to the paint colour
+      const { data, info } = await sharp(Buffer.from(tex.getImage())).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      const bins = new Array(36).fill(0), px = [];
+      for (let i = 0; i < data.length; i += 4) { const c = hsl(data[i] / 255, data[i + 1] / 255, data[i + 2] / 255); px.push(c); if (c[1] > 0.25 && c[2] > 0.25 && c[2] < 0.9) bins[Math.floor(c[0] * 36) % 36]++; }
+      const dom = (bins.indexOf(Math.max(...bins)) + 0.5) / 36;
+      let ls = 0, ln = 0; for (const c of px) if (Math.min(Math.abs(c[0] - dom), 1 - Math.abs(c[0] - dom)) < 0.06 && c[1] > 0.18) { ls += c[2]; ln++; }
+      const domL = ls / Math.max(1, ln);
+      px.forEach((c, k) => {
+        if (Math.min(Math.abs(c[0] - dom), 1 - Math.abs(c[0] - dom)) >= 0.06 || c[1] <= 0.18) return;
+        const [r, g, b] = rgb(target[0], target[1], Math.min(0.97, target[2] * c[2] / domL));
+        data[k * 4] = r * 255; data[k * 4 + 1] = g * 255; data[k * 4 + 2] = b * 255;
+      });
+      tex.setImage(await sharp(data, { raw: info }).png().toBuffer()).setMimeType('image/png');
+    }
+    await writeGlb(doc, `models/car_${name}.glb`, 0, 1024);
   }
 }
 
@@ -178,6 +232,7 @@ Everything here is CC0 (public domain) unless noted. Credit isn't required for C
 
 - **Poly Haven** (https://polyhaven.com), CC0: ${Object.values(MODELS).join(', ')} (models); ${Object.values(TEXTURES).join(', ')} (textures); ${Object.values(SKIES).join(', ')} (HDRI skies).
 - **ambientCG** (https://ambientcg.com), CC0: building facades ${Object.values(FACADES).flatMap(f => [f.day, f.night]).join(', ')}.
+- **Grab3D** (https://grab3d.com), CC0 cars (repainted): ${Object.values(CARS).map(c => c.slug).join(', ')}.
 - **OpenGameArt** (https://opengameart.org), CC0 guns: ${Object.values(GUNS).map(g => g.page).join(', ')} (https://opengameart.org/content/<name>).
 
 People (MIT licence, notice below): **Microsoft Rocketbox** avatars ${Object.values(PEOPLE).join(', ')} and animations ${Object.values(PEOPLE_CLIPS).map(c => c.split('/')[1]).join(', ')} (https://github.com/microsoft/Microsoft-Rocketbox), converted to glTF.
