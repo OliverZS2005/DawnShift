@@ -5,10 +5,12 @@
 //   * OpenGameArt (https://opengameart.org) CC0 gun models, converted with Blender (tools/guns.py)
 //   * ambientCG (https://ambientcg.com) photographed building facades, by day and at night (CC0)
 //   * Grab3D (https://grab3d.com) CC0 cars, repainted in real car colours
+//   * Poly Haven modular facade kits: modelled building fronts (windows, doors, mouldings), cut into 3 m
+//     bays with Blender (tools/kit.py) and put together into city blocks by the game
 //   * Microsoft Rocketbox (https://github.com/microsoft/Microsoft-Rocketbox, MIT licence): realistic people
 //     and their animations. Converting those from FBX needs Blender on the PATH (tools/people.py).
 // The downloaded files are committed, so you only need this to change or refresh the art.
-// Pass a section name to redo just that part: models, textures, skies, facades, cars, guns, people, fonts.
+// Pass a section name to redo just that part: models, textures, skies, facades, kits, cars, guns, people, fonts.
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -63,6 +65,35 @@ const CARS = {
   suv: { slug: '1990s-suv', paint: '#151617' },            // black
   taxi: { slug: '1990s-taxi', paint: '#e8b10d' },          // taxi yellow
 };
+// Modelled building fronts (Poly Haven kits): piece name -> the kit parts merged into one 3 m bay. Ground
+// floor bays (door, shop, plain) carry the plinth; upper bays carry the moulding along their floor line.
+const KITS = {
+  apartments: { id: 'modular_urban_apartments_facade', pieces: {
+    door: ['wall_door_centered_large_01', 'door_centered_large_01', 'base_standard_01'],
+    shop: ['wall_window_centered_double_01', 'window_centered_double_01', 'base_standard_01'],
+    plain: ['wall_standard_standard_01', 'base_standard_01'],
+    large: ['wall_window_centered_large_01', 'window_centered_large_01', 'cornice_standard_standard_01'],
+    double: ['wall_window_centered_double_01', 'window_centered_double_01', 'cornice_standard_standard_01'],
+    small: ['wall_window_centered_small_01', 'window_centered_small_01', 'cornice_standard_standard_01'],
+    offset: ['wall_window_offset_small_01', 'window_offset_small_01', 'cornice_standard_standard_01'],
+    crown: ['crown_standard_standard_01'], pier: ['wall_pier_corner_01'], crown_pier: ['crown_pier_corner_01'],
+  } },
+  factory: { id: 'modular_factory_facade', pieces: {
+    door: ['wall_door_recessed_large_01', 'door_recessed_large_01', 'base_standard_standard_01'],
+    shop: ['wall_window_tall_large_01', 'window_tall_large_01', 'base_standard_standard_01'],
+    plain: ['wall_standard_standard_01', 'base_standard_standard_01'],
+    large: ['wall_window_tall_large_01', 'window_tall_large_01', 'cornice02_standard_standard_01'],
+    double: ['wall_window_centered_double_01', 'window_centered_double_01', 'cornice02_standard_standard_01'],
+    small: ['wall_window_tall_small_01', 'window_tall_small_01', 'cornice02_standard_standard_01'],
+    offset: ['wall_window_centered_large_01', 'window_centered_large_01', 'cornice02_standard_standard_01'],
+    crown: ['crown_standard_standard_01'], pier: ['wall_pier_corner_01'], crown_pier: ['crown_pier_corner_01'],
+  } },
+  // chain-link fence round the lots you can't buy yet: a 1.9 m panel and a post
+  // (the wire's see-through holes come as a separate alpha map: `alpha` puts it into the colour texture)
+  fence: { id: 'modular_chainlink_fence', keep: true, pieces: { panel: ['modular_chainlink_fence_double'], post: ['modular_chainlink_fence_post'] },
+    alpha: { modular_chainlink_fence_wire: 'wire_alpha' } },
+};
+const KIT_TEX = 1024;
 const SKIES = { day: 'kloofendal_48d_partly_cloudy_puresky', sunset: 'qwantani_sunset_puresky', dusk: 'qwantani_dusk_2_puresky', night: 'rogland_clear_night' };
 // The guns (OpenGameArt pages, all CC0). file: the download; model: the file inside it to convert;
 // muzzle: which way the barrel points in it; drop: stray parts (spare magazine, silencer); finish:
@@ -137,6 +168,30 @@ if (want('facades')) {
     const night = await set(f.night, '1K');
     await jpg(night('Color'), 1024, `textures/facade_${name}_night.jpg`);
     if (fs.existsSync(night('Emission'))) await jpg(night('Emission'), 1024, `textures/facade_${name}_emit.jpg`);
+  }
+}
+
+if (want('kits')) {
+  console.log('Facade kits (Poly Haven, cut into bays with Blender)');
+  for (const [name, kit] of Object.entries(KITS)) {
+    if (only === 'kits' && process.argv[3] && process.argv[3] !== name) continue;
+    const g = (await api(kit.id)).gltf['2k'].gltf, dir = path.join(TMP, kit.id);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'kit.gltf'), await get(g.url));
+    for (const [rel, f] of Object.entries(g.include || {})) { fs.mkdirSync(path.join(dir, path.dirname(rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), await get(f.url)); }
+    fs.writeFileSync(path.join(dir, 'pieces.json'), JSON.stringify(kit.pieces));
+    const raw = path.join(dir, 'out.glb');
+    execFileSync('blender', ['-b', '--python', path.join(path.dirname(fileURLToPath(import.meta.url)), 'kit.py'), '--', path.join(dir, 'kit.gltf'), raw, path.join(dir, 'pieces.json'), kit.keep ? 'keep' : ''], { stdio: 'ignore' });
+    const doc = await io.read(raw), files = await api(kit.id);
+    for (const [mat, map] of Object.entries(kit.alpha || {})) {
+      const m = doc.getRoot().listMaterials().find(x => x.getName() === mat), tex = m && m.getBaseColorTexture();
+      if (!tex) continue;
+      const img = sharp(Buffer.from(tex.getImage())), { width, height } = await img.metadata();
+      const alpha = await sharp(await get(files[map]['2k'].jpg.url)).resize(width, height).toColourspace('b-w').raw().toBuffer();
+      tex.setImage(await img.joinChannel(alpha, { raw: { width, height, channels: 1 } }).png().toBuffer()).setMimeType('image/png');
+      m.setAlphaMode('MASK').setAlphaCutoff(0.5);
+    }
+    await writeGlb(doc, `models/kit_${name}.glb`, 0, KIT_TEX);
   }
 }
 
@@ -230,7 +285,7 @@ fs.writeFileSync(path.join(ROOT, 'CREDITS.md'), `# Art credits
 
 Everything here is CC0 (public domain) unless noted. Credit isn't required for CC0, but it's deserved.
 
-- **Poly Haven** (https://polyhaven.com), CC0: ${Object.values(MODELS).join(', ')} (models); ${Object.values(TEXTURES).join(', ')} (textures); ${Object.values(SKIES).join(', ')} (HDRI skies).
+- **Poly Haven** (https://polyhaven.com), CC0: ${Object.values(MODELS).join(', ')} and the modular facade kits ${Object.values(KITS).map(k => k.id).join(', ')} (models); ${Object.values(TEXTURES).join(', ')} (textures); ${Object.values(SKIES).join(', ')} (HDRI skies).
 - **ambientCG** (https://ambientcg.com), CC0: building facades ${Object.values(FACADES).flatMap(f => [f.day, f.night]).join(', ')}.
 - **Grab3D** (https://grab3d.com), CC0 cars (repainted): ${Object.values(CARS).map(c => c.slug).join(', ')}.
 - **OpenGameArt** (https://opengameart.org), CC0 guns: ${Object.values(GUNS).map(g => g.page).join(', ')} (https://opengameart.org/content/<name>).

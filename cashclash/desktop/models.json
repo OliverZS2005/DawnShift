@@ -3156,143 +3156,34 @@
   "forSale": {
    "parts": [
     {
-     "t": "cyl",
-     "s": [
-      0.04,
-      0.04,
-      1.4
-     ],
-     "p": [
-      0.5,
-      0.7,
-      -0.6
-     ],
-     "c": "#8a6a43"
-    },
-    {
-     "t": "cyl",
-     "s": [
-      0.04,
-      0.04,
-      1.4
-     ],
-     "p": [
-      0.5,
-      0.7,
-      0.6
-     ],
-     "c": "#8a6a43"
-    },
-    {
      "t": "box",
      "s": [
-      0.06,
-      0.8,
-      1.5
+      0.07,
+      1.9,
+      0.07
      ],
      "p": [
-      0.52,
-      1.3,
-      0
+      -0.75,
+      0.95,
+      3.2
      ],
-     "c": "#f5f5f5",
-     "e": "#ffffff",
-     "ei": 0.1
+     "c": "#e8e4dc",
+     "ro": 0.5
     },
     {
      "t": "box",
      "s": [
       0.07,
-      0.25,
-      1.3
+      1.9,
+      0.07
      ],
      "p": [
-      0.53,
-      1.475,
-      0
+      0.75,
+      0.95,
+      3.2
      ],
-     "c": "#2f9e44"
-    },
-    {
-     "t": "cone",
-     "s": [
-      0.22,
-      0.6
-     ],
-     "p": [
-      1.6,
-      0.3,
-      -1.6
-     ],
-     "c": "#ff7b1f"
-    },
-    {
-     "t": "cyl",
-     "s": [
-      0.15,
-      0.23,
-      0.08
-     ],
-     "p": [
-      1.6,
-      0.33999999999999997,
-      -1.6
-     ],
-     "c": "#ffffff"
-    },
-    {
-     "t": "cone",
-     "s": [
-      0.22,
-      0.6
-     ],
-     "p": [
-      1.8,
-      0.3,
-      1.4
-     ],
-     "c": "#ff7b1f"
-    },
-    {
-     "t": "cyl",
-     "s": [
-      0.15,
-      0.23,
-      0.08
-     ],
-     "p": [
-      1.8,
-      0.33999999999999997,
-      1.4
-     ],
-     "c": "#ffffff"
-    },
-    {
-     "t": "cone",
-     "s": [
-      0.22,
-      0.6
-     ],
-     "p": [
-      -1.2,
-      0.3,
-      1.8
-     ],
-     "c": "#ff7b1f"
-    },
-    {
-     "t": "cyl",
-     "s": [
-      0.15,
-      0.23,
-      0.08
-     ],
-     "p": [
-      -1.2,
-      0.33999999999999997,
-      1.8
-     ],
-     "c": "#ffffff"
+     "c": "#e8e4dc",
+     "ro": 0.5
     }
    ]
   },
@@ -3301,119 +3192,257 @@
     {
      "t": "box",
      "s": [
-      0.06,
-      1.3,
-      5.2
+      0.07,
+      1.9,
+      0.07
      ],
      "p": [
-      -2.6,
-      0.65,
-      0
+      -0.75,
+      0.95,
+      4.05
      ],
-     "c": "#9aa1a8",
-     "m": 0.8,
-     "o": 0.6
+     "c": "#6b6f73",
+     "m": 0.7,
+     "ro": 0.45
     },
     {
      "t": "box",
      "s": [
-      0.06,
-      1.3,
-      5.2
+      0.07,
+      1.9,
+      0.07
      ],
      "p": [
-      2.6,
-      0.65,
-      0
-     ],
-     "c": "#9aa1a8",
-     "m": 0.8,
-     "o": 0.6
-    },
-    {
-     "t": "box",
-     "s": [
-      5.2,
-      1.3,
-      0.06
-     ],
-     "p": [
-      0,
-      0.65,
-      -2.6
-     ],
-     "c": "#9aa1a8",
-     "m": 0.8,
-     "o": 0.6
-    },
-    {
-     "t": "box",
-     "s": [
-      5.2,
-      1.3,
-      0.06
-     ],
-     "p": [
-      0,
-      0.65,
-      2.6
-     ],
-     "c": "#9aa1a8",
-     "m": 0.8,
-     "o": 0.6
-    },
-    {
-     "t": "box",
-     "s": [
-      0.08,
-      0.7,
-      0.9
-     ],
-     "p": [
-      2.65,
       0.75,
-      0
+      0.95,
+      4.05
      ],
-     "c": "#c9372c",
-     "e": "#c9372c",
-     "ei": 0.4
-    },
-    {
-     "t": "torus",
-     "s": [
-      0.18,
-      0.05
-     ],
-     "p": [
-      2.72,
-      1.25,
-      0
-     ],
-     "r": [
-      0,
-      1.5707963267948966,
-      0
-     ],
-     "c": "#d4a937",
-     "m": 1
-    },
-    {
-     "t": "box",
-     "s": [
-      0.1,
-      0.35,
-      0.4
-     ],
-     "p": [
-      2.72,
-      1.125,
-      0
-     ],
-     "c": "#d4a937",
-     "m": 1
+     "c": "#6b6f73",
+     "m": 0.7,
+     "ro": 0.45
     }
    ]
   },
+  "boards": {
+   "forSale": {
+    "text": "FOR SALE",
+    "colors": [
+     "#b8352a",
+     "#d6d0c4"
+    ],
+    "at": [
+     0,
+     1.4,
+     3.24
+    ]
+   },
+   "locked": {
+    "text": "COMING SOON",
+    "colors": [
+     "#e6e1d6",
+     "#9c2f27"
+    ],
+    "at": [
+     0,
+     1.4,
+     4.09
+    ]
+   }
+  },
+  "fence": [
+   [
+    "panel",
+    3.8,
+    3.8,
+    0
+   ],
+   [
+    "post",
+    3.8,
+    3.8,
+    0
+   ],
+   [
+    "panel",
+    1.9,
+    3.8,
+    0
+   ],
+   [
+    "post",
+    1.9,
+    3.8,
+    0
+   ],
+   [
+    "panel",
+    0,
+    3.8,
+    0
+   ],
+   [
+    "post",
+    0,
+    3.8,
+    0
+   ],
+   [
+    "panel",
+    -1.9,
+    3.8,
+    0
+   ],
+   [
+    "post",
+    -1.9,
+    3.8,
+    0
+   ],
+   [
+    "panel",
+    3.8,
+    -3.8,
+    1.5708
+   ],
+   [
+    "post",
+    3.8,
+    -3.8,
+    0
+   ],
+   [
+    "panel",
+    3.8,
+    -1.9,
+    1.5708
+   ],
+   [
+    "post",
+    3.8,
+    -1.9,
+    0
+   ],
+   [
+    "panel",
+    3.8,
+    0,
+    1.5708
+   ],
+   [
+    "post",
+    3.8,
+    0,
+    0
+   ],
+   [
+    "panel",
+    3.8,
+    1.9,
+    1.5708
+   ],
+   [
+    "post",
+    3.8,
+    1.9,
+    0
+   ],
+   [
+    "panel",
+    -3.8,
+    -3.8,
+    3.1416
+   ],
+   [
+    "post",
+    -3.8,
+    -3.8,
+    0
+   ],
+   [
+    "panel",
+    -1.9,
+    -3.8,
+    3.1416
+   ],
+   [
+    "post",
+    -1.9,
+    -3.8,
+    0
+   ],
+   [
+    "panel",
+    0,
+    -3.8,
+    3.1416
+   ],
+   [
+    "post",
+    0,
+    -3.8,
+    0
+   ],
+   [
+    "panel",
+    1.9,
+    -3.8,
+    3.1416
+   ],
+   [
+    "post",
+    1.9,
+    -3.8,
+    0
+   ],
+   [
+    "panel",
+    -3.8,
+    3.8,
+    -1.5708
+   ],
+   [
+    "post",
+    -3.8,
+    3.8,
+    0
+   ],
+   [
+    "panel",
+    -3.8,
+    1.9,
+    -1.5708
+   ],
+   [
+    "post",
+    -3.8,
+    1.9,
+    0
+   ],
+   [
+    "panel",
+    -3.8,
+    0,
+    -1.5708
+   ],
+   [
+    "post",
+    -3.8,
+    0,
+    0
+   ],
+   [
+    "panel",
+    -3.8,
+    -1.9,
+    -1.5708
+   ],
+   [
+    "post",
+    -3.8,
+    -1.9,
+    0
+   ]
+  ],
   "crate": {
    "parts": [
     {
@@ -3476,6 +3505,98 @@
      ],
      "c": "#b83a2d"
     }
+   ]
+  }
+ },
+ "SHOPS": {
+  "lemon": {
+   "kit": "apartments",
+   "floors": 1,
+   "g": "sd",
+   "u": "small",
+   "sign": [
+    "#ffd84a",
+    "#20331d"
+   ]
+  },
+  "cafe": {
+   "kit": "apartments",
+   "floors": 2,
+   "g": "sd",
+   "u": "large",
+   "sign": [
+    "#f3e3c3",
+    "#3b2416"
+   ]
+  },
+  "arcade": {
+   "kit": "apartments",
+   "floors": 2,
+   "g": "ds",
+   "u": "double",
+   "sign": [
+    "#ff5fd2",
+    "#16102a"
+   ]
+  },
+  "fact": {
+   "kit": "factory",
+   "floors": 2,
+   "g": "ds",
+   "u": "large",
+   "sign": [
+    "#ffffff",
+    "#2f3a44"
+   ]
+  },
+  "bank": {
+   "kit": "apartments",
+   "floors": 3,
+   "g": "sd",
+   "u": "large",
+   "sign": [
+    "#e9c46a",
+    "#13233d"
+   ]
+  },
+  "oil": {
+   "kit": "factory",
+   "floors": 2,
+   "g": "sd",
+   "u": "small",
+   "sign": [
+    "#ffb000",
+    "#151515"
+   ]
+  },
+  "space": {
+   "kit": "factory",
+   "floors": 3,
+   "g": "ds",
+   "u": "double",
+   "sign": [
+    "#9be7ff",
+    "#0d1830"
+   ]
+  },
+  "ailab": {
+   "kit": "factory",
+   "floors": 4,
+   "g": "sd",
+   "u": "offset",
+   "sign": [
+    "#ffffff",
+    "#3b1f6e"
+   ]
+  },
+  "dyson": {
+   "kit": "apartments",
+   "floors": 5,
+   "g": "ds",
+   "u": "double",
+   "sign": [
+    "#ffcf4a",
+    "#3a1d05"
    ]
   }
  },
@@ -6141,6 +6262,11 @@
    "concrete",
    "tower"
   ],
+  "kits": {
+   "apartments": "models/kit_apartments.glb",
+   "factory": "models/kit_factory.glb",
+   "fence": "models/kit_fence.glb"
+  },
   "heights": {},
   "fighter": {
    "people": [
@@ -6268,6 +6394,22 @@
     58
    ]
   },
+  "kit": {
+   "names": [
+    "apartments",
+    "factory"
+   ],
+   "bay": 3,
+   "floor": 3,
+   "inset": 0.6,
+   "reach": 75,
+   "upper": [
+    "large",
+    "double",
+    "small",
+    "offset"
+   ]
+  },
   "arena": {
    "clear": [
     30,
@@ -6322,13 +6464,23 @@
      "w": 9.28,
      "d": 15,
      "floors": 8,
-     "h": 27,
+     "h": 24,
      "facade": "brick2",
      "tint": "#e9e3dc",
      "near": true,
      "shade": true,
      "tank": true,
-     "seed": 146420
+     "seed": 146420,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 2,
+       "n": 3,
+       "g": "dss",
+       "u": "small",
+       "d": 29.95
+      }
+     ]
     },
     {
      "x": -7.86,
@@ -6336,13 +6488,23 @@
      "w": 17.7,
      "d": 15,
      "floors": 6,
-     "h": 20.4,
+     "h": 18,
      "facade": "brick",
      "tint": "#efe4da",
      "near": true,
      "shade": true,
      "tank": true,
-     "seed": 351760
+     "seed": 351760,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 2,
+       "n": 6,
+       "g": "ddsssd",
+       "u": "small",
+       "d": 22.42
+      }
+     ]
     },
     {
      "x": 17.13,
@@ -6350,13 +6512,30 @@
      "w": 15.58,
      "d": 15,
      "floors": 5,
-     "h": 17.1,
+     "h": 15,
      "facade": "concrete",
      "tint": "#ffffff",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 243607
+     "seed": 243607,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 1,
+       "n": 5,
+       "g": "dssss",
+       "u": "large",
+       "d": 29.99
+      },
+      {
+       "s": 2,
+       "n": 5,
+       "g": "dssss",
+       "u": "double",
+       "d": 27.1
+      }
+     ]
     },
     {
      "x": -40.08,
@@ -6392,13 +6571,23 @@
      "w": 8.1,
      "d": 15,
      "floors": 7,
-     "h": 23.7,
+     "h": 21,
      "facade": "concrete",
      "tint": "#e6e4df",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 971442
+     "seed": 971442,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 3,
+       "n": 3,
+       "g": "dss",
+       "u": "double",
+       "d": 25.51
+      }
+     ]
     },
     {
      "x": -6.23,
@@ -6406,13 +6595,23 @@
      "w": 8.4,
      "d": 15,
      "floors": 6,
-     "h": 20.4,
+     "h": 18,
      "facade": "concrete",
      "tint": "#e6e4df",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 578945
+     "seed": 578945,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 3,
+       "n": 3,
+       "g": "sdd",
+       "u": "large",
+       "d": 21.9
+      }
+     ]
     },
     {
      "x": 3.82,
@@ -6420,13 +6619,23 @@
      "w": 11.69,
      "d": 15,
      "floors": 6,
-     "h": 20.4,
+     "h": 18,
      "facade": "concrete",
      "tint": "#ffffff",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 636598
+     "seed": 636598,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 3,
+       "n": 4,
+       "g": "dssp",
+       "u": "double",
+       "d": 21.34
+      }
+     ]
     },
     {
      "x": 15.34,
@@ -6434,13 +6643,23 @@
      "w": 11.36,
      "d": 15,
      "floors": 8,
-     "h": 27,
+     "h": 24,
      "facade": "brick",
      "tint": "#ffffff",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 474843
+     "seed": 474843,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 3,
+       "n": 4,
+       "g": "dsps",
+       "u": "small",
+       "d": 26.01
+      }
+     ]
     },
     {
      "x": 28.82,
@@ -6476,13 +6695,23 @@
      "w": 15,
      "d": 12.1,
      "floors": 4,
-     "h": 13.8,
+     "h": 12,
      "facade": "concrete",
      "tint": "#e6e4df",
      "near": true,
      "shade": true,
      "tank": true,
-     "seed": 785240
+     "seed": 785240,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 0,
+       "n": 4,
+       "g": "dsps",
+       "u": "large",
+       "d": 33.52
+      }
+     ]
     },
     {
      "x": -37.5,
@@ -6490,13 +6719,23 @@
      "w": 15,
      "d": 14,
      "floors": 4,
-     "h": 13.8,
+     "h": 12,
      "facade": "brick2",
      "tint": "#e9e3dc",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 586786
+     "seed": 586786,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 0,
+       "n": 5,
+       "g": "ssdss",
+       "u": "small",
+       "d": 30.06
+      }
+     ]
     },
     {
      "x": -37.5,
@@ -6504,13 +6743,23 @@
      "w": 15,
      "d": 9.25,
      "floors": 9,
-     "h": 30.3,
+     "h": 27,
      "facade": "brick2",
      "tint": "#ffffff",
      "near": true,
      "shade": true,
      "tank": true,
-     "seed": 6255
+     "seed": 6255,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 0,
+       "n": 3,
+       "g": "dps",
+       "u": "offset",
+       "d": 31.54
+      }
+     ]
     },
     {
      "x": -37.5,
@@ -6518,13 +6767,23 @@
      "w": 15,
      "d": 6.66,
      "floors": 5,
-     "h": 17.1,
+     "h": 15,
      "facade": "brick",
      "tint": "#efe4da",
      "near": true,
      "shade": true,
      "tank": true,
-     "seed": 473131
+     "seed": 473131,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 0,
+       "n": 2,
+       "g": "ds",
+       "u": "offset",
+       "d": 34.82
+      }
+     ]
     },
     {
      "x": 37.5,
@@ -6532,13 +6791,23 @@
      "w": 15,
      "d": 18.22,
      "floors": 6,
-     "h": 20.4,
+     "h": 18,
      "facade": "brick",
      "tint": "#efe4da",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 707732
+     "seed": 707732,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 1,
+       "n": 6,
+       "g": "dsssss",
+       "u": "double",
+       "d": 32.27
+      }
+     ]
     },
     {
      "x": 37.5,
@@ -6546,13 +6815,23 @@
      "w": 15,
      "d": 17.4,
      "floors": 6,
-     "h": 20.4,
+     "h": 18,
      "facade": "brick",
      "tint": "#ffffff",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 566479
+     "seed": 566479,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 1,
+       "n": 6,
+       "g": "dpsssp",
+       "u": "large",
+       "d": 30.58
+      }
+     ]
     },
     {
      "x": 37.5,
@@ -6560,13 +6839,23 @@
      "w": 15,
      "d": 6.38,
      "floors": 6,
-     "h": 20.4,
+     "h": 18,
      "facade": "brick2",
      "tint": "#e9e3dc",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 413733
+     "seed": 413733,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 1,
+       "n": 2,
+       "g": "ds",
+       "u": "small",
+       "d": 34.89
+      }
+     ]
     },
     {
      "x": -22.35,
@@ -6574,13 +6863,23 @@
      "w": 15.75,
      "d": 15,
      "floors": 6,
-     "h": 20.4,
+     "h": 18,
      "facade": "brick2",
      "tint": "#e9e3dc",
      "near": true,
      "shade": false,
      "tank": true,
-     "seed": 865819
+     "seed": 865819,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 3,
+       "n": 5,
+       "g": "dspss",
+       "u": "small",
+       "d": 53.86
+      }
+     ]
     },
     {
      "x": -5.88,
@@ -6588,13 +6887,23 @@
      "w": 17.2,
      "d": 15,
      "floors": 3,
-     "h": 10.5,
+     "h": 9,
      "facade": "concrete",
      "tint": "#e6e4df",
      "near": true,
      "shade": true,
      "tank": true,
-     "seed": 428859
+     "seed": 428859,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 3,
+       "n": 6,
+       "g": "dsppss",
+       "u": "small",
+       "d": 49.35
+      }
+     ]
     },
     {
      "x": 11.34,
@@ -6602,13 +6911,23 @@
      "w": 17.24,
      "d": 15,
      "floors": 11,
-     "h": 36.9,
+     "h": 33,
      "facade": "brick2",
      "tint": "#ffffff",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 194924
+     "seed": 194924,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 3,
+       "n": 6,
+       "g": "dpssps",
+       "u": "offset",
+       "d": 50.3
+      }
+     ]
     },
     {
      "x": 24.5,
@@ -6616,13 +6935,23 @@
      "w": 9.07,
      "d": 15,
      "floors": 7,
-     "h": 23.7,
+     "h": 21,
      "facade": "brick",
      "tint": "#efe4da",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 302793
+     "seed": 302793,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 3,
+       "n": 3,
+       "g": "dss",
+       "u": "large",
+       "d": 54.78
+      }
+     ]
     },
     {
      "x": 33.36,
@@ -6630,13 +6959,23 @@
      "w": 8.65,
      "d": 15,
      "floors": 11,
-     "h": 36.9,
+     "h": 33,
      "facade": "brick",
      "tint": "#e2d6cc",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 176746
+     "seed": 176746,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 3,
+       "n": 3,
+       "g": "dss",
+       "u": "double",
+       "d": 59.28
+      }
+     ]
     },
     {
      "x": 41.34,
@@ -6644,13 +6983,23 @@
      "w": 7.32,
      "d": 15,
      "floors": 5,
-     "h": 17.1,
+     "h": 15,
      "facade": "brick",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": true,
-     "seed": 958602
+     "seed": 958602,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 3,
+       "n": 2,
+       "g": "ds",
+       "u": "double",
+       "d": 64.11
+      }
+     ]
     },
     {
      "x": -39.73,
@@ -6756,13 +7105,23 @@
      "w": 15,
      "d": 16,
      "floors": 10,
-     "h": 33.6,
+     "h": 30,
      "facade": "brick",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": true,
-     "seed": 931982
+     "seed": 931982,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 3,
+       "n": 5,
+       "g": "ppssd",
+       "u": "double",
+       "d": 74.18
+      }
+     ]
     },
     {
      "x": 37.5,
@@ -6882,13 +7241,23 @@
      "w": 18.74,
      "d": 15,
      "floors": 7,
-     "h": 23.7,
+     "h": 21,
      "facade": "brick2",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 545896
+     "seed": 545896,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 2,
+       "n": 6,
+       "g": "dsssps",
+       "u": "small",
+       "d": 60.58
+      }
+     ]
     },
     {
      "x": -17.38,
@@ -6896,13 +7265,23 @@
      "w": 17.76,
      "d": 15,
      "floors": 3,
-     "h": 10.5,
+     "h": 9,
      "facade": "brick2",
      "tint": "#e9e3dc",
      "near": true,
      "shade": true,
      "tank": true,
-     "seed": 384311
+     "seed": 384311,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 2,
+       "n": 6,
+       "g": "dsspss",
+       "u": "double",
+       "d": 51.99
+      }
+     ]
     },
     {
      "x": -3.78,
@@ -6910,13 +7289,23 @@
      "w": 9.43,
      "d": 15,
      "floors": 3,
-     "h": 10.5,
+     "h": 9,
      "facade": "brick2",
      "tint": "#ffffff",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 876355
+     "seed": 876355,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 2,
+       "n": 3,
+       "g": "ssd",
+       "u": "double",
+       "d": 49.15
+      }
+     ]
     },
     {
      "x": 9.9,
@@ -6924,13 +7313,23 @@
      "w": 17.93,
      "d": 15,
      "floors": 5,
-     "h": 17.1,
+     "h": 15,
      "facade": "concrete",
      "tint": "#e6e4df",
      "near": true,
      "shade": true,
      "tank": true,
-     "seed": 892436
+     "seed": 892436,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 2,
+       "n": 6,
+       "g": "sssssd",
+       "u": "small",
+       "d": 49.99
+      }
+     ]
     },
     {
      "x": 23.83,
@@ -6938,13 +7337,23 @@
      "w": 9.93,
      "d": 15,
      "floors": 11,
-     "h": 36.9,
+     "h": 33,
      "facade": "brick",
      "tint": "#efe4da",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 644009
+     "seed": 644009,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 2,
+       "n": 3,
+       "g": "dss",
+       "u": "offset",
+       "d": 54.49
+      }
+     ]
     },
     {
      "x": -37.5,
@@ -6966,13 +7375,23 @@
      "w": 15,
      "d": 16,
      "floors": 7,
-     "h": 23.7,
+     "h": 21,
      "facade": "concrete",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 924373
+     "seed": 924373,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 2,
+       "n": 5,
+       "g": "dssss",
+       "u": "offset",
+       "d": 74.18
+      }
+     ]
     },
     {
      "x": -35.82,
@@ -7442,13 +7861,23 @@
      "w": 8.15,
      "d": 15,
      "floors": 8,
-     "h": 27,
+     "h": 24,
      "facade": "brick2",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 513916
+     "seed": 513916,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 1,
+       "n": 5,
+       "g": "dpppp",
+       "u": "double",
+       "d": 64.62
+      }
+     ]
     },
     {
      "x": 72.34,
@@ -7498,13 +7927,23 @@
      "w": 9.99,
      "d": 15,
      "floors": 9,
-     "h": 30.3,
+     "h": 27,
      "facade": "brick",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": true,
-     "seed": 845432
+     "seed": 845432,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 1,
+       "n": 5,
+       "g": "dsppp",
+       "u": "double",
+       "d": 64.63
+      }
+     ]
     },
     {
      "x": 72.98,
@@ -7554,13 +7993,23 @@
      "w": 15,
      "d": 16.26,
      "floors": 10,
-     "h": 33.6,
+     "h": 30,
      "facade": "brick2",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": true,
-     "seed": 790987
+     "seed": 790987,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 1,
+       "n": 5,
+       "g": "dssss",
+       "u": "large",
+       "d": 59.41
+      }
+     ]
     },
     {
      "x": 65.5,
@@ -7568,13 +8017,23 @@
      "w": 15,
      "d": 9.48,
      "floors": 7,
-     "h": 23.7,
+     "h": 21,
      "facade": "brick2",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": true,
-     "seed": 247350
+     "seed": 247350,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 1,
+       "n": 3,
+       "g": "dss",
+       "u": "offset",
+       "d": 58
+      }
+     ]
     },
     {
      "x": 65.5,
@@ -7582,13 +8041,23 @@
      "w": 15,
      "d": 16.26,
      "floors": 8,
-     "h": 27,
+     "h": 24,
      "facade": "brick2",
      "tint": "#e9e3dc",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 362609
+     "seed": 362609,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 1,
+       "n": 5,
+       "g": "sdspp",
+       "u": "small",
+       "d": 59.41
+      }
+     ]
     },
     {
      "x": 96.5,
@@ -8156,13 +8625,23 @@
      "w": 22.28,
      "d": 15,
      "floors": 9,
-     "h": 30.3,
+     "h": 27,
      "facade": "brick",
      "tint": "#e2d6cc",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 525677
+     "seed": 525677,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 0,
+       "n": 5,
+       "g": "dpssp",
+       "u": "double",
+       "d": 64.62
+      }
+     ]
     },
     {
      "x": -99.69,
@@ -8212,13 +8691,23 @@
      "w": 13.03,
      "d": 15,
      "floors": 9,
-     "h": 30.3,
+     "h": 27,
      "facade": "brick",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": true,
-     "seed": 279936
+     "seed": 279936,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 0,
+       "n": 5,
+       "g": "ddddd",
+       "u": "large",
+       "d": 64.62
+      }
+     ]
     },
     {
      "x": -96.5,
@@ -8254,13 +8743,23 @@
      "w": 15,
      "d": 13.9,
      "floors": 8,
-     "h": 27,
+     "h": 24,
      "facade": "concrete",
      "tint": "#e6e4df",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 385280
+     "seed": 385280,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 0,
+       "n": 5,
+       "g": "ddddd",
+       "u": "large",
+       "d": 59.68
+      }
+     ]
     },
     {
      "x": -65.5,
@@ -8268,13 +8767,23 @@
      "w": 15,
      "d": 12.58,
      "floors": 8,
-     "h": 27,
+     "h": 24,
      "facade": "concrete",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 253459
+     "seed": 253459,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 0,
+       "n": 4,
+       "g": "dsss",
+       "u": "offset",
+       "d": 58.01
+      }
+     ]
     },
     {
      "x": -65.5,
@@ -8282,13 +8791,23 @@
      "w": 15,
      "d": 15.52,
      "floors": 8,
-     "h": 27,
+     "h": 24,
      "facade": "brick",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": true,
-     "seed": 170093
+     "seed": 170093,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 0,
+       "n": 5,
+       "g": "dpssp",
+       "u": "double",
+       "d": 59.49
+      }
+     ]
     },
     {
      "x": -95.83,
@@ -13610,13 +14129,23 @@
      "w": 8.01,
      "d": 15,
      "floors": 11,
-     "h": 36.9,
+     "h": 33,
      "facade": "concrete",
      "tint": "#ffffff",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 925285
+     "seed": 925285,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 3,
+       "n": 3,
+       "g": "dss",
+       "u": "large",
+       "d": 38.01
+      }
+     ]
     },
     {
      "x": -7.45,
@@ -13624,13 +14153,23 @@
      "w": 11.09,
      "d": 15,
      "floors": 9,
-     "h": 30.3,
+     "h": 27,
      "facade": "brick",
      "tint": "#e2d6cc",
      "near": true,
      "shade": true,
      "tank": true,
-     "seed": 617846
+     "seed": 617846,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 3,
+       "n": 4,
+       "g": "dssp",
+       "u": "double",
+       "d": 34.81
+      }
+     ]
     },
     {
      "x": 2.9,
@@ -13638,13 +14177,23 @@
      "w": 9.61,
      "d": 15,
      "floors": 10,
-     "h": 33.6,
+     "h": 30,
      "facade": "brick",
      "tint": "#e2d6cc",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 82643
+     "seed": 82643,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 3,
+       "n": 3,
+       "g": "dss",
+       "u": "small",
+       "d": 34.12
+      }
+     ]
     },
     {
      "x": 14.35,
@@ -13652,13 +14201,23 @@
      "w": 13.29,
      "d": 15,
      "floors": 7,
-     "h": 23.7,
+     "h": 21,
      "facade": "concrete",
      "tint": "#ffffff",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 368805
+     "seed": 368805,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 3,
+       "n": 4,
+       "g": "dsss",
+       "u": "large",
+       "d": 36.9
+      }
+     ]
     },
     {
      "x": -14.21,
@@ -13708,13 +14267,23 @@
      "w": 15,
      "d": 16,
      "floors": 9,
-     "h": 30.3,
+     "h": 27,
      "facade": "brick2",
      "tint": "#e9e3dc",
      "near": true,
      "shade": true,
      "tank": true,
-     "seed": 693113
+     "seed": 693113,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 0,
+       "n": 5,
+       "g": "dsppp",
+       "u": "double",
+       "d": 57.31
+      }
+     ]
     },
     {
      "x": 13.5,
@@ -13722,13 +14291,23 @@
      "w": 15,
      "d": 9.67,
      "floors": 5,
-     "h": 17.1,
+     "h": 15,
      "facade": "concrete",
      "tint": "#e6e4df",
      "near": true,
      "shade": true,
      "tank": true,
-     "seed": 911583
+     "seed": 911583,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 1,
+       "n": 3,
+       "g": "dpp",
+       "u": "large",
+       "d": 54.17
+      }
+     ]
     },
     {
      "x": 13.5,
@@ -13736,13 +14315,23 @@
      "w": 15,
      "d": 6.33,
      "floors": 3,
-     "h": 10.5,
+     "h": 9,
      "facade": "concrete",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": true,
-     "seed": 246546
+     "seed": 246546,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 1,
+       "n": 2,
+       "g": "ds",
+       "u": "offset",
+       "d": 62.13
+      }
+     ]
     },
     {
      "x": -13.09,
@@ -13792,13 +14381,23 @@
      "w": 10.43,
      "d": 15,
      "floors": 10,
-     "h": 33.6,
+     "h": 30,
      "facade": "concrete",
      "tint": "#e6e4df",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 499350
+     "seed": 499350,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 2,
+       "n": 3,
+       "g": "dss",
+       "u": "large",
+       "d": 37.49
+      }
+     ]
     },
     {
      "x": -3.4,
@@ -13806,13 +14405,23 @@
      "w": 14.35,
      "d": 15,
      "floors": 7,
-     "h": 23.7,
+     "h": 21,
      "facade": "concrete",
      "tint": "#e6e4df",
      "near": true,
      "shade": true,
      "tank": true,
-     "seed": 227821
+     "seed": 227821,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 2,
+       "n": 5,
+       "g": "dpssp",
+       "u": "offset",
+       "d": 34.17
+      }
+     ]
     },
     {
      "x": -13.5,
@@ -13820,13 +14429,23 @@
      "w": 15,
      "d": 8.09,
      "floors": 8,
-     "h": 27,
+     "h": 24,
      "facade": "concrete",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 57110
+     "seed": 57110,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 0,
+       "n": 3,
+       "g": "dss",
+       "u": "small",
+       "d": 61.25
+      }
+     ]
     },
     {
      "x": -13.5,
@@ -13834,13 +14453,23 @@
      "w": 15,
      "d": 7.91,
      "floors": 8,
-     "h": 27,
+     "h": 24,
      "facade": "brick2",
      "tint": "#ffffff",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 280120
+     "seed": 280120,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 0,
+       "n": 3,
+       "g": "dsp",
+       "u": "large",
+       "d": 53.3
+      }
+     ]
     },
     {
      "x": 13.5,
@@ -13848,13 +14477,30 @@
      "w": 15,
      "d": 16,
      "floors": 5,
-     "h": 17.1,
+     "h": 15,
      "facade": "brick2",
      "tint": "#e9e3dc",
      "near": true,
      "shade": true,
      "tank": true,
-     "seed": 831883
+     "seed": 831883,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 1,
+       "n": 5,
+       "g": "ssssd",
+       "u": "large",
+       "d": 57.31
+      },
+      {
+       "s": 2,
+       "n": 5,
+       "g": "ssssd",
+       "u": "double",
+       "d": 50.83
+      }
+     ]
     },
     {
      "x": -14.46,
@@ -14100,13 +14746,23 @@
      "w": 16.75,
      "d": 15,
      "floors": 11,
-     "h": 36.9,
+     "h": 33,
      "facade": "concrete",
      "tint": "#e6e4df",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 31987
+     "seed": 31987,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 1,
+       "n": 5,
+       "g": "dsspp",
+       "u": "large",
+       "d": 36.58
+      }
+     ]
     },
     {
      "x": 58.12,
@@ -14114,13 +14770,23 @@
      "w": 14.75,
      "d": 15,
      "floors": 8,
-     "h": 27,
+     "h": 24,
      "facade": "concrete",
      "tint": "#ffffff",
      "near": true,
      "shade": true,
      "tank": true,
-     "seed": 545392
+     "seed": 545392,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 2,
+       "n": 5,
+       "g": "ddspp",
+       "u": "small",
+       "d": 58.43
+      }
+     ]
     },
     {
      "x": 72.75,
@@ -14142,13 +14808,23 @@
      "w": 8.6,
      "d": 15,
      "floors": 3,
-     "h": 10.5,
+     "h": 9,
      "facade": "brick",
      "tint": "#ffffff",
      "near": true,
      "shade": true,
      "tank": true,
-     "seed": 106975
+     "seed": 106975,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 1,
+       "n": 5,
+       "g": "dppss",
+       "u": "large",
+       "d": 36.58
+      }
+     ]
     },
     {
      "x": 51.72,
@@ -14184,13 +14860,23 @@
      "w": 15,
      "d": 12,
      "floors": 7,
-     "h": 23.7,
+     "h": 21,
      "facade": "concrete",
      "tint": "#e6e4df",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 331733
+     "seed": 331733,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 1,
+       "n": 4,
+       "g": "dsss",
+       "u": "small",
+       "d": 34
+      }
+     ]
     },
     {
      "x": 72.5,
@@ -14198,13 +14884,23 @@
      "w": 15,
      "d": 12,
      "floors": 9,
-     "h": 30.3,
+     "h": 27,
      "facade": "brick",
      "tint": "#efe4da",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 208936
+     "seed": 208936,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 1,
+       "n": 4,
+       "g": "dsss",
+       "u": "double",
+       "d": 65
+      }
+     ]
     },
     {
      "x": 41.27,
@@ -14212,13 +14908,30 @@
      "w": 14.55,
      "d": 15,
      "floors": 6,
-     "h": 20.4,
+     "h": 18,
      "facade": "concrete",
      "tint": "#ffffff",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 353537
+     "seed": 353537,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 1,
+       "n": 5,
+       "g": "sdddd",
+       "u": "small",
+       "d": 53.65
+      },
+      {
+       "s": 3,
+       "n": 5,
+       "g": "sdddd",
+       "u": "large",
+       "d": 53.47
+      }
+     ]
     },
     {
      "x": 57.51,
@@ -14226,13 +14939,23 @@
      "w": 17.92,
      "d": 15,
      "floors": 6,
-     "h": 20.4,
+     "h": 18,
      "facade": "brick",
      "tint": "#e2d6cc",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 336664
+     "seed": 336664,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 3,
+       "n": 6,
+       "g": "dspssd",
+       "u": "offset",
+       "d": 66.81
+      }
+     ]
     },
     {
      "x": 73.24,
@@ -14310,13 +15033,23 @@
      "w": 15,
      "d": 16,
      "floors": 5,
-     "h": 17.1,
+     "h": 15,
      "facade": "brick2",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 106927
+     "seed": 106927,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 1,
+       "n": 5,
+       "g": "dpsss",
+       "u": "large",
+       "d": 66.37
+      }
+     ]
     },
     {
      "x": 72.5,
@@ -14408,13 +15141,30 @@
      "w": 11.37,
      "d": 15,
      "floors": 6,
-     "h": 20.4,
+     "h": 18,
      "facade": "brick2",
      "tint": "#ffffff",
      "near": true,
      "shade": true,
      "tank": true,
-     "seed": 272436
+     "seed": 272436,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 1,
+       "n": 5,
+       "g": "dssps",
+       "u": "double",
+       "d": 53.65
+      },
+      {
+       "s": 2,
+       "n": 4,
+       "g": "dssp",
+       "u": "small",
+       "d": 52.26
+      }
+     ]
     },
     {
      "x": 54,
@@ -14422,13 +15172,23 @@
      "w": 17.24,
      "d": 15,
      "floors": 4,
-     "h": 13.8,
+     "h": 12,
      "facade": "concrete",
      "tint": "#e6e4df",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 215635
+     "seed": 215635,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 2,
+       "n": 6,
+       "g": "dsssss",
+       "u": "double",
+       "d": 63.81
+      }
+     ]
     },
     {
      "x": 67.62,
@@ -14450,13 +15210,23 @@
      "w": 15,
      "d": 16,
      "floors": 5,
-     "h": 17.1,
+     "h": 15,
      "facade": "brick2",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 445552
+     "seed": 445552,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 1,
+       "n": 5,
+       "g": "ddspp",
+       "u": "double",
+       "d": 66.37
+      }
+     ]
     },
     {
      "x": 72.5,
@@ -14786,13 +15556,23 @@
      "w": 10.23,
      "d": 15,
      "floors": 7,
-     "h": 23.7,
+     "h": 21,
      "facade": "brick2",
      "tint": "#ffffff",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 368748
+     "seed": 368748,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 0,
+       "n": 5,
+       "g": "dpssp",
+       "u": "large",
+       "d": 36.58
+      }
+     ]
     },
     {
      "x": -72.96,
@@ -14828,13 +15608,23 @@
      "w": 15.65,
      "d": 15,
      "floors": 9,
-     "h": 30.3,
+     "h": 27,
      "facade": "brick",
      "tint": "#efe4da",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 1051
+     "seed": 1051,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 0,
+       "n": 5,
+       "g": "dspss",
+       "u": "offset",
+       "d": 36.58
+      }
+     ]
     },
     {
      "x": -72.5,
@@ -14842,13 +15632,23 @@
      "w": 15,
      "d": 12,
      "floors": 4,
-     "h": 13.8,
+     "h": 12,
      "facade": "brick",
      "tint": "#efe4da",
      "near": true,
      "shade": false,
      "tank": true,
-     "seed": 806129
+     "seed": 806129,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 0,
+       "n": 4,
+       "g": "sdsp",
+       "u": "double",
+       "d": 65
+      }
+     ]
     },
     {
      "x": -41.5,
@@ -14856,13 +15656,23 @@
      "w": 15,
      "d": 12,
      "floors": 8,
-     "h": 27,
+     "h": 24,
      "facade": "brick",
      "tint": "#e2d6cc",
      "near": true,
      "shade": true,
      "tank": true,
-     "seed": 978520
+     "seed": 978520,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 0,
+       "n": 4,
+       "g": "dsps",
+       "u": "large",
+       "d": 34
+      }
+     ]
     },
     {
      "x": -70.56,
@@ -14884,13 +15694,23 @@
      "w": 10.82,
      "d": 15,
      "floors": 7,
-     "h": 23.7,
+     "h": 21,
      "facade": "brick2",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 287975
+     "seed": 287975,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 3,
+       "n": 4,
+       "g": "dsss",
+       "u": "small",
+       "d": 65.26
+      }
+     ]
     },
     {
      "x": -46.23,
@@ -14898,13 +15718,23 @@
      "w": 8.13,
      "d": 15,
      "floors": 10,
-     "h": 33.6,
+     "h": 30,
      "facade": "brick2",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": true,
-     "seed": 684757
+     "seed": 684757,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 3,
+       "n": 3,
+       "g": "dss",
+       "u": "large",
+       "d": 57.39
+      }
+     ]
     },
     {
      "x": -38.08,
@@ -14912,13 +15742,30 @@
      "w": 8.17,
      "d": 15,
      "floors": 6,
-     "h": 20.4,
+     "h": 18,
      "facade": "brick2",
      "tint": "#ffffff",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 879130
+     "seed": 879130,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 0,
+       "n": 5,
+       "g": "dspss",
+       "u": "small",
+       "d": 53.65
+      },
+      {
+       "s": 3,
+       "n": 3,
+       "g": "dsp",
+       "u": "double",
+       "d": 51.05
+      }
+     ]
     },
     {
      "x": -73.04,
@@ -14982,13 +15829,23 @@
      "w": 15,
      "d": 8.43,
      "floors": 3,
-     "h": 10.5,
+     "h": 9,
      "facade": "brick",
      "tint": "#efe4da",
      "near": true,
      "shade": false,
      "tank": true,
-     "seed": 559890
+     "seed": 559890,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 0,
+       "n": 3,
+       "g": "dss",
+       "u": "small",
+       "d": 63.15
+      }
+     ]
     },
     {
      "x": -41.5,
@@ -14996,13 +15853,23 @@
      "w": 15,
      "d": 7.57,
      "floors": 7,
-     "h": 23.7,
+     "h": 21,
      "facade": "brick2",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 821691
+     "seed": 821691,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 0,
+       "n": 3,
+       "g": "dsp",
+       "u": "offset",
+       "d": 70.02
+      }
+     ]
     },
     {
      "x": -75.06,
@@ -15066,13 +15933,23 @@
      "w": 18.29,
      "d": 15,
      "floors": 8,
-     "h": 27,
+     "h": 24,
      "facade": "brick",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 159502
+     "seed": 159502,
+     "kit": "factory",
+     "faces": [
+      {
+       "s": 2,
+       "n": 6,
+       "g": "ppssdd",
+       "u": "large",
+       "d": 63.62
+      }
+     ]
     },
     {
      "x": -39.31,
@@ -15080,13 +15957,30 @@
      "w": 10.62,
      "d": 15,
      "floors": 9,
-     "h": 30.3,
+     "h": 27,
      "facade": "concrete",
      "tint": "#e6e4df",
      "near": true,
      "shade": true,
      "tank": false,
-     "seed": 178448
+     "seed": 178448,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 0,
+       "n": 5,
+       "g": "ddsss",
+       "u": "large",
+       "d": 53.65
+      },
+      {
+       "s": 2,
+       "n": 4,
+       "g": "ddss",
+       "u": "small",
+       "d": 51.97
+      }
+     ]
     },
     {
      "x": -72.5,
@@ -15108,13 +16002,23 @@
      "w": 15,
      "d": 9.19,
      "floors": 5,
-     "h": 17.1,
+     "h": 15,
      "facade": "brick",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": false,
-     "seed": 85934
+     "seed": 85934,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 0,
+       "n": 3,
+       "g": "dps",
+       "u": "small",
+       "d": 69.32
+      }
+     ]
     },
     {
      "x": -41.5,
@@ -15122,13 +16026,23 @@
      "w": 15,
      "d": 6.81,
      "floors": 8,
-     "h": 27,
+     "h": 24,
      "facade": "brick2",
      "tint": "#ffffff",
      "near": true,
      "shade": false,
      "tank": true,
-     "seed": 489439
+     "seed": 489439,
+     "kit": "apartments",
+     "faces": [
+      {
+       "s": 0,
+       "n": 2,
+       "g": "dp",
+       "u": "offset",
+       "d": 62.47
+      }
+     ]
     },
     {
      "x": -75.96,
@@ -20294,5 +21208,1600 @@
     ]
    }
   }
+ },
+ "SHOP_BUILDINGS": {
+  "lemon": [
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 1,
+    "h": 3,
+    "seed": 61516,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "small",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "small",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "small",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 2,
+    "h": 6,
+    "seed": 61516,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "small",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "small",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "small",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 3,
+    "h": 9,
+    "seed": 61516,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "small",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "small",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "small",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 4,
+    "h": 12,
+    "seed": 61516,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "small",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "small",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "small",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 5,
+    "h": 15,
+    "seed": 61516,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "small",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "small",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "small",
+      "d": 0
+     }
+    ]
+   }
+  ],
+  "cafe": [
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 2,
+    "h": 6,
+    "seed": 10436,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 3,
+    "h": 9,
+    "seed": 10436,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 4,
+    "h": 12,
+    "seed": 10436,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 5,
+    "h": 15,
+    "seed": 10436,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 6,
+    "h": 18,
+    "seed": 10436,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     }
+    ]
+   }
+  ],
+  "arcade": [
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 2,
+    "h": 6,
+    "seed": 80535,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "ds",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 3,
+    "h": 9,
+    "seed": 80535,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "ds",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 4,
+    "h": 12,
+    "seed": 80535,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "ds",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 5,
+    "h": 15,
+    "seed": 80535,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "ds",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 6,
+    "h": 18,
+    "seed": 80535,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "ds",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     }
+    ]
+   }
+  ],
+  "fact": [
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 2,
+    "h": 6,
+    "seed": 99731,
+    "kit": "factory",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "ds",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 3,
+    "h": 9,
+    "seed": 99731,
+    "kit": "factory",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "ds",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 4,
+    "h": 12,
+    "seed": 99731,
+    "kit": "factory",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "ds",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 5,
+    "h": 15,
+    "seed": 99731,
+    "kit": "factory",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "ds",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 6,
+    "h": 18,
+    "seed": 99731,
+    "kit": "factory",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "ds",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     }
+    ]
+   }
+  ],
+  "bank": [
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 3,
+    "h": 9,
+    "seed": 80899,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 4,
+    "h": 12,
+    "seed": 80899,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 5,
+    "h": 15,
+    "seed": 80899,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 6,
+    "h": 18,
+    "seed": 80899,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 7,
+    "h": 21,
+    "seed": 80899,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "large",
+      "d": 0
+     }
+    ]
+   }
+  ],
+  "oil": [
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 2,
+    "h": 6,
+    "seed": 18571,
+    "kit": "factory",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "small",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "small",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "small",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 3,
+    "h": 9,
+    "seed": 18571,
+    "kit": "factory",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "small",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "small",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "small",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 4,
+    "h": 12,
+    "seed": 18571,
+    "kit": "factory",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "small",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "small",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "small",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 5,
+    "h": 15,
+    "seed": 18571,
+    "kit": "factory",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "small",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "small",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "small",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 6,
+    "h": 18,
+    "seed": 18571,
+    "kit": "factory",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "small",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "small",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "small",
+      "d": 0
+     }
+    ]
+   }
+  ],
+  "space": [
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 3,
+    "h": 9,
+    "seed": 41951,
+    "kit": "factory",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "ds",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 4,
+    "h": 12,
+    "seed": 41951,
+    "kit": "factory",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "ds",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 5,
+    "h": 15,
+    "seed": 41951,
+    "kit": "factory",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "ds",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 6,
+    "h": 18,
+    "seed": 41951,
+    "kit": "factory",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "ds",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 7,
+    "h": 21,
+    "seed": 41951,
+    "kit": "factory",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "ds",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     }
+    ]
+   }
+  ],
+  "ailab": [
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 4,
+    "h": 12,
+    "seed": 20542,
+    "kit": "factory",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "offset",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "offset",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "offset",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 5,
+    "h": 15,
+    "seed": 20542,
+    "kit": "factory",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "offset",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "offset",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "offset",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 6,
+    "h": 18,
+    "seed": 20542,
+    "kit": "factory",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "offset",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "offset",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "offset",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 7,
+    "h": 21,
+    "seed": 20542,
+    "kit": "factory",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "offset",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "offset",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "offset",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 8,
+    "h": 24,
+    "seed": 20542,
+    "kit": "factory",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "sd",
+      "u": "offset",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "offset",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "offset",
+      "d": 0
+     }
+    ]
+   }
+  ],
+  "dyson": [
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 5,
+    "h": 15,
+    "seed": 74934,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "ds",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 6,
+    "h": 18,
+    "seed": 74934,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "ds",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 7,
+    "h": 21,
+    "seed": 74934,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "ds",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 8,
+    "h": 24,
+    "seed": 74934,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "ds",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     }
+    ]
+   },
+   {
+    "x": 0,
+    "z": -1.3,
+    "w": 6,
+    "d": 5,
+    "floors": 9,
+    "h": 27,
+    "seed": 74934,
+    "kit": "apartments",
+    "facade": "brick",
+    "tint": "#ffffff",
+    "faces": [
+     {
+      "s": 2,
+      "n": 2,
+      "g": "ds",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 0,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     },
+     {
+      "s": 1,
+      "n": 2,
+      "g": "pp",
+      "u": "double",
+      "d": 0
+     }
+    ]
+   }
+  ]
  }
 }

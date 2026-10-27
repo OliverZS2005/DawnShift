@@ -148,24 +148,53 @@
 
   // ---------- Lot dressing ----------
   const LOT = {
-    forSale: { parts: clean([
-      [-0.6, 0.6].map(z => cyl(0.04, 1.4, 0.5, 0, z, '#8a6a43')),
-      box(0.06, 0.8, 1.5, 0.52, 0.9, 0, '#f5f5f5', { e: '#ffffff', ei: 0.1 }), box(0.07, 0.25, 1.3, 0.53, 1.35, 0, '#2f9e44'),
-      [[1.6, -1.6], [1.8, 1.4], [-1.2, 1.8]].map(([x, z]) => [cone(0.22, 0.6, x, 0, z, '#ff7b1f'), cyl(0.23, 0.08, x, 0.3, z, '#ffffff', { rt: 0.15 })]),
-    ]) },
-    locked: { parts: clean([
-      [-2.6, 2.6].map(x => box(0.06, 1.3, 5.2, x, 0, 0, '#9aa1a8', { m: 0.8, o: 0.6 })),
-      [-2.6, 2.6].map(z => box(5.2, 1.3, 0.06, 0, 0, z, '#9aa1a8', { m: 0.8, o: 0.6 })),
-      box(0.08, 0.7, 0.9, 2.65, 0.4, 0, '#c9372c', { e: '#c9372c', ei: 0.4 }),
-      { t: 'torus', s: [0.18, 0.05], p: [2.72, 1.25, 0], r: [0, PI / 2, 0], c: '#d4a937', m: 1 },
-      box(0.1, 0.35, 0.4, 2.72, 0.95, 0, '#d4a937', { m: 1 }),
-    ]) },
+    // an estate agent's board on two posts at the front of the lot (the locked lots also get a chain-link
+    // fence, LOT.fence)
+    forSale: { parts: clean([[-0.75, 0.75].map(x => box(0.07, 1.9, 0.07, x, 0, 3.2, '#e8e4dc', { ro: 0.5 }))]) },
+    locked: { parts: clean([[-0.75, 0.75].map(x => box(0.07, 1.9, 0.07, x, 0, 4.05, '#6b6f73', { m: 0.7, ro: 0.45 }))]) },
+    // the boards on those posts: text, [letters, board] colours, centre [x, y, z] (signs facing +Z)
+    boards: { forSale: { text: 'FOR SALE', colors: ['#b8352a', '#d6d0c4'], at: [0, 1.4, 3.24] },
+      locked: { text: 'COMING SOON', colors: ['#e6e1d6', '#9c2f27'], at: [0, 1.4, 4.09] } },
+    // chain-link fence round a lot you can't buy yet: [piece, x, z, rotation y] (models/kit_fence.glb,
+    // panels 1.9 m wide from their origin towards -X, facing +Z)
+    fence: (() => {
+      const out = [], h = 3.8, n = 4, w = 2 * h / n;
+      [[0, h], [h, 0], [0, -h], [-h, 0]].forEach(([cx, cz], s) => {
+        const ry = [0, PI / 2, PI, -PI / 2][s], X = [Math.cos(ry), -Math.sin(ry)];
+        for (let k = 0; k < n; k++) {
+          const t = h - k * w;
+          out.push(['panel', +(cx + X[0] * t).toFixed(3), +(cz + X[1] * t).toFixed(3), +ry.toFixed(4)], ['post', +(cx + X[0] * t).toFixed(3), +(cz + X[1] * t).toFixed(3), 0]);
+        }
+      });
+      return out;
+    })(),
     crate: { parts: clean([
       box(1.0, 1.0, 1.0, 0, 0, 0, '#d4a937', { m: 0.9, ro: 0.25, e: '#ffcc33', ei: 0.35 }),
       box(1.04, 0.16, 1.04, 0, 0.42, 0, '#b83a2d', { m: 0.3 }), box(0.16, 1.04, 1.04, 0, -0.02, 0, '#b83a2d', { m: 0.3 }),
       sph(0.14, 0, 1.12, 0, '#b83a2d'),
     ]) },
   };
+
+  // The businesses as real buildings from the facade kits (URBAN.kit): the kit, floors (one more for each
+  // milestone: 25/50/100/200 owned), the ground floor bays and window style, and the shop sign's
+  // [letters, board] colours. lotBuilding() turns one into a building like cityLayout()'s, 6 x 5 m at the
+  // back of the lot, its front (+Z) towards the production line.
+  const SHOPS = {
+    lemon: { kit: 'apartments', floors: 1, g: 'sd', u: 'small', sign: ['#ffd84a', '#20331d'] },
+    cafe: { kit: 'apartments', floors: 2, g: 'sd', u: 'large', sign: ['#f3e3c3', '#3b2416'] },
+    arcade: { kit: 'apartments', floors: 2, g: 'ds', u: 'double', sign: ['#ff5fd2', '#16102a'] },
+    fact: { kit: 'factory', floors: 2, g: 'ds', u: 'large', sign: ['#ffffff', '#2f3a44'] },
+    bank: { kit: 'apartments', floors: 3, g: 'sd', u: 'large', sign: ['#e9c46a', '#13233d'] },
+    oil: { kit: 'factory', floors: 2, g: 'sd', u: 'small', sign: ['#ffb000', '#151515'] },
+    space: { kit: 'factory', floors: 3, g: 'ds', u: 'double', sign: ['#9be7ff', '#0d1830'] },
+    ailab: { kit: 'factory', floors: 4, g: 'sd', u: 'offset', sign: ['#ffffff', '#3b1f6e'] },
+    dyson: { kit: 'apartments', floors: 5, g: 'ds', u: 'double', sign: ['#ffcf4a', '#3a1d05'] },
+  };
+  function lotBuilding(id, milestones) {
+    const s = SHOPS[id], seed = [...id].reduce((a, c) => a * 31 + c.charCodeAt(0), 7) % 100000;
+    return { x: 0, z: -1.3, w: 6, d: 5, floors: s.floors + milestones, h: (s.floors + milestones) * URBAN.kit.floor, seed, kit: s.kit,
+      facade: 'brick', tint: '#ffffff', faces: [{ s: 2, n: 2, g: s.g, u: s.u, d: 0 }, { s: 0, n: 2, g: 'pp', u: s.u, d: 0 }, { s: 1, n: 2, g: 'pp', u: s.u, d: 0 }] };
+  }
 
   // ---------- Characters & weapons (face +X) ----------
   const SOLDIER = { parts: clean([
@@ -208,6 +237,8 @@
     guns: { pistol: 'guns/pistol.glb', smg: 'guns/smg.glb', shotgun: 'guns/shotgun.glb', sniper: 'guns/sniper.glb', rocket: 'guns/rocket.glb' },
     textures: ['concrete_floor', 'corrugated', 'metal_plate', 'marble', 'asphalt', 'brick', 'grass', 'pavers', 'slate', 'plaster', 'concrete_wall', 'roof', 'shutter'],
     facades: ['brick', 'brick2', 'concrete', 'tower'], // textures/facade_<name>_{diff,nor,rough,metal,night,emit}.jpg
+    // modelled building fronts (Poly Haven kits): one object per piece, see URBAN.kit and tools/kit.py
+    kits: { apartments: 'models/kit_apartments.glb', factory: 'models/kit_factory.glb', fence: 'models/kit_fence.glb' },
     heights: {}, // everything is already real size
     // The fighters: photoreal people (Microsoft Rocketbox), one per opponent. Their legs play the run,
     // walk and idle clips in the direction they move; the upper body turns to where they aim and both
@@ -315,6 +346,12 @@
     facadeTile: { brick: 19.8, brick2: 19.8, concrete: 19.8, tower: 80 },
     marking: { dash: 3, gap: 4, crosswalk: 4.2 }, // centre-line dashes and crosswalk depth (m)
     skyline: { count: 64, radius: [230, 430], size: [14, 30], floors: [18, 58] },
+    // Modelled fronts (Poly Haven kits, models/kit_<name>.glb from tools/kit.py) on the sides of the nearer
+    // buildings that face the middle: 3 m bays, 3 m floors. Ground-floor bays: d door, s shop window,
+    // p plain wall; the floors above repeat one window style per side. The building's box is set back
+    // `inset` behind those sides so the windows and doors have depth. reach: only sides closer than this
+    // (renderers may use less, at lower quality).
+    kit: { names: ['apartments', 'factory'], bay: 3, floor: 3, inset: 0.6, reach: 75, upper: ['large', 'double', 'small', 'offset'] },
     // clear: half-extents (m) of the open ground in the middle; ring: buildings wall it in (a courtyard)
     arena: { clear: [30, 21], ring: true, seed: 77 },
     city: { clear: [21, 21], ring: false, seed: 91 },
@@ -372,6 +409,27 @@
       const side = i % 4, along = -0.9 + r() * 1.8, out = r() < 0.5 ? edge : inner;
       const [x, z] = side < 2 ? [along * Cx, (side ? 1 : -1) * out[1]] : [(side === 2 ? 1 : -1) * out[0], along * Cz];
       props.push({ model: pick(stuff), p: [round2(x), 0.15, round2(z)], ry: round2(r() * PI * 2) });
+    }
+    // modelled fronts on the sides that face the middle (not the ones up against a neighbour)
+    const K = U.kit, touching = (b, side) => buildings.some(o => o !== b && (side < 2
+      ? Math.abs((o.x - o.w / 2 * (side ? -1 : 1)) - (b.x + b.w / 2 * (side ? -1 : 1))) < 0.05 && Math.abs(o.z - b.z) < (o.d + b.d) / 2 - 0.5
+      : Math.abs((o.z - o.d / 2 * (side === 3 ? -1 : 1)) - (b.z + b.d / 2 * (side === 3 ? -1 : 1))) < 0.05 && Math.abs(o.x - b.x) < (o.w + b.w) / 2 - 0.5));
+    for (const b of buildings) {
+      if (!b.near) continue;
+      const faces = [];
+      [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([nx, nz], side) => {
+        const fx = b.x + nx * b.w / 2, fz = b.z + nz * b.d / 2, dist = Math.hypot(fx, fz);
+        if (-(fx * nx + fz * nz) <= 0 || dist > K.reach || touching(b, side)) return;
+        const n = Math.max(1, Math.round((side < 2 ? b.d : b.w) / K.bay));
+        let g = '';
+        for (let k = 0; k < n; k++) { const t = (b.seed >> (k % 16)) & 7; g += t === 0 ? 'd' : t < 6 ? 's' : 'p'; }
+        if (!g.includes('d')) g = 'd' + g.slice(1); // every front has a way in
+        faces.push({ s: side, n, g, u: K.upper[(b.seed + side) % K.upper.length], d: round2(dist) });
+      });
+      if (!faces.length) continue;
+      b.kit = K.names[b.seed % 10 < 3 ? 1 : 0];
+      b.faces = faces;
+      b.h = b.floors * K.floor;
     }
     // the skyline: towers far away in the haze
     const S = U.skyline, skyline = [];
@@ -431,5 +489,5 @@
     return [cx + Math.cos(a) * R, cz + Math.sin(a) * R, Math.atan2(-Math.sin(a), Math.cos(a))];
   }
 
-  return { BUILDINGS, LOT, SOLDIER, GUNS, ARENA, CITY, ASSETS, URBAN, tex, cityLayout, trafficAt };
+  return { BUILDINGS, LOT, SHOPS, SOLDIER, GUNS, ARENA, CITY, ASSETS, URBAN, tex, cityLayout, trafficAt, lotBuilding };
 });

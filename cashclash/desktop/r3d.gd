@@ -444,20 +444,21 @@ func city(where: String, night: bool) -> Node3D:
 	var trim = pbr("concrete_wall", Color("#a9a49b"), 2.5, 0.0, Color("#8a857d"))
 	var tank_mat = flat(Color("#5e4a3a"), 0.9, 0.0)
 	var shops = [pbr("shutter", Color("#8d8f8c"), 2.5, 0.0, Color("#4a4c4b")), pbr("plaster", Color("#5a514a"), 2.5, 0.0, Color("#4a443e"))]
+	var placed = {} # kit|piece|lit|building -> transforms
 	for b in L.buildings:
 		var w = float(b.w)
 		var d = float(b.d)
 		var h = float(b.h)
 		var c = Vector3(float(b.x), 0, float(b.z))
 		var k = "+" if b.shade else "" # buildings near the middle cast shadows; batched separately
-		var tile = float(T[b.facade])
-		_box_into(_batch(batches, b.facade + b.tint + k, facade(b.facade, night, Color(b.tint))), Vector3(w, h, d), c + Vector3(0, h / 2, 0), tile, tile)
-		_box_into(_batch(batches, "trim" + k, trim), Vector3(w + 0.5, 0.5, d + 0.5), c + Vector3(0, h - 0.1, 0), 2.5, 2.5) # cornice (also the roof)
+		var faces = b.get("faces", [])
+		add_building(b, faces, night, k, batches, placed)
 		if not b.near:
 			continue
-		var shop = int(b.seed) % 2
-		_box_into(_batch(batches, "shop%d%s" % [shop, k], shops[shop]), Vector3(w + 0.12, 3.25, d + 0.12), c + Vector3(0, 1.625, 0), 2.5, 2.5) # storefronts
-		_box_into(_batch(batches, "trim" + k, trim), Vector3(w + 0.3, 0.35, d + 0.3), c + Vector3(0, 3.42, 0), 2.5, 2.5) # ledge over the shops
+		if not faces.size():
+			var shop = int(b.seed) % 2
+			_box_into(_batch(batches, "shop%d%s" % [shop, k], shops[shop]), Vector3(w + 0.12, 3.25, d + 0.12), c + Vector3(0, 1.625, 0), 2.5, 2.5) # storefronts
+			_box_into(_batch(batches, "trim" + k, trim), Vector3(w + 0.3, 0.35, d + 0.3), c + Vector3(0, 3.42, 0), 2.5, 2.5) # ledge over the shops
 		if b.tank: # a timber water tank on legs, New York style
 			var t = c + Vector3((int(b.seed) % 3 - 1) * w * 0.2, h, ((int(b.seed) >> 2) % 3 - 1) * d * 0.2)
 			for l in [[-0.9, -0.9], [0.9, -0.9], [-0.9, 0.9], [0.9, 0.9]]:
@@ -485,6 +486,7 @@ func city(where: String, night: bool) -> Node3D:
 			mi.set_meta("no_shadow", true)
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		group.add_child(mi)
+	kit_instances(placed, group)
 	# oil stains and manhole covers
 	var stain_mat = StandardMaterial3D.new()
 	stain_mat.albedo_texture = _stain_tex()
@@ -536,6 +538,202 @@ func city(where: String, night: bool) -> Node3D:
 	group.set_meta("traffic", [L.traffic, cars])
 	tick_city(group, 0.0)
 	return group
+
+# ---------- Modelled building fronts (Poly Haven kits, see URBAN.kit in ../models.js) ----------
+# One building of the layout (or a business, SHOP_BUILDINGS): its box (photo fronts) goes into `batches`
+# (by material), its modelled sides (`faces`) into `placed` (kit|piece|lit|building -> transforms); the
+# box is set back behind those so the windows and doors have depth. Mirrors addBuilding() in render3d.js.
+func add_building(b: Dictionary, faces: Array, night: bool, k: String, batches: Dictionary, placed: Dictionary) -> void:
+	var T = M.URBAN.facadeTile
+	var trim = pbr("concrete_wall", Color("#a9a49b"), 2.5, 0.0, Color("#8a857d"))
+	var inner = flat(Color("#1d1a17"), 0.95, 0.0)
+	var I = float(M.URBAN.kit.inset)
+	var w = float(b.w)
+	var d = float(b.d)
+	var h = float(b.h)
+	var c = Vector3(float(b.x), 0, float(b.z))
+	var tile = float(T[b.facade])
+	var fm = facade(b.facade, night, Color(b.tint))
+	var fkey = b.facade + b.tint + k
+	var on = [false, false, false, false]
+	for f in faces:
+		on[int(f.s)] = true
+	# the box, set back behind the modelled sides
+	var x0 = c.x - w / 2 + (I if on[1] else 0.0)
+	var x1 = c.x + w / 2 - (I if on[0] else 0.0)
+	var z0 = c.z - d / 2 + (I if on[3] else 0.0)
+	var z1 = c.z + d / 2 - (I if on[2] else 0.0)
+	_box_into(_batch(batches, fkey, fm), Vector3(x1 - x0, h, z1 - z0), Vector3((x0 + x1) / 2, h / 2, (z0 + z1) / 2), tile, tile)
+	if faces.size():
+		_box_into(_batch(batches, "trim" + k, trim), Vector3(w, 0.3, d), c + Vector3(0, h - 0.15, 0), 2.5, 2.5) # roof over the set-back
+		for f in faces:
+			# dark rooms behind the windows, and the photo sides carried on to the corner
+			if int(f.s) < 2:
+				var fx = x0 - 0.01 if int(f.s) == 1 else x1 + 0.01
+				var ex = c.x - w / 2 if int(f.s) == 1 else c.x + w / 2
+				_box_into(_batch(batches, "inner", inner), Vector3(0.02, h, z1 - z0), Vector3(fx, h / 2, (z0 + z1) / 2), 1, 1)
+				for e in [[2, c.z + d / 2 - 0.01], [3, c.z - d / 2 + 0.01]]:
+					if not on[e[0]]:
+						_box_into(_batch(batches, fkey, fm), Vector3(I, h, 0.02), Vector3((fx + ex) / 2, h / 2, e[1]), tile, tile)
+			else:
+				var fz = z0 - 0.01 if int(f.s) == 3 else z1 + 0.01
+				var ez = c.z - d / 2 if int(f.s) == 3 else c.z + d / 2
+				_box_into(_batch(batches, "inner", inner), Vector3(x1 - x0, h, 0.02), Vector3((x0 + x1) / 2, h / 2, fz), 1, 1)
+				for e in [[0, c.x + w / 2 - 0.01], [1, c.x - w / 2 + 0.01]]:
+					if not on[e[0]]:
+						_box_into(_batch(batches, fkey, fm), Vector3(0.02, h, I), Vector3(e[1], h / 2, (fz + ez) / 2), tile, tile)
+		kit_pieces(b, faces, night, func(piece, x, y, z, ry, sx, glow):
+			var key = "%s|%s|%s|%d" % [b.kit, piece, glow, int(b.seed)]
+			if not placed.has(key):
+				placed[key] = []
+			placed[key].append(Transform3D(Basis(Vector3.UP, ry) * Basis.from_scale(Vector3(sx, 1, 1)), Vector3(x, y, z))))
+	else:
+		_box_into(_batch(batches, "trim" + k, trim), Vector3(w + 0.5, 0.5, d + 0.5), c + Vector3(0, h - 0.1, 0), 2.5, 2.5) # cornice (also the roof)
+
+# The pieces collected by add_building(): one MultiMesh per piece and building (so each building picks its
+# own level of detail).
+func kit_instances(placed: Dictionary, group: Node3D) -> void:
+	for key in placed:
+		var parts = key.split("|")
+		var mesh = kit_mesh(parts[0], parts[1], parts[2] == "true")
+		if mesh == null:
+			continue
+		var mm = MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = mesh
+		mm.instance_count = placed[key].size()
+		for i in placed[key].size():
+			mm.set_instance_transform(i, placed[key][i])
+		var mmi = MultiMeshInstance3D.new()
+		mmi.multimesh = mm
+		group.add_child(mmi)
+
+# A business (SHOP_BUILDINGS: a kit building, a floor taller per milestone) with its name on a sign board
+# over the shop front.
+func shop_building(b: Dictionary, milestones: int, night: bool) -> Node3D:
+	var g = Node3D.new()
+	var spec = M.SHOP_BUILDINGS[b.id][milestones]
+	var batches = {}
+	var placed = {}
+	add_building(spec, spec.faces, night, "+", batches, placed)
+	for key in batches:
+		var mi = MeshInstance3D.new()
+		mi.mesh = batches[key].st.commit()
+		mi.material_override = batches[key].mat
+		g.add_child(mi)
+	kit_instances(placed, g)
+	g.add_child(sign_board(b.name.to_upper(), M.SHOPS[b.id].sign, 5.2, 0.62, Vector3(0, 3.3, float(spec.z) + float(spec.d) / 2 + 0.18), 0.9 if night else 0.1))
+	shadows(g)
+	return g
+
+# Chain-link fence round a lot you can't buy yet (LOT.fence).
+func fence() -> Node3D:
+	var g = Node3D.new()
+	var placed = {}
+	for e in M.LOT.fence:
+		var key = "fence|%s|false|0" % e[0]
+		if not placed.has(key):
+			placed[key] = []
+		placed[key].append(Transform3D(Basis(Vector3.UP, float(e[3])), Vector3(float(e[1]), 0, float(e[2]))))
+	kit_instances(placed, g)
+	return g
+
+# A painted sign board facing +Z: `text` in colors[0] on colors[1], w x h metres, centred at `at`.
+func sign_board(text: String, colors: Array, w: float, h: float, at: Vector3, glow: float) -> Node3D:
+	var g = Node3D.new()
+	g.position = at
+	var bg = Color(colors[1])
+	var fg = Color(colors[0])
+	g.add_child(box(Vector3(w, h, 0.06), flat(bg, 0.55, 0.0), Vector3.ZERO))
+	var fm = flat(fg.lerp(bg, 0.65), 0.5, 0.0) # a thin painted border
+	for e in [[Vector3(w - h * 0.12, h * 0.04, 0.005), Vector3(0, h * 0.4, 0.032)], [Vector3(w - h * 0.12, h * 0.04, 0.005), Vector3(0, -h * 0.4, 0.032)],
+			[Vector3(h * 0.04, h * 0.84, 0.005), Vector3(w / 2 - h * 0.08, 0, 0.032)], [Vector3(h * 0.04, h * 0.84, 0.005), Vector3(-w / 2 + h * 0.08, 0, 0.032)]]:
+		g.add_child(box(e[0], fm, e[1]))
+	var l = Label3D.new()
+	l.text = text
+	l.font = font("barlow-condensed-800")
+	l.font_size = 128
+	l.outline_size = 0
+	l.modulate = fg
+	l.shaded = glow < 0.5 # lit like paint by day; a lit sign at night
+	l.double_sided = false
+	var px = font("barlow-condensed-800").get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 128)
+	l.pixel_size = min(h * 0.62 / 128.0 / 0.75, (w - h * 0.5) / max(1.0, px.x))
+	l.position = Vector3(0, -h * 0.02, 0.036)
+	g.add_child(l)
+	return g
+
+const KIT_GROUND = {"d": "door", "s": "shop", "p": "plain"}
+const SIDES = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+var _kit_meshes := {}
+
+# The mesh of one kit piece; `glow`: its windows lit (the same glass glowing warm), for night.
+func kit_mesh(kit: String, piece: String, glow: bool) -> Mesh:
+	var key = "%s|%s|%s" % [kit, piece, glow]
+	if _kit_meshes.has(key):
+		return _kit_meshes[key]
+	var mesh: Mesh = null
+	var ps = scene(M.ASSETS.kits.get(kit, ""))
+	if ps:
+		var root = ps.instantiate()
+		var n = root.find_child(piece, false, false)
+		if n:
+			var mi = n if n is MeshInstance3D else n.find_children("*", "MeshInstance3D", true, false).front()
+			mesh = mi.mesh if mi else null
+		root.free()
+	if mesh and glow:
+		mesh = mesh.duplicate()
+		for i in mesh.get_surface_count():
+			var m = mesh.surface_get_material(i)
+			if m is StandardMaterial3D and "glass" in m.resource_name:
+				var g: StandardMaterial3D = m.duplicate()
+				g.emission_enabled = true
+				g.emission = Color("#ffc58a")
+				g.emission_texture = m.albedo_texture
+				g.emission_energy_multiplier = 1.6
+				g.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+				mesh.surface_set_material(i, g)
+	_kit_meshes[key] = mesh
+	return mesh
+
+# Where every kit piece of building b goes: calls put(piece, x, y, z, rotation y, scale x, lit) for each
+# bay, the corner piers and the roof mouldings. Which windows are lit at night depends only on the
+# building, side, bay and floor. Mirrors kitPieces() in ../render3d.js.
+func kit_pieces(b: Dictionary, faces: Array, night: bool, put: Callable) -> void:
+	var K = M.URBAN.kit
+	var bay = float(K.bay)
+	var storey = float(K.floor)
+	var floors = int(b.floors)
+	var seed = int(b.seed)
+	for f in faces:
+		var side = int(f.s)
+		var nx = SIDES[side][0]
+		var nz = SIDES[side][1]
+		var ry = atan2(nx, nz)
+		var X = Vector2(cos(ry), -sin(ry))
+		var ry_l = atan2(-X.x, -X.y)
+		var length = float(b.d) if side < 2 else float(b.w)
+		var n = int(f.n)
+		var sx = length / (bay * n)
+		var cx = float(b.x) + nx * float(b.w) / 2
+		var cz = float(b.z) + nz * float(b.d) / 2
+		var rx = cx + X.x * length / 2
+		var rz = cz + X.y * length / 2
+		var lx = cx - X.x * length / 2
+		var lz = cz - X.y * length / 2
+		for k in n:
+			var ox = rx - X.x * k * bay * sx
+			var oz = rz - X.y * k * bay * sx
+			var g = f.g[k]
+			put.call(KIT_GROUND[g], ox, 0.0, oz, ry, sx, night and g == "s" and (seed + side * 31 + k * 7) % 10 < 6)
+			for fl in range(1, floors):
+				put.call(f.u, ox, fl * storey, oz, ry, sx, night and (seed + side * 31 + k * 7 + fl * 13) % 10 < 3)
+			put.call("crown", ox, floors * storey, oz, ry, sx, false)
+		for fl in floors:
+			put.call("pier", rx, fl * storey, rz, ry, 1.0, false)
+			put.call("pier", lx, fl * storey, lz, ry_l, 1.0, false)
+		put.call("crown_pier", rx, floors * storey, rz, ry, 1.0, false)
+		put.call("crown_pier", lx, floors * storey, lz, ry_l, 1.0, false)
 
 # Moves a city()'s traffic to time t (seconds).
 func tick_city(group: Node3D, t: float) -> void:

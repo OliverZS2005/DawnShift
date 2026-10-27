@@ -314,11 +314,105 @@
     for (let i = 0; i < 9; i++) { const g = x.createRadialGradient(64 + (r() - 0.5) * 50, 64 + (r() - 0.5) * 50, 0, 64, 64, 30 + r() * 30); g.addColorStop(0, 'rgba(8,7,6,.45)'); g.addColorStop(1, 'rgba(8,7,6,0)'); x.fillStyle = g; x.fillRect(0, 0, 128, 128); }
     return (stainTex = new THREE.CanvasTexture(c));
   }
+  // Modelled building fronts (Poly Haven kits): piece name -> its parts ({geometry, material}), at the origin.
+  function kitParts(name) {
+    return once('kit:' + name, async () => {
+      const g = await loadGLB(A.kits[name]), out = new Map();
+      if (g) for (const node of g.scene.children) {
+        const parts = []; node.traverse(c => { if (c.isMesh) parts.push({ geometry: c.geometry, material: c.material }); });
+        out.set(node.name, parts);
+      }
+      return out;
+    });
+  }
+  // Lit windows at night: the same glass glowing warm. Which ones are lit depends only on the building,
+  // side, bay and floor, so the desktop version lights the same windows.
+  const litGlass = new Map();
+  function lit(material) {
+    if (!litGlass.has(material)) {
+      const m = material.clone();
+      m.emissive = new THREE.Color('#ffc58a'); m.emissiveMap = material.map; m.emissiveIntensity = 1.6; m.opacity = 1; m.transparent = false;
+      litGlass.set(material, m);
+    }
+    return litGlass.get(material);
+  }
+  const KIT = U.kit, KIT_GROUND = { d: 'door', s: 'shop', p: 'plain' }, SIDES = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  // Where every kit piece of building b goes: calls put(piece, x, y, z, rotationY, scaleX, lit) for each
+  // bay, the corner piers and the roof mouldings. Mirrors kit_pieces() in desktop/r3d.gd.
+  function kitPieces(b, faces, night, put) {
+    for (const f of faces) {
+      const [nx, nz] = SIDES[f.s], ry = Math.atan2(nx, nz), X = [Math.cos(ry), -Math.sin(ry)], ryL = Math.atan2(-X[0], -X[1]);
+      const len = f.s < 2 ? b.d : b.w, sx = len / (KIT.bay * f.n), cx = b.x + nx * b.w / 2, cz = b.z + nz * b.d / 2;
+      const rx = cx + X[0] * len / 2, rz = cz + X[1] * len / 2, lx = cx - X[0] * len / 2, lz = cz - X[1] * len / 2;
+      for (let k = 0; k < f.n; k++) {
+        const ox = rx - X[0] * k * KIT.bay * sx, oz = rz - X[1] * k * KIT.bay * sx;
+        put(KIT_GROUND[f.g[k]], ox, 0, oz, ry, sx, night && f.g[k] === 's' && (b.seed + f.s * 31 + k * 7) % 10 < 6);
+        for (let fl = 1; fl < b.floors; fl++) put(f.u, ox, fl * KIT.floor, oz, ry, sx, night && (b.seed + f.s * 31 + k * 7 + fl * 13) % 10 < 3);
+        put('crown', ox, b.floors * KIT.floor, oz, ry, sx, false);
+      }
+      for (let fl = 0; fl < b.floors; fl++) { put('pier', rx, fl * KIT.floor, rz, ry, 1, false); put('pier', lx, fl * KIT.floor, lz, ryL, 1, false); }
+      put('crown_pier', rx, b.floors * KIT.floor, rz, ry, 1, false); put('crown_pier', lx, b.floors * KIT.floor, lz, ryL, 1, false);
+    }
+  }
+  // One building of the layout (or a business, M.lotBuilding()): its box (photo fronts) goes to add(key,
+  // material, geometry), batched by material; the modelled sides (`faces`) to kits (kit -> piece|lit|shadow
+  // -> matrices), and the box is set back behind those so the windows and doors have depth.
+  let innerMat = null;
+  function addBuilding(b, faces, night, k, add, kits) {
+    const T = U.facadeTile, trim = pbr('concrete_wall', { tint: '#a9a49b', fallback: '#8a857d' });
+    const inner = innerMat || (innerMat = new THREE.MeshStandardMaterial({ color: '#1d1a17', roughness: 0.95 }));
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3();
+    const on = [0, 1, 2, 3].map(s => faces.some(f => f.s === s));
+    const fm = facadeMat(b.facade, night, b.tint), tile = T[b.facade], I = KIT.inset;
+    // the box, set back behind the modelled sides
+    const x0 = b.x - b.w / 2 + (on[1] ? I : 0), x1 = b.x + b.w / 2 - (on[0] ? I : 0), z0 = b.z - b.d / 2 + (on[3] ? I : 0), z1 = b.z + b.d / 2 - (on[2] ? I : 0);
+    add(b.facade + b.tint + k, fm, boxGeo(x1 - x0, b.h, z1 - z0, tile, tile, (x0 + x1) / 2, b.h / 2, (z0 + z1) / 2));
+    if (faces.length) {
+      add('trim' + k, trim, boxGeo(b.w, 0.3, b.d, 2.5, 2.5, b.x, b.h - 0.15, b.z)); // roof over the set-back
+      for (const f of faces) {
+        // dark rooms behind the windows, and the photo sides carried on to the corner
+        if (f.s < 2) {
+          const fx = f.s ? x0 - 0.01 : x1 + 0.01, ex = f.s ? b.x - b.w / 2 : b.x + b.w / 2;
+          add('inner', inner, boxGeo(0.02, b.h, z1 - z0, 1, 1, fx, b.h / 2, (z0 + z1) / 2));
+          for (const [s, z] of [[2, b.z + b.d / 2 - 0.01], [3, b.z - b.d / 2 + 0.01]]) if (!on[s]) add(b.facade + b.tint + k, fm, boxGeo(I, b.h, 0.02, tile, tile, (fx + ex) / 2, b.h / 2, z));
+        } else {
+          const fz = f.s === 3 ? z0 - 0.01 : z1 + 0.01, ez = f.s === 3 ? b.z - b.d / 2 : b.z + b.d / 2;
+          add('inner', inner, boxGeo(x1 - x0, b.h, 0.02, 1, 1, (x0 + x1) / 2, b.h / 2, fz));
+          for (const [s, x] of [[0, b.x + b.w / 2 - 0.01], [1, b.x - b.w / 2 + 0.01]]) if (!on[s]) add(b.facade + b.tint + k, fm, boxGeo(0.02, b.h, I, tile, tile, x, b.h / 2, (fz + ez) / 2));
+        }
+      }
+      if (!kits.has(b.kit)) kits.set(b.kit, new Map());
+      const into = kits.get(b.kit);
+      kitPieces(b, faces, night, (piece, x, y, z, ry, sx, glow) => {
+        const key = piece + '|' + (glow ? 1 : 0) + '|' + k;
+        if (!into.has(key)) into.set(key, []);
+        into.get(key).push(m4.compose(p.set(x, y, z), q.setFromAxisAngle(UP, ry), sc.set(sx, 1, 1)).clone());
+      });
+    } else add('trim' + k, trim, boxGeo(b.w + 0.5, 0.5, b.d + 0.5, 2.5, 2.5, b.x, b.h - 0.1, b.z)); // cornice (also the roof)
+  }
+  // The kit pieces collected by addBuilding(): one instanced mesh per piece part (lit windows and shadow
+  // casters apart). They appear when the kit has loaded.
+  function instanceKits(kits, group) {
+    for (const [name, into] of kits) kitParts(name).then(parts => {
+      if (!parts) return;
+      for (const [key, list] of into) {
+        const [piece, glow, k] = key.split('|');
+        for (const part of parts.get(piece) || []) {
+          const mat = glow === '1' && /glass/.test(part.material.name) ? lit(part.material) : part.material;
+          const im = new THREE.InstancedMesh(part.geometry, mat, list.length);
+          list.forEach((m, i) => im.setMatrixAt(i, m));
+          im.castShadow = k === '+' && !mat.transparent; im.receiveShadow = true; im.computeBoundingSphere(); group.add(im);
+        }
+      }
+    });
+  }
   // The streets (wet asphalt, lane paint, crossings, stains, manholes), sidewalks, buildings with photo
   // facades (storefronts, ledges, cornices and roof tanks up close), the skyline in the haze, and street
-  // furniture, and traffic driving round the middle. Returns the group; call group.userData.tick(t) each
-  // frame to move the traffic. `detail` false (the lowest quality) leaves out the small stuff.
-  function buildCity(where, night, detail = true) {
+  // furniture, and traffic driving round the middle. The sides of the nearer buildings that face the middle
+  // (closer than `kitReach`) get modelled fronts instead of photos. Returns the group; call
+  // group.userData.tick(t) each frame to move the traffic. `detail` false (the lowest quality) leaves out
+  // the small stuff.
+  function buildCity(where, night, detail = true, kitReach = KIT.reach) {
     const group = new THREE.Group(), L = M.cityLayout(where), batches = new Map(), T = U.facadeTile;
     const add = (key, mat, geo) => { if (!batches.has(key)) batches.set(key, { mat, geos: [] }); batches.get(key).geos.push(geo); };
     const ground = new THREE.Mesh(tiledPlane(1000, 1000, 7), wetGround()); ground.position.y = -0.04; ground.receiveShadow = true; group.add(ground);
@@ -326,13 +420,16 @@
     for (const [x0, z0, x1, z1] of L.sidewalks) add('pav', pav, boxGeo(x1 - x0, 0.15, z1 - z0, 2.5, 2.5, (x0 + x1) / 2, 0.075, (z0 + z1) / 2));
     const trim = pbr('concrete_wall', { tint: '#a9a49b', fallback: '#8a857d' }), tankMat = new THREE.MeshStandardMaterial({ color: '#5e4a3a', roughness: 0.9 });
     const shops = [pbr('shutter', { tint: '#8d8f8c', fallback: '#4a4c4b' }), pbr('plaster', { tint: '#5a514a', fallback: '#4a443e' })];
+    const kits = new Map(), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3();
     for (const b of L.buildings) {
       const k = b.shade ? '+' : ''; // buildings near the middle cast shadows; batched separately
-      add(b.facade + b.tint + k, facadeMat(b.facade, night, b.tint), boxGeo(b.w, b.h, b.d, T[b.facade], T[b.facade], b.x, b.h / 2, b.z));
-      add('trim' + k, trim, boxGeo(b.w + 0.5, 0.5, b.d + 0.5, 2.5, 2.5, b.x, b.h - 0.1, b.z)); // cornice (also the roof)
+      const faces = (b.faces || []).filter(f => f.d < kitReach);
+      addBuilding(b, faces, night, k, add, kits);
       if (!b.near || !detail) continue;
-      add('shop' + (b.seed % 2) + k, shops[b.seed % 2], boxGeo(b.w + 0.12, 3.25, b.d + 0.12, 2.5, 2.5, b.x, 1.625, b.z)); // ground-floor storefronts
-      add('trim' + k, trim, boxGeo(b.w + 0.3, 0.35, b.d + 0.3, 2.5, 2.5, b.x, 3.42, b.z)); // ledge over the shops
+      if (!faces.length) {
+        add('shop' + (b.seed % 2) + k, shops[b.seed % 2], boxGeo(b.w + 0.12, 3.25, b.d + 0.12, 2.5, 2.5, b.x, 1.625, b.z)); // ground-floor storefronts
+        add('trim' + k, trim, boxGeo(b.w + 0.3, 0.35, b.d + 0.3, 2.5, 2.5, b.x, 3.42, b.z)); // ledge over the shops
+      }
       if (b.tank) { // a timber water tank on legs, New York style
         const tx = b.x + (b.seed % 3 - 1) * b.w * 0.2, tz = b.z + ((b.seed >> 2) % 3 - 1) * b.d * 0.2;
         for (const [lx, lz] of [[-0.9, -0.9], [0.9, -0.9], [-0.9, 0.9], [0.9, 0.9]]) add('tank', tankMat, boxGeo(0.18, 2.2, 0.18, 1, 1, tx + lx, b.h + 1.1, tz + lz));
@@ -349,9 +446,10 @@
       const mesh = new THREE.Mesh(mergeGeos(geos), mat);
       mesh.castShadow = key.endsWith('+'); mesh.receiveShadow = true; group.add(mesh);
     }
+    instanceKits(kits, group);
     if (detail) { // oil stains and manhole covers
       const stainMat = new THREE.MeshBasicMaterial({ map: stain(), transparent: true, depthWrite: false, color: '#ffffff' });
-      const blot = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-PI / 2), stainMat, L.stains.length), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3();
+      const blot = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-PI / 2), stainMat, L.stains.length);
       L.stains.forEach(([x, z, s, a], i) => blot.setMatrixAt(i, m4.compose(p.set(x, -0.02, z), q.setFromAxisAngle(UP, a), sc.set(s, 1, s * 0.7))));
       blot.renderOrder = 1; group.add(blot);
       const cover = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.42, 0.42, 0.02, 20), new THREE.MeshStandardMaterial({ color: '#2a2724', roughness: 0.45, metalness: 0.7 }), L.manholes.length);
@@ -535,7 +633,7 @@
       // a paved courtyard around the arena, walled in by city blocks
       const [cx, cz] = U.arena.clear;
       const apron = new THREE.Mesh(tiledPlane(2 * cx, 2 * cz, 5), pbr(th.outerTex, { tint: '#bbbbbb', fallback: '#4a4a48' })); apron.position.y = -0.02; apron.receiveShadow = true; grp.add(apron);
-      streets = buildCity('arena', th.lampsOn, view.tier > 0); grp.add(streets);
+      streets = buildCity('arena', th.lampsOn, view.tier > 0, [0, 40, 60, U.kit.reach][view.tier]); grp.add(streets);
       const lineMat = new THREE.MeshStandardMaterial({ color: th.line, roughness: 0.55 });
       for (const [w, d, x, z] of [[45, 0.14, 0, -13.93], [45, 0.14, 0, 13.93], [0.14, 28, -22.43, 0], [0.14, 28, 22.43, 0]]) {
         const l = new THREE.Mesh(new THREE.BoxGeometry(w, 0.012, d), lineMat); l.position.set(x, 0.007, z); l.receiveShadow = true; grp.add(l);
@@ -790,7 +888,7 @@
     const L = M.CITY.lot, P = M.CITY.pad, ray = new THREE.Raycaster(), [cx, cz] = U.city.clear;
     const lots = [], coins = [], world = new THREE.Group();
     let level = 0, sunLight, crate = null, aim = -1, t = 0, running = false, last = 0, token = 0, tycoon = null, streets = null;
-    const me = { x: 0, z: 1.5 * L + 2.2, yaw: 0, pitch: -0.08, walk: 0 }, keys = {};
+    const me = { x: L, z: 1.5 * L + 2.2, yaw: 0, pitch: -0.08, walk: 0 }, keys = {}; // in front of the arcade, the lemonade stand and coffee shop behind
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
     scene.add(world);
     const lotPos = i => [(1 - Math.floor(i / 3)) * L, ((i % 3) - 1) * L];
@@ -816,7 +914,7 @@
       world.clear();
       // the business takes up a paved plaza in the middle of the city
       const plaza = new THREE.Mesh(tiledPlane(2 * cx, 2 * cz, 2.5), pbr('pavers', { tint: '#a9a399', fallback: '#77746f' })); plaza.receiveShadow = true; world.add(plaza);
-      streets = buildCity('city', night, view.tier > 0); world.add(streets);
+      streets = buildCity('city', night, view.tier > 0, [0, 40, 60, U.kit.reach][view.tier]); world.add(streets);
       // roads with lane markings, on a grid between and around the lots
       const asphalt = pbr('asphalt', { tint: '#a8a8a8', fallback: '#45464a' }), paint = new THREE.MeshStandardMaterial({ color: '#efe9d2', roughness: 0.7 });
       const span = L * 3 + M.CITY.road;
@@ -859,6 +957,39 @@
       prop('cash_register').then(o => { if (o) { o.position.set(half + 0.45, y, z); o.rotation.y = -PI / 2; g.add(o); } });
       return { group: g, stands, z, items: [], until: Math.random() };
     }
+    // A business: its building (M.lotBuilding) with the name on a sign board over the shop front.
+    function shopBuilding(b, ms, night) {
+      const g = new THREE.Group(), spec = M.lotBuilding(b.id, ms), batches = new Map(), kits = new Map();
+      addBuilding(spec, spec.faces, night, '+', (key, mat, geo) => { if (!batches.has(key)) batches.set(key, { mat, geos: [] }); batches.get(key).geos.push(geo); }, kits);
+      for (const { mat, geos } of batches.values()) g.add(shadows(new THREE.Mesh(mergeGeos(geos), mat)));
+      instanceKits(kits, g);
+      g.add(signBoard(b.name.toUpperCase(), M.SHOPS[b.id].sign, 5.2, 0.62, [0, 3.3, spec.z + spec.d / 2 + 0.18], night ? 0.9 : 0.1));
+      return g;
+    }
+    // A painted sign board facing +Z: `text` in colors[0] on colors[1], w x h metres, centred at `at`.
+    function signBoard(text, [fg, bg], w, h, at, glow) {
+      const c = document.createElement('canvas'); c.width = 1024; c.height = Math.round(1024 * h / w);
+      const x = c.getContext('2d'), H = c.height; x.fillStyle = bg; x.fillRect(0, 0, 1024, H);
+      x.strokeStyle = fg; x.globalAlpha = 0.35; x.lineWidth = H * 0.05; x.strokeRect(H * 0.07, H * 0.07, 1024 - H * 0.14, H * 0.86); x.globalAlpha = 1;
+      x.fillStyle = fg; x.font = `800 ${Math.round(H * 0.62)}px 'Barlow Condensed', 'Arial Narrow', sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillText(text, 512, H * 0.54, 1024 - H * 0.5);
+      const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+      const g = new THREE.Group();
+      const board = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.06), new THREE.MeshStandardMaterial({ color: bg, roughness: 0.55 }));
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.45, emissive: '#ffffff', emissiveMap: tex, emissiveIntensity: glow }));
+      face.position.z = 0.031; g.add(shadows(board), face); g.position.set(...at);
+      return g;
+    }
+    // Chain-link fence round a lot you can't buy yet.
+    function fence() {
+      const g = new THREE.Group(), kits = new Map([['fence', new Map()]]), into = kits.get('fence'), q = new THREE.Quaternion();
+      for (const [piece, x, z, ry] of M.LOT.fence) {
+        if (!into.has(piece + '|0|+')) into.set(piece + '|0|+', []);
+        into.get(piece + '|0|+').push(new THREE.Matrix4().compose(new THREE.Vector3(x, 0, z), q.setFromAxisAngle(UP, ry), new THREE.Vector3(1, 1, 1)));
+      }
+      instanceKits(kits, g);
+      return g;
+    }
     function refreshLot(i, tyc) {
       const b = CC.BUILDINGS[i], lot = lots[i];
       const n = CC.owned(tyc, b.id), lv = CC.bLevel(tyc, b.id), unl = CC.unlocked(tyc, b);
@@ -867,18 +998,18 @@
       if (lot.key === key) return;
       lot.key = key; lot.holder.clear(); lot.anims = []; lot.line = null;
       const add = (model, x, z, s) => { const m = build(model); m.root.position.set(x, 0, z); m.root.scale.setScalar(s); lot.holder.add(m.root); lot.anims.push(...m.anims); };
-      if (!unl) add(M.LOT.locked, 0, 0, 1);
-      else if (!n) add(M.LOT.forSale, 0, 0, 1);
+      const night = M.CITY.levels[level - 1].lampsOn;
+      const board = kind => { const d = M.LOT.boards[kind]; add(M.LOT[kind], 0, 0, 1); lot.holder.add(signBoard(d.text, d.colors, 1.6, 0.85, d.at, 0.05)); };
+      if (!unl) { board('locked'); lot.holder.add(fence()); }
+      else if (!n) board('forSale');
       else {
-        add(M.BUILDINGS[b.id], 0, -0.9, 0.85);
-        // each milestone (25/50/100/200 owned) adds a smaller branch along the back of the lot
-        [[-2.9, -2.9], [2.9, -2.9], [-2.9, -0.6], [2.9, -0.6]].slice(0, ms).forEach(([x, z]) => add(M.BUILDINGS[b.id], x, z, 0.3));
+        // a real building from the facade kits, a floor taller for each milestone (25/50/100/200 owned)
+        lot.holder.add(shopBuilding(b, ms, night));
         lot.line = productionLine(i, Math.min(3, 1 + ms)); lot.holder.add(lot.line.group);
       }
-      // upgrade levels gild the lot
+      // upgrade levels warm the paving towards sandstone
       const k = Math.min(1, lv / 6);
-      lot.pad.material.color.set(!unl ? '#777777' : new THREE.Color('#ffffff').lerp(new THREE.Color('#f0c95a'), k));
-      lot.pad.material.metalness = k * 0.6;
+      lot.pad.material.color.set(!unl ? '#8a8a8a' : new THREE.Color('#ffffff').lerp(new THREE.Color('#e3c98f'), k * 0.6));
     }
     function update(tyc) {
       tycoon = tyc;

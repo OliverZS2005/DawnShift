@@ -47,6 +47,7 @@ func _init() -> void:
 	L = float(R3D.M.CITY.lot)
 	P = float(R3D.M.CITY.pad)
 	LINE = R3D.M.CITY.line
+	me.x = L # in front of the arcade, the lemonade stand and coffee shop behind it
 	me.z = 1.5 * L + 2.2
 	world = Node3D.new()
 	v.world.add_child(world)
@@ -226,34 +227,27 @@ func _refresh_lot(i: int, tyc: Dictionary) -> void:
 		c.queue_free()
 	lot.anims = []
 	lot.line = null
-	var models = []
-	if not unl:
-		models.append([R3D.M.LOT.locked, Vector3.ZERO, 1.0])
-	elif n == 0:
-		models.append([R3D.M.LOT.forSale, Vector3.ZERO, 1.0])
-	else:
-		models.append([R3D.M.BUILDINGS[b.id], Vector3(0, 0, -0.9), 0.85])
-		# each milestone (25/50/100/200 owned) adds a smaller branch along the back of the lot
-		var spots = [Vector3(-2.9, 0, -2.9), Vector3(2.9, 0, -2.9), Vector3(-2.9, 0, -0.6), Vector3(2.9, 0, -0.6)]
-		for k in ms:
-			models.append([R3D.M.BUILDINGS[b.id], spots[k], 0.3])
+	var night = R3D.M.CITY.levels[level - 1].lampsOn
 	var top = 0.4
-	for m in models:
-		var built = R3D.build(m[0])
-		built.root.position = m[1]
-		built.root.scale = Vector3.ONE * m[2]
+	if not unl or n == 0:
+		var kind = "locked" if not unl else "forSale"
+		var built = R3D.build(R3D.M.LOT[kind])
 		lot.holder.add_child(built.root)
-		lot.anims.append_array(built.anims)
-		var box = R3D.aabb(built.root)
-		top = max(top, box.end.y * m[2])
-	lot.top = top
-	if unl and n > 0:
+		var bd = R3D.M.LOT.boards[kind]
+		lot.holder.add_child(R3D.sign_board(bd.text, bd.colors, 1.6, 0.85, Vector3(bd.at[0], bd.at[1], bd.at[2]), 0.05))
+		if not unl:
+			lot.holder.add_child(R3D.fence())
+		top = 2.5
+	else:
+		# a real building from the facade kits, a floor taller for each milestone (25/50/100/200 owned)
+		lot.holder.add_child(R3D.shop_building(b, ms, night))
+		top = float(R3D.M.SHOP_BUILDINGS[b.id][ms].h) + 0.8
 		lot.line = _production_line(i, min(3, 1 + ms))
 		lot.holder.add_child(lot.line.group)
-	# upgrade levels gild the lot
+	lot.top = top
+	# upgrade levels warm the paving towards sandstone
 	var k = min(1.0, lv / 6.0)
-	lot.pad.material_override.albedo_color = Color("#777777") if not unl else Color.WHITE.lerp(Color("#f0c95a"), k)
-	lot.pad.material_override.metallic = k * 0.6
+	lot.pad.material_override.albedo_color = Color("#8a8a8a") if not unl else Color.WHITE.lerp(Color("#e3c98f"), k * 0.6)
 
 func update_city(tyc: Dictionary) -> void:
 	tycoon = tyc
