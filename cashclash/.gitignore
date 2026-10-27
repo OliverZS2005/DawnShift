@@ -1,3 +1,5 @@
 node_modules/
 players.json
 players.json.tmp
+syncs.json
+syncs.json.tmp

@@ -7,7 +7,17 @@ A money tycoon with a top-down arena shooter. Win a battle and you take 10% of y
 - **Reboot** (🔄 tab): wipes your money, buildings and weapons, and moves you up one business level. There are 7 levels, from Street Hustler to Galactic Empire. Each level doubles your income for good and unlocks a new building (Factory, Bank, Oil Rig, Space Mine, AI Lab, Dyson Sphere).
 - **Prestige:** at level 7, rebooting earns Boost Points instead. You get more if you overshoot the goal. Spend them on permanent perks: Income, Firepower, Toughness, Agility, Head Start, Night Shift and Lucky Streak. Firepower, Toughness and Agility also make you stronger in battle.
 - **Random events:** 📈 Market Boom (x3 income), 🏷️ Fire Sale (buildings 40% off) and 🎁 Golden Crate (claim it for 90 seconds of income).
+- **Rivals level up too:** computer rivals run their own tycoons. They reboot through the business levels, prestige, and get better weapons and perks. Matchmaking weighs business level as well as money.
 - **Arena maps:** Warehouse, Pillars, Corridors and Vault. Each fight picks one at random.
+
+## Desktop app (Godot)
+The desktop version lives in [`desktop/`](desktop/). It's a Godot 4.3 project with the same game, the same save format and the same multiplayer protocol, so desktop and web players fight each other on the same servers.
+- **Download:** every change builds Windows, Mac and Linux versions with the *Cash Clash desktop* GitHub workflow. Open the latest run and download from **Artifacts**. The Mac build isn't signed with a paid certificate, so right-click it and choose **Open** the first time.
+- **Run from source:** open `desktop/project.godot` in Godot 4.3+ and press Play.
+- `desktop/rules.gd` is a port of `shared.js`. CI fails if the two ever calculate different numbers (`tests/parity.gd` vs. `tests/parity.js`).
+
+## Sync between web and desktop
+In the 🎮 Play tab, under **Sync**, create a sync code on one device and enter it on the other. Your singleplayer game and your multiplayer logins are then stored on a Cash Clash server under that code and stay in sync. Each device pushes its save every 20 seconds and when you close it, and loads the other device's progress if that's newer. Play on one device at a time; if both play at once, the device that saves second loses its progress since the last sync.
 
 ## Singleplayer
 Open `index.html` in a browser. It runs entirely on your PC and you fight computer rivals.
@@ -33,6 +43,7 @@ Players can open `http://<your-ip>:8080` or type that address into the Play tab.
 | `PORT` | 8080 | Port to listen on |
 | `SERVER_NAME` | Cash Clash Server | Name shown to players |
 | `DATA_FILE` | ./players.json | Where player profiles are saved |
+| `SYNC_FILE` | next to `DATA_FILE`, `syncs.json` | Where sync codes and their saves are kept |
 | `ALLOW_IMPORT` | 1 | Set to `0` to forbid importing singleplayer saves (they're edited locally, so players could cheat) |
 
 The server controls money, purchases, matchmaking and the battle simulation, so clients can only send inputs.

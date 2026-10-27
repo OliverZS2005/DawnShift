@@ -88,10 +88,9 @@ const store = {
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = 'none', 3000); }
 
 // ---------- Singleplayer save (exactly one slot; it can only be reset, never duplicated) ----------
-const RIVAL_NAMES = ['xXSniperXx','MoneyMike','LemonLord','BigBankBob','NoScopeNina','TycoonTina','RocketRay','CashCarl','SprayPray','GoldGabe','FrugalFred','OilBaronOz','SpaceSam','PennyPia','CoinKing','ShotgunSue','ArcadeAce','FactoryFay','RichRick','DollarDee','BrokeBen','JackpotJo','VaultVic','StonksSteve'];
 const freshSP = () => ({
   tycoon: CC.newTycoon(),
-  rivals: RIVAL_NAMES.map((n, i) => ({ name: n, money: Math.round(30 * Math.pow(1.75, i) * (0.7 + Math.random() * 0.6)), skill: 0.3 + Math.random() * 0.6, recent: 0 })),
+  rivals: CC.newRivals(),
   wins: 0, losses: 0, log: [], last: Date.now(),
 });
 let SP = store.get('cc_sp');
@@ -143,6 +142,54 @@ function onNet(n, m) {
   else if (m.type === 'toast') toast(m.msg);
   else if (m.type === 'error') toast(m.msg);
 }
+
+// ---------- Cloud sync (web <-> desktop) ----------
+// Your singleplayer game and multiplayer logins are stored under a sync code on a Cash Clash server.
+// Every device pushes its save with the version it last saw; if another device saved since, the
+// server hands back the newer save and we load it instead (play on one device at a time).
+const httpBase = u => normUrl(u).replace(/^ws/, 'http');
+let SYNC = store.get('cc_sync'), syncBusy = false;
+const syncUrl = () => httpBase(SYNC.server) + '/api/sync/' + SYNC.code;
+const syncBlob = () => ({ sp: SP, tokens: tokens() });
+function adoptSave(save) {
+  if (save.sp && save.sp.tycoon) { SP = save.sp; SP.tycoon = CC.upgradeSave(SP.tycoon); SP.rivals = SP.rivals || CC.newRivals(); SP.log = SP.log || []; }
+  if (save.tokens) store.set('cc_tokens', { ...tokens(), ...save.tokens });
+  store.set('cc_sp', SP); render();
+}
+async function syncNow(quiet) {
+  if (!SYNC || syncBusy || G) return;
+  syncBusy = true;
+  try {
+    SP.last = Date.now();
+    const r = await fetch(syncUrl(), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ save: syncBlob(), base: SYNC.base, device: 'web' }) });
+    const b = await r.json();
+    if (r.status === 409) { adoptSave(b.save); SYNC.base = b.updatedAt; toast('☁️ Loaded newer progress from your other device'); }
+    else if (r.ok) SYNC.base = b.updatedAt;
+    else throw new Error(b.error || r.status);
+    SYNC.at = Date.now(); SYNC.err = null;
+  } catch (e) { SYNC.err = e.message || 'offline'; if (!quiet) toast('Sync failed: ' + SYNC.err); }
+  store.set('cc_sync', SYNC); syncBusy = false;
+  if (tab === 'play') renderSoon();
+}
+async function syncCreate(server) {
+  const code = Array.from(crypto.getRandomValues(new Uint8Array(10)), n => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[n % 32]).join('');
+  SYNC = { server, code, base: 0 };
+  await syncNow();
+  if (SYNC.err) SYNC = null; else toast('☁️ Sync code created: ' + code);
+  store.set('cc_sync', SYNC); render();
+}
+async function syncLink(server, code) {
+  code = code.trim().toUpperCase();
+  try {
+    const r = await fetch(httpBase(server) + '/api/sync/' + code), b = await r.json();
+    if (!r.ok) return toast(b.error || 'Could not link');
+    if (!confirm('Replace the singleplayer game on this device with the synced one?')) return;
+    adoptSave(b.save); SYNC = { server, code, base: b.updatedAt, at: Date.now() }; store.set('cc_sync', SYNC); toast('☁️ Linked! This device now syncs.'); render();
+  } catch { toast('Could not reach the sync server'); }
+}
+setInterval(() => syncNow(true), 20000);
+addEventListener('visibilitychange', () => { if (document.hidden) syncNow(true); });
+setTimeout(() => syncNow(true), 500);
 
 // Current tycoon + how to act on it, depending on mode.
 const T = () => mode === 'mp' && NET?.state ? NET.state.tycoon : SP.tycoon;
@@ -245,22 +292,32 @@ function renderPlay() {
         <label>Your name</label><input id="nm" maxlength="16" value="${esc(store.get('cc_name') || '')}" placeholder="Player">
         <div class="row"><span class="muted">${NET?.connecting ? 'Connecting…' : ''}</span><button class="primary" data-connect>Join server</button></div>`}
     </div>
-  </div>${choice}`;
+  </div>${choice}
+  <div class="card" style="margin-top:12px"><h3>☁️ Sync with desktop</h3>
+    ${SYNC ? `<p>Sync code <b style="font-size:18px;letter-spacing:2px">${SYNC.code}</b> on <span class="muted">${esc(SYNC.server)}</span></p>
+      <p class="muted">Enter this code in the Cash Clash desktop app (or another browser) to share your singleplayer game and multiplayer logins.
+      ${SYNC.err ? `<span class="loss">Last sync failed: ${esc(SYNC.err)}</span>` : SYNC.at ? `Last synced ${new Date(SYNC.at).toLocaleTimeString()}.` : ''} Play on one device at a time.</p>
+      <div class="row"><button data-sync-now>Sync now</button><button class="danger" data-sync-off>Stop syncing</button></div>`
+    : `<p class="muted">Keep this game and the desktop app in sync through a Cash Clash server. Create a code here, or enter the code shown in your desktop app.</p>
+      <label>Sync server</label><input id="syncSrv" value="${esc(store.get('cc_server') || defaultServer)}">
+      <label>Sync code (to link an existing one)</label><input id="syncCode" maxlength="10" placeholder="e.g. K7Q2M9XPLR" style="text-transform:uppercase">
+      <div class="row"><button class="primary" data-sync-create>Create new sync code</button><button data-sync-link>Link with code</button></div>`}
+  </div>`;
 }
 
 function renderBattleSP() {
-  const ladder = [...SP.rivals, { name: 'YOU', money: SP.tycoon.money, you: true }].sort((a, b) => b.money - a.money);
+  const ladder = [...SP.rivals, { name: 'YOU', money: SP.tycoon.money, level: SP.tycoon.level, prestige: SP.tycoon.prestige, you: true }].sort((a, b) => b.money - a.money);
   const w = WEAPONS.find(x => x.id === SP.tycoon.equipped);
   return `<div class="grid">
     <div class="card"><h3>⚔️ Find a match <span class="tag">vs computer</span></h3>
-      <p class="muted">Matchmaking finds the rival whose money is closest to yours. Win: take <b class="win">10%</b> of their money. Lose: they take <b class="loss">10%</b> of yours.</p>
+      <p class="muted">Matchmaking finds the rival closest to your money and business level. Rivals reboot and level up too. Win: take <b class="win">10%</b> of their money. Lose: they take <b class="loss">10%</b> of yours.</p>
       <p>Record: <b class="win">${SP.wins}W</b> / <b class="loss">${SP.losses}L</b> · ${w.icon} ${w.name}</p>
       <button class="primary" id="queue">Search for opponent</button>
       <div id="mm" class="muted" style="margin-top:8px"></div>
       <h3 style="margin-top:14px">Battle log</h3>
       <div class="log">${SP.log.slice(-20).reverse().map(l => `<div class="${l.w ? 'win' : 'loss'}">${esc(l.t)}</div>`).join('') || '<span class="muted">No battles yet.</span>'}</div>
     </div>
-    <div class="card"><h3>🏆 Leaderboard</h3><table>${ladder.map((r, i) => `<tr class="${r.you ? 'you' : ''}"><td>#${i + 1}</td><td>${r.name}${r.you ? ` <span class="lvl">L${SP.tycoon.level}</span>` : ''}</td><td>${fmt(r.money)}</td></tr>`).join('')}</table></div>
+    <div class="card"><h3>🏆 Leaderboard</h3><table>${ladder.map((r, i) => `<tr class="${r.you ? 'you' : ''}"><td>#${i + 1}</td><td>${r.name} <span class="lvl">L${r.level || 1}${r.prestige ? '★' + r.prestige : ''}</span></td><td>${fmt(r.money)}</td></tr>`).join('')}</table></div>
   </div>`;
 }
 function renderBattleMP() {
@@ -282,6 +339,10 @@ $('#view').addEventListener('click', e => {
   const d = b.dataset;
   if (d.a) { act(JSON.parse(d.a)); if (mode === 'sp') render(); }
   else if ('reset' in d) resetSP();
+  else if ('syncCreate' in d) syncCreate($('#syncSrv').value);
+  else if ('syncLink' in d) syncLink($('#syncSrv').value, $('#syncCode').value);
+  else if ('syncNow' in d) syncNow();
+  else if ('syncOff' in d) { SYNC = null; store.set('cc_sync', null); render(); }
   else if ('reboot' in d) { const t = T(); if (confirm(t.level < CC.MAX_BIZ ? `Reboot to ${CC.LEVELS[t.level]}? You lose all money, buildings and weapons.` : `Prestige for ${CC.prestigePoints(t)} Boost Points? You lose all money, buildings and weapons.`)) { act({ type: 'reboot' }); toast('🔄 Rebooted!'); if (mode === 'sp') render(); } }
   else if ('sp' in d) { mode = 'sp'; render(); }
   else if ('mp' in d) { mode = 'mp'; render(); }
@@ -306,19 +367,10 @@ function startQueueSP() {
     mm.textContent = `Searching… ${w.toFixed(1)}s (range ±${CC.searchWindow(w).toFixed(2)} orders of magnitude)`;
     if (w < 0.8) return;
     // recently fought rivals count as further away so you don't face the same one every time
-    const best = SP.rivals.map(r => ({ r, d: CC.wealthDistance(r.money, SP.tycoon.money) + (r.recent > 0 ? 0.5 : 0) })).sort((a, b) => a.d - b.d)[0];
-    if (best.d <= CC.searchWindow(w)) { clearInterval(queueTimer); mm.innerHTML = `Matched with <b>${best.r.name}</b> (${fmt(best.r.money)})`; setTimeout(() => openArena({ mp: false, rival: best.r }), 700); }
+    const best = SP.rivals.map(r => ({ r, d: CC.matchDistance(r, SP.tycoon) + (r.recent > 0 ? 0.5 : 0) })).sort((a, b) => a.d - b.d)[0];
+    if (best.d <= CC.searchWindow(w)) { clearInterval(queueTimer); mm.innerHTML = `Matched with <b>${best.r.name}</b> (L${best.r.level}${best.r.prestige ? '★' + best.r.prestige : ''}, ${fmt(best.r.money)})`; setTimeout(() => openArena({ mp: false, rival: best.r }), 700); }
   }, 100);
 }
-// Rival loadout derives from their wealth, so richer opponents are tougher.
-function rivalLoadout(r) {
-  const affordable = WEAPONS.filter(w => w.price <= r.money * 0.6);
-  const w = affordable[Math.max(0, affordable.length - 1 - (Math.random() < .35 ? 1 : 0))] || WEAPONS[0];
-  const lvl = Math.max(0, Math.min(MAX_LVL, Math.floor(Math.log10(Math.max(10, r.money)) * 1.3 - 2 + Math.random() * 2)));
-  const up = { dmg: lvl, rate: lvl, mag: lvl, armor: lvl };
-  return { weapons: { [w.id]: up }, equipped: w.id };
-}
-
 // ---------- Arena (shared by both modes) ----------
 const cv = $('#cv'), cx = cv.getContext('2d');
 const keys = {}, mouse = { x: 0, y: 0, down: false };
@@ -386,7 +438,7 @@ function interpolatedView(g, dt) {
 
 function openArena(opts) {
   G = { ...opts, over: false, buf: [], pending: [], seq: 0 };
-  if (!opts.mp) { G.you = 0; G.oppName = opts.rival.name; G.A = CC.newArena(SP.tycoon, rivalLoadout(opts.rival)); G.pot = { win: opts.rival.money * CC.STEAL, lose: SP.tycoon.money * CC.STEAL }; }
+  if (!opts.mp) { G.you = 0; G.oppName = opts.rival.name; G.A = CC.newArena(SP.tycoon, CC.rivalLoadout(opts.rival)); G.pot = { win: opts.rival.money * CC.STEAL, lose: SP.tycoon.money * CC.STEAL }; }
   $('#arenaWrap').style.display = 'flex';
   let last = performance.now(), sendT = 0;
   const g = G;
@@ -467,7 +519,7 @@ setInterval(() => {
   const now = performance.now(), dt = (now - lastTick) / 1000; lastTick = now;
   // Singleplayer keeps earning in the background even while you're on a server.
   SP.tycoon.money += CC.income(SP.tycoon) * dt;
-  for (const r of SP.rivals) r.money *= 1 + 0.0015 * dt * (0.5 + r.skill);
+  for (const r of SP.rivals) { const news = CC.tickRival(r, dt); if (news && mode === 'sp' && tab === 'battle') toast('📰 ' + news); }
   if ((eventT += dt) >= 1) { eventT = 0; const ev = CC.rollEvent(SP.tycoon); if (ev && mode === 'sp') eventToast(ev); }
   updateMoney();
   if ((saveT += dt) > 5) { saveT = 0; saveSP(); }

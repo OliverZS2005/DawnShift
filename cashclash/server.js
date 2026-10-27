@@ -23,9 +23,46 @@ for (const p of Object.values(players)) p.tycoon = CC.upgradeSave(p.tycoon);
 let dirty = false;
 setInterval(() => { if (!dirty) return; dirty = false; fs.writeFile(DATA_FILE + '.tmp', JSON.stringify(players), e => { if (!e) fs.rename(DATA_FILE + '.tmp', DATA_FILE, () => {}); }); }, 5000);
 
-// ---------- HTTP (static files) ----------
+// ---------- Cloud saves (web <-> desktop sync) ----------
+// A sync code holds one save blob: { sp: singleplayer game, tokens: { serverUrl: multiplayer token } }.
+// Writes carry the `base` version the device last saw; if another device wrote since, we answer 409
+// with the newer save so the device can load it instead of overwriting it.
+const SYNC_FILE = process.env.SYNC_FILE || path.join(path.dirname(DATA_FILE), 'syncs.json');
+let syncs = {};
+try { syncs = JSON.parse(fs.readFileSync(SYNC_FILE, 'utf8')); } catch {}
+let syncDirty = false;
+setInterval(() => { if (!syncDirty) return; syncDirty = false; fs.writeFile(SYNC_FILE + '.tmp', JSON.stringify(syncs), e => { if (!e) fs.rename(SYNC_FILE + '.tmp', SYNC_FILE, () => {}); }); }, 5000);
+const SYNC_CODE = /^[A-Z0-9]{10}$/;
+const json = (res, code, body) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
+function handleSync(req, res, code) {
+  if (!SYNC_CODE.test(code)) return json(res, 400, { error: 'Bad sync code' });
+  const cur = syncs[code];
+  if (req.method === 'GET') return cur ? json(res, 200, cur) : json(res, 404, { error: 'Unknown sync code' });
+  if (req.method !== 'PUT') return json(res, 405, { error: 'Method not allowed' });
+  let body = '', size = 0;
+  req.on('data', c => { size += c.length; if (size > 512 * 1024) { json(res, 413, { error: 'Save too large' }); req.destroy(); } else body += c; });
+  req.on('end', () => {
+    if (res.writableEnded) return;
+    let m; try { m = JSON.parse(body); } catch { return json(res, 400, { error: 'Bad JSON' }); }
+    if (!m || typeof m.save !== 'object') return json(res, 400, { error: 'Missing save' });
+    if (cur && cur.updatedAt !== m.base) return json(res, 409, cur);
+    if (!cur && m.base) return json(res, 404, { error: 'Unknown sync code' });
+    syncs[code] = { save: m.save, updatedAt: Math.max(Date.now(), (cur?.updatedAt || 0) + 1), device: String(m.device || '').slice(0, 20) };
+    syncDirty = true;
+    json(res, 200, { updatedAt: syncs[code].updatedAt });
+  });
+}
+
+// ---------- HTTP (static files + sync API) ----------
 const STATIC = { '/': 'index.html', '/index.html': 'index.html', '/shared.js': 'shared.js' };
 const server = http.createServer((req, res) => {
+  // Desktop app and file:// pages call the sync API from other origins.
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
+  const sm = req.url.match(/^\/api\/sync\/([^/?]+)/);
+  if (sm) return handleSync(req, res, sm[1]);
   const f = STATIC[req.url.split('?')[0]];
   if (!f) { res.writeHead(404); return res.end('Not found'); }
   res.writeHead(200, { 'Content-Type': f.endsWith('.js') ? 'text/javascript' : 'text/html' });
@@ -116,7 +153,7 @@ setInterval(() => {
     let best = null, bestD = Infinity;
     for (const b of q) {
       if (b === a || taken.has(b)) continue;
-      const d = CC.wealthDistance(a.p.tycoon.money, b.p.tycoon.money);
+      const d = CC.matchDistance(a.p.tycoon, b.p.tycoon);
       if (d < bestD) { best = b; bestD = d; }
     }
     const win = CC.searchWindow(Math.max(now - a.queuedAt, best ? now - best.queuedAt : 0) / 1000);
@@ -147,8 +184,7 @@ setInterval(() => {
     M.inputs.forEach(i => { i.reload = false; i.sw = undefined; }); // one-shot inputs
     const snap = CC.snapshot(M.arena);
     M.sessions.forEach((s, i) => send(s.ws, { type: 'snap', snap, ack: M.acks[i] }));
-    if (w >= 0) endMatch(M, w);
-    else if (M.arena.t > 180) endMatch(M, M.arena.units[0].hp >= M.arena.units[1].hp ? 0 : 1, 'time limit');
+    if (w >= 0) endMatch(M, w, M.arena.units.every(u => u.hp > 0) ? 'time limit' : undefined);
   }
 }, TICK * 1000);
 

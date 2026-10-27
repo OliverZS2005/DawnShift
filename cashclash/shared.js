@@ -158,8 +158,43 @@
   // How far (in orders of magnitude) we accept after waiting `sec` in queue.
   const searchWindow = sec => 0.15 + sec * 0.25;
 
+  // Matchmaking also weighs business level, so a fresh Megacorp doesn't get paired with a real Street Hustler.
+  const power = t => (t.level || 1) + 0.5 * (t.prestige || 0);
+  const matchDistance = (a, b) => wealthDistance(a.money, b.money) + 0.4 * Math.abs(power(a) - power(b));
+
+  // ---------- Computer rivals (singleplayer) ----------
+  // Rivals run their own tycoons: they earn, reboot through the business levels and prestige, just like you.
+  const RIVAL_NAMES = ['xXSniperXx','MoneyMike','LemonLord','BigBankBob','NoScopeNina','TycoonTina','RocketRay','CashCarl','SprayPray','GoldGabe','FrugalFred','OilBaronOz','SpaceSam','PennyPia','CoinKing','ShotgunSue','ArcadeAce','FactoryFay','RichRick','DollarDee','BrokeBen','JackpotJo','VaultVic','StonksSteve'];
+  function newRivals() {
+    return RIVAL_NAMES.map((name, i) => {
+      const r = { name, skill: 0.3 + Math.random() * 0.6, recent: 0, level: Math.min(MAX_BIZ, 1 + Math.floor(i / 4)), prestige: 0 };
+      r.money = Math.round(Math.min(30 * Math.pow(1.75, i) * (0.7 + Math.random() * 0.6), rebootCost(r) * 0.5));
+      return r;
+    });
+  }
+  const rivalMult = r => Math.pow(2, r.level - 1) * (1 + 0.25 * r.prestige);
+  // Advances one rival by dt seconds. Returns a news string when they reboot, else null.
+  function tickRival(r, dt) {
+    r.level = r.level || 1; r.prestige = r.prestige || 0;
+    r.money = r.money * (1 + 0.0015 * dt * (0.5 + r.skill)) + dt * (0.5 + r.skill) * rivalMult(r);
+    // Skilled rivals reboot as soon as they can; others overshoot a little first.
+    if (r.money < rebootCost(r) * (1.6 - r.skill * 0.6)) return null;
+    if (r.level < MAX_BIZ) r.level++; else r.prestige++;
+    r.money = 500 * Math.pow(3, r.level) * (1 + r.prestige);
+    return r.prestige ? `${r.name} prestiged (★${r.prestige})!` : `${r.name} rebooted to ${LEVELS[r.level - 1]}!`;
+  }
+  // A rival's battle gear follows their wealth and level, so higher-level rivals hit harder.
+  function rivalLoadout(r) {
+    const level = r.level || 1, prestige = r.prestige || 0;
+    const affordable = WEAPONS.filter(w => w.price <= r.money * 0.6 * Math.pow(2, level - 1));
+    const w = affordable[Math.max(0, affordable.length - 1 - (Math.random() < .35 ? 1 : 0))] || WEAPONS[0];
+    const lvl = Math.max(0, Math.min(MAX_LVL, Math.floor(Math.log10(Math.max(10, r.money)) * 1.3 - 2 + Math.random() * 2) + Math.floor((level - 1) / 2)));
+    return { weapons: { [w.id]: { dmg: lvl, rate: lvl, mag: lvl, armor: lvl } }, equipped: w.id,
+      perks: { hp: Math.min(10, prestige), dmg: Math.min(10, prestige), speed: Math.min(8, Math.floor(prestige / 2)) } };
+  }
+
   // ---------- Arena ----------
-  const W = 900, H = 560, R = 14, SPEED = 210, TICK = 1 / 30;
+  const W = 900, H = 560, R = 14, SPEED = 210, TICK = 1 / 30, TIME_LIMIT = 180, CELL = 20;
   const MAPS = [
     { name: 'Warehouse', walls: [[200, 120, 40, 140], [660, 300, 40, 140], [400, 60, 100, 30], [400, 470, 100, 30], [120, 400, 120, 30], [660, 130, 120, 30], [420, 250, 60, 60]] },
     { name: 'Pillars',   walls: [[180, 100, 50, 50], [180, 410, 50, 50], [670, 100, 50, 50], [670, 410, 50, 50], [425, 160, 50, 50], [425, 350, 50, 50], [300, 255, 50, 50], [550, 255, 50, 50]] },
@@ -233,22 +268,51 @@
     A.bullets = A.bullets.filter(b => b.life > 0);
     A.fx.forEach(f => f.t -= dt); A.fx = A.fx.filter(f => f.t > 0);
     const [a, b] = A.units;
-    if (a.hp <= 0 || b.hp <= 0) return a.hp / a.mhp > b.hp / b.mhp ? 0 : b.hp / b.mhp > a.hp / a.mhp ? 1 : (Math.random() < .5 ? 0 : 1);
+    if (a.hp <= 0 || b.hp <= 0 || A.t >= TIME_LIMIT) return a.hp / a.mhp > b.hp / b.mhp ? 0 : b.hp / b.mhp > a.hp / a.mhp ? 1 : (Math.random() < .5 ? 0 : 1);
     return -1;
+  }
+
+  // Breadth-first search over a 20px grid; returns a point a few cells along the shortest path
+  // from `from` to `to`, or null if there's no path. Lets bots walk around walls instead of into them.
+  function nextWaypoint(walls, from, to) {
+    const cols = Math.floor(W / CELL), rows = Math.floor(H / CELL), key = (c, r) => r * cols + c;
+    const cell = p => [Math.min(cols - 1, Math.max(0, Math.floor(p.x / CELL))), Math.min(rows - 1, Math.max(0, Math.floor(p.y / CELL)))];
+    const [sc, sr] = cell(from), [gc, gr] = cell(to), goal = key(gc, gr);
+    const prev = new Map([[key(sc, sr), -1]]), q = [[sc, sr]];
+    for (let qi = 0; qi < q.length && !prev.has(goal); qi++) {
+      const [c, r] = q[qi];
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nc = c + dc, nr = r + dr, k = key(nc, nr);
+        if (nc < 0 || nr < 0 || nc >= cols || nr >= rows || prev.has(k)) continue;
+        if (k !== goal && hitsWall(walls, nc * CELL + CELL / 2, nr * CELL + CELL / 2, R)) continue;
+        prev.set(k, key(c, r)); q.push([nc, nr]);
+      }
+    }
+    if (!prev.has(goal)) return null;
+    const path = []; for (let k = goal; k !== -1; k = prev.get(k)) path.push(k);
+    const k = path[Math.max(0, path.length - 4)];
+    return { x: (k % cols) * CELL + CELL / 2, y: Math.floor(k / cols) * CELL + CELL / 2 };
   }
 
   // Singleplayer opponent brain: approach to preferred range, strafe, shoot with skill-based aim error.
   function botInput(A, i, skill) {
     const e = A.units[i], p = A.units[1 - i];
-    const ai = e.ai || (e.ai = { strafe: 1, think: 0 });
+    const ai = e.ai || (e.ai = { strafe: 1, think: 0, pathT: 0, wp: null });
     const dx = p.x - e.x, dy = p.y - e.y, dist = Math.hypot(dx, dy) || 1, see = lineClear(A.walls, e, p);
     if ((ai.think -= 1 / 60) <= 0) { ai.think = 0.6 + Math.random(); ai.strafe = Math.random() < .5 ? -1 : 1; }
     const pref = e.gun.id === 'shotgun' ? 120 : e.gun.id === 'sniper' ? 420 : 260;
     let ax = 0, ay = 0;
-    if (!see || dist > pref + 40) { ax = dx / dist; ay = dy / dist; } else if (dist < pref - 40) { ax = -dx / dist; ay = -dy / dist; }
-    ax += -dy / dist * ai.strafe * .8; ay += dx / dist * ai.strafe * .8;
+    if (!see) {
+      // no line of sight: follow a path around the walls
+      if ((ai.pathT -= 1 / 60) <= 0 || !ai.wp) { ai.pathT = 0.3; ai.wp = nextWaypoint(A.walls, e, p) || p; }
+      const wx = ai.wp.x - e.x, wy = ai.wp.y - e.y, wd = Math.hypot(wx, wy) || 1;
+      ax = wx / wd; ay = wy / wd;
+    } else {
+      if (dist > pref + 40) { ax = dx / dist; ay = dy / dist; } else if (dist < pref - 40) { ax = -dx / dist; ay = -dy / dist; }
+      ax += -dy / dist * ai.strafe * .8; ay += dx / dist * ai.strafe * .8;
+    }
     const m = Math.hypot(ax, ay) || 1; ax /= m; ay /= m;
-    if (hitsWall(A.walls, e.x + ax * 8, e.y + ay * 8, R)) ai.strafe *= -1;
+    if (see && hitsWall(A.walls, e.x + ax * 8, e.y + ay * 8, R)) ai.strafe *= -1;
     const scale = 0.8 + 0.2 * skill;
     return { mx: ax * scale, my: ay * scale, ang: Math.atan2(dy, dx) + (Math.random() - .5) * (0.5 - 0.4 * skill), shoot: see };
   }
@@ -264,6 +328,6 @@
 
   return { BUILDINGS, WEAPONS, STATS, MAX_LVL, STEAL, LEVELS, MAX_BIZ, PERKS, EVENTS, MAPS, TICK, fmt,
     newTycoon, upgradeSave, owned, bLevel, unlocked, bCost, bUpCost, bIncome, income, globalMult, milestoneMult, nextMilestone, upCost, offlineEarnings,
-    perk, perkCost, rebootCost, prestigePoints, eventOn, rollEvent, applyAction, sanitizeTycoon, wealthDistance, searchWindow,
-    W, H, hitsWall, moveUnit, newArena, stepArena, botInput, snapshot };
+    perk, perkCost, rebootCost, prestigePoints, eventOn, rollEvent, applyAction, sanitizeTycoon, wealthDistance, matchDistance, searchWindow, newRivals, tickRival, rivalLoadout,
+    W, H, hitsWall, moveUnit, nextWaypoint, newArena, stepArena, botInput, snapshot };
 });
