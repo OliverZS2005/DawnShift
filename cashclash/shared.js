@@ -5,13 +5,15 @@
   else root.CC = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   const BUILDINGS = [
-    { id: 'lemon',  name: 'Lemonade Stand', icon: '🍋', base: 15,     income: 1 },
-    { id: 'cafe',   name: 'Coffee Shop',    icon: '☕', base: 120,    income: 6 },
-    { id: 'arcade', name: 'Arcade',         icon: '🕹️', base: 1300,   income: 40 },
-    { id: 'fact',   name: 'Factory',        icon: '🏭', base: 14000,  income: 260 },
-    { id: 'bank',   name: 'Bank',           icon: '🏦', base: 160000, income: 1800 },
-    { id: 'oil',    name: 'Oil Rig',        icon: '🛢️', base: 2.2e6,  income: 14000 },
-    { id: 'space',  name: 'Space Mine',     icon: '🚀', base: 3.5e7,  income: 120000 },
+    { id: 'lemon',  name: 'Lemonade Stand', icon: '🍋', base: 15,     income: 1,       unlock: 1 },
+    { id: 'cafe',   name: 'Coffee Shop',    icon: '☕', base: 120,    income: 6,       unlock: 1 },
+    { id: 'arcade', name: 'Arcade',         icon: '🕹️', base: 1300,   income: 40,      unlock: 1 },
+    { id: 'fact',   name: 'Factory',        icon: '🏭', base: 14000,  income: 260,     unlock: 2 },
+    { id: 'bank',   name: 'Bank',           icon: '🏦', base: 160000, income: 1800,    unlock: 3 },
+    { id: 'oil',    name: 'Oil Rig',        icon: '🛢️', base: 2.2e6,  income: 14000,   unlock: 4 },
+    { id: 'space',  name: 'Space Mine',     icon: '🚀', base: 3.5e7,  income: 120000,  unlock: 5 },
+    { id: 'ailab',  name: 'AI Lab',         icon: '🧠', base: 6e8,    income: 1.1e6,   unlock: 6 },
+    { id: 'dyson',  name: 'Dyson Sphere',   icon: '☀️', base: 1.2e10, income: 1.2e7,   unlock: 7 },
   ];
   const WEAPONS = [
     { id: 'pistol',  name: 'Pistol',          icon: '🔫', price: 0,      dmg: 14, rate: 3,   mag: 12, reload: 1.1, speed: 700,  spread: .03,  pellets: 1 },
@@ -23,20 +25,65 @@
   const STATS = { dmg: 'Damage', rate: 'Fire rate', mag: 'Magazine', armor: 'Armor' };
   const MAX_LVL = 10;
   const STEAL = 0.10;
-  const OFFLINE_RATE = 0.5, OFFLINE_CAP = 7200;
 
-  const fmt = n => { n = Math.floor(n); const u = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi']; let i = 0, x = n; while (Math.abs(x) >= 1000 && i < u.length - 1) { x /= 1000; i++; } return '$' + (i ? x.toFixed(2) : x) + u[i]; };
+  // ---------- Business levels & reboots ----------
+  // Reboot = wipe money, buildings and weapons to reach the next business level (x2 income, new building).
+  // At the top level, rebooting ("prestige") grants Boost Points for permanent perks instead.
+  const LEVELS = ['Street Hustler', 'Small Business', 'Franchise', 'Corporation', 'Conglomerate', 'Megacorp', 'Galactic Empire'];
+  const MAX_BIZ = LEVELS.length;
+  const PERKS = {
+    income:  { name: 'Income',        icon: '💵', desc: '+25% income',            max: 20 },
+    dmg:     { name: 'Firepower',     icon: '🔥', desc: '+10% weapon damage',     max: 10 },
+    hp:      { name: 'Toughness',     icon: '❤️', desc: '+10% max health',        max: 10 },
+    speed:   { name: 'Agility',       icon: '👟', desc: '+5% move speed',         max: 8 },
+    cash:    { name: 'Head Start',    icon: '💼', desc: 'x10 starting cash',      max: 5 },
+    offline: { name: 'Night Shift',   icon: '🌙', desc: '+1h offline earnings',   max: 10 },
+    luck:    { name: 'Lucky Streak',  icon: '🍀', desc: 'More frequent events',   max: 5 },
+  };
+  const perk = (t, k) => t.perks?.[k] || 0;
+  const perkCost = (t, k) => 1 + Math.floor(perk(t, k) / 2);
+  const rebootCost = t => t.level < MAX_BIZ ? 25000 * Math.pow(25, t.level - 1) : 1e11 * Math.pow(4, t.prestige);
+  const prestigePoints = t => t.level < MAX_BIZ ? 0 : 1 + Math.max(0, Math.floor(Math.log2(t.money / rebootCost(t))));
+
+  const fmt = n => { n = Math.floor(n); const u = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx']; let i = 0, x = n; while (Math.abs(x) >= 1000 && i < u.length - 1) { x /= 1000; i++; } return '$' + (i ? x.toFixed(2) : x) + u[i]; };
 
   // ---------- Tycoon ----------
-  const newTycoon = () => ({ money: 50, buildings: {}, weapons: { pistol: { dmg: 0, rate: 0, mag: 0, armor: 0 } }, equipped: 'pistol' });
+  const freshWeapons = () => ({ pistol: { dmg: 0, rate: 0, mag: 0, armor: 0 } });
+  const startCash = t => 50 * Math.pow(10, perk(t, 'cash'));
+  const newTycoon = () => ({ money: 50, buildings: {}, weapons: freshWeapons(), equipped: 'pistol', level: 1, prestige: 0, points: 0, perks: {}, event: null });
   const owned = (t, id) => t.buildings[id]?.count || 0;
   const bLevel = (t, id) => t.buildings[id]?.level || 0;
-  const bCost = (t, b) => b.base * Math.pow(1.15, owned(t, b.id));
+  const unlocked = (t, b) => t.level >= b.unlock;
+  const now = () => Date.now();
+  const eventOn = (t, type) => t.event && t.event.type === type && t.event.until > now();
+  const bCost = (t, b) => b.base * Math.pow(1.15, owned(t, b.id)) * (eventOn(t, 'sale') ? 0.6 : 1);
   const bUpCost = (t, b) => b.base * 25 * Math.pow(4, bLevel(t, b.id));
-  const bIncome = (t, b) => owned(t, b.id) * b.income * Math.pow(2, bLevel(t, b.id));
+  const MILESTONES = [25, 50, 100, 200];
+  const milestoneMult = n => Math.pow(2, MILESTONES.filter(m => n >= m).length);
+  const nextMilestone = n => MILESTONES.find(m => n < m);
+  const globalMult = t => Math.pow(2, t.level - 1) * (1 + 0.25 * perk(t, 'income')) * (eventOn(t, 'boom') ? 3 : 1);
+  const bIncome = (t, b) => owned(t, b.id) * b.income * Math.pow(2, bLevel(t, b.id)) * milestoneMult(owned(t, b.id)) * globalMult(t);
   const income = t => BUILDINGS.reduce((s, b) => s + bIncome(t, b), 0);
   const upCost = (t, w, stat) => Math.max(200, (w.price || 800) * 0.35) * Math.pow(1.6, t.weapons[w.id][stat]);
-  const offlineEarnings = (t, seconds) => income(t) * Math.min(OFFLINE_CAP, Math.max(0, seconds)) * OFFLINE_RATE;
+  const offlineEarnings = (t, seconds) => {
+    const base = { ...t, event: null }; // events don't run while you're away
+    return income(base) * Math.min(7200 + 3600 * perk(t, 'offline'), Math.max(0, seconds)) * 0.5;
+  };
+
+  // ---------- Random events (call once per second) ----------
+  const EVENTS = {
+    boom:  { name: 'Market Boom', icon: '📈', desc: 'x3 income for 30s', dur: 30 },
+    sale:  { name: 'Fire Sale',   icon: '🏷️', desc: 'Buildings 40% off for 30s', dur: 30 },
+    crate: { name: 'Golden Crate', icon: '🎁', desc: 'Claim within 15s for 90s of income!', dur: 15 },
+  };
+  function rollEvent(t) {
+    if (t.event && t.event.until > now()) return null;
+    t.event = null;
+    if (!(income(t) > 0) || Math.random() > (1 + 0.3 * perk(t, 'luck')) / 120) return null;
+    const keys = Object.keys(EVENTS), type = keys[Math.floor(Math.random() * keys.length)];
+    t.event = { type, until: now() + EVENTS[type].dur * 1000 };
+    return type;
+  }
 
   // Applies a player action to a tycoon. Returns an error message, or null on success.
   function applyAction(t, a) {
@@ -44,6 +91,7 @@
     const pay = c => { if (!(t.money >= c)) return false; t.money -= c; return true; };
     if (a.type === 'buy') {
       const b = BUILDINGS.find(x => x.id === a.id); if (!b) return 'Unknown building';
+      if (!unlocked(t, b)) return `Reach ${LEVELS[b.unlock - 1]} to unlock`;
       if (!pay(bCost(t, b))) return 'Not enough money';
       t.buildings[b.id] = { count: owned(t, b.id) + 1, level: bLevel(t, b.id) };
     } else if (a.type === 'bup') {
@@ -62,6 +110,19 @@
     } else if (a.type === 'equip') {
       if (!t.weapons[a.id]) return 'Not owned';
       t.equipped = a.id;
+    } else if (a.type === 'claim') {
+      if (!eventOn(t, 'crate')) return 'The crate is gone';
+      t.event = null; t.money += Math.max(100, income(t) * 90);
+    } else if (a.type === 'reboot') {
+      if (t.money < rebootCost(t)) return `Need ${fmt(rebootCost(t))} to reboot`;
+      if (t.level < MAX_BIZ) t.level++;
+      else { t.points += prestigePoints(t); t.prestige++; }
+      Object.assign(t, { money: startCash(t), buildings: {}, weapons: freshWeapons(), equipped: 'pistol', event: null });
+    } else if (a.type === 'perk') {
+      const p = PERKS[a.id]; if (!p) return 'Unknown perk';
+      if (perk(t, a.id) >= p.max) return 'Already maxed';
+      if (t.points < perkCost(t, a.id)) return 'Not enough Boost Points';
+      t.points -= perkCost(t, a.id); t.perks[a.id] = perk(t, a.id) + 1;
     } else return 'Unknown action';
     return null;
   }
@@ -71,18 +132,25 @@
     const t = newTycoon();
     if (!raw || typeof raw !== 'object') return t;
     const num = (v, lo, hi) => (typeof v === 'number' && isFinite(v)) ? Math.min(hi, Math.max(lo, v)) : lo;
-    t.money = num(raw.money, 0, 1e18);
+    const int = (v, lo, hi) => Math.floor(num(v, lo, hi));
+    t.money = num(raw.money, 0, 1e21);
+    t.level = int(raw.level, 1, MAX_BIZ);
+    t.prestige = int(raw.prestige, 0, 1e4);
+    t.points = int(raw.points, 0, 1e5);
+    for (const k in PERKS) { const v = int(raw.perks?.[k], 0, PERKS[k].max); if (v) t.perks[k] = v; }
     for (const b of BUILDINGS) {
       const rb = raw.buildings && raw.buildings[b.id];
-      if (rb) t.buildings[b.id] = { count: Math.floor(num(rb.count, 0, 1e4)), level: Math.floor(num(rb.level, 0, 40)) };
+      if (rb && unlocked(t, b)) t.buildings[b.id] = { count: int(rb.count, 0, 1e4), level: int(rb.level, 0, 40) };
     }
     for (const w of WEAPONS) {
       const rw = raw.weapons && raw.weapons[w.id];
-      if (rw) t.weapons[w.id] = Object.fromEntries(Object.keys(STATS).map(s => [s, Math.floor(num(rw[s], 0, MAX_LVL))]));
+      if (rw) t.weapons[w.id] = Object.fromEntries(Object.keys(STATS).map(s => [s, int(rw[s], 0, MAX_LVL)]));
     }
     if (raw.equipped && t.weapons[raw.equipped]) t.equipped = raw.equipped;
     return t;
   }
+  // Fills in fields added in later versions so old saves keep working.
+  const upgradeSave = t => Object.assign(newTycoon(), t, { perks: t.perks || {}, level: t.level || 1, prestige: t.prestige || 0, points: t.points || 0 });
 
   // ---------- Matchmaking ----------
   // Distance on a log10 scale, so $1K vs $2K is as close as $1M vs $2M.
@@ -91,22 +159,38 @@
   const searchWindow = sec => 0.15 + sec * 0.25;
 
   // ---------- Arena ----------
-  const W = 900, H = 560, R = 14, SPEED = 210;
-  const WALLS = [[200, 120, 40, 140], [660, 300, 40, 140], [400, 60, 100, 30], [400, 470, 100, 30], [120, 400, 120, 30], [660, 130, 120, 30], [420, 250, 60, 60]];
-  function hitsWall(x, y, rad) {
+  const W = 900, H = 560, R = 14, SPEED = 210, TICK = 1 / 30;
+  const MAPS = [
+    { name: 'Warehouse', walls: [[200, 120, 40, 140], [660, 300, 40, 140], [400, 60, 100, 30], [400, 470, 100, 30], [120, 400, 120, 30], [660, 130, 120, 30], [420, 250, 60, 60]] },
+    { name: 'Pillars',   walls: [[180, 100, 50, 50], [180, 410, 50, 50], [670, 100, 50, 50], [670, 410, 50, 50], [425, 160, 50, 50], [425, 350, 50, 50], [300, 255, 50, 50], [550, 255, 50, 50]] },
+    { name: 'Corridors', walls: [[150, 0, 30, 200], [150, 360, 30, 200], [720, 0, 30, 200], [720, 360, 30, 200], [330, 150, 240, 30], [330, 380, 240, 30]] },
+    { name: 'Vault',     walls: [[300, 140, 300, 25], [300, 395, 300, 25], [300, 140, 25, 100], [575, 320, 25, 100], [80, 260, 80, 40], [740, 260, 80, 40]] },
+  ];
+  function hitsWall(walls, x, y, rad) {
     if (x < rad || y < rad || x > W - rad || y > H - rad) return true;
-    return WALLS.some(([wx, wy, ww, wh]) => x + rad > wx && x - rad < wx + ww && y + rad > wy && y - rad < wy + wh);
+    return walls.some(([wx, wy, ww, wh]) => x + rad > wx && x - rad < wx + ww && y + rad > wy && y - rad < wy + wh);
   }
-  function lineClear(a, b) { for (let i = 1; i < 30; i++) if (hitsWall(a.x + (b.x - a.x) * i / 30, a.y + (b.y - a.y) * i / 30, 1)) return false; return true; }
-  function makeGun(id, up) {
+  function lineClear(walls, a, b) { for (let i = 1; i < 30; i++) if (hitsWall(walls, a.x + (b.x - a.x) * i / 30, a.y + (b.y - a.y) * i / 30, 1)) return false; return true; }
+  // Movement is shared so the client can predict its own player exactly like the server moves it.
+  function moveUnit(walls, u, mx, my, speed, dt) {
+    mx = +mx || 0; my = +my || 0; const m = Math.hypot(mx, my);
+    if (m > 1) { mx /= m; my /= m; }
+    if (!hitsWall(walls, u.x + mx * speed * dt, u.y, R)) u.x += mx * speed * dt;
+    if (!hitsWall(walls, u.x, u.y + my * speed * dt, R)) u.y += my * speed * dt;
+  }
+  function makeGun(id, up, dmgPerk = 0) {
     const w = WEAPONS.find(x => x.id === id) || WEAPONS[0];
     const mag = Math.round(w.mag * (1 + 0.15 * up.mag));
-    return { ...w, dmg: w.dmg * (1 + 0.15 * up.dmg), rate: w.rate * (1 + 0.08 * up.rate), mag, ammo: mag, cd: 0, reloading: 0, armor: up.armor };
+    return { ...w, dmg: w.dmg * (1 + 0.15 * up.dmg) * (1 + 0.1 * dmgPerk), rate: w.rate * (1 + 0.08 * up.rate), mag, ammo: mag, cd: 0, reloading: 0, armor: up.armor };
   }
-  // loadout = { weapons, equipped } (a tycoon works as one)
-  function newArena(loadoutA, loadoutB) {
-    const unit = (l, x, ang) => ({ x, y: H / 2, hp: 100, ang, loadout: { weapons: l.weapons, equipped: l.equipped }, gun: makeGun(l.equipped, l.weapons[l.equipped]) });
-    return { units: [unit(loadoutA, 80, 0), unit(loadoutB, W - 80, Math.PI)], bullets: [], fx: [], t: 0 };
+  // loadout = { weapons, equipped, perks } (a tycoon works as one)
+  function newArena(loadoutA, loadoutB, mapIndex = Math.floor(Math.random() * MAPS.length)) {
+    const unit = (l, x, ang) => {
+      const p = l.perks || {}, mhp = 100 * (1 + 0.1 * (p.hp || 0));
+      return { x, y: H / 2, hp: mhp, mhp, ang, speed: SPEED * (1 + 0.05 * (p.speed || 0)), dmgPerk: p.dmg || 0,
+        loadout: { weapons: l.weapons, equipped: l.equipped }, gun: makeGun(l.equipped, l.weapons[l.equipped], p.dmg || 0) };
+    };
+    return { map: mapIndex, walls: MAPS[mapIndex].walls, units: [unit(loadoutA, 60, 0), unit(loadoutB, W - 60, Math.PI)], bullets: [], fx: [], t: 0 };
   }
   function reload(u) { if (!u.gun.reloading && u.gun.ammo < u.gun.mag) u.gun.reloading = u.gun.reload; }
   function shoot(A, u, owner) {
@@ -128,12 +212,9 @@
       const g = u.gun, inp = inputs[i] || {};
       g.cd -= dt;
       if (g.reloading > 0 && (g.reloading -= dt) <= 0) { g.reloading = 0; g.ammo = g.mag; }
-      if (inp.sw && inp.sw !== g.id && u.loadout.weapons[inp.sw]) u.gun = makeGun(inp.sw, u.loadout.weapons[inp.sw]);
+      if (inp.sw && inp.sw !== g.id && u.loadout.weapons[inp.sw]) u.gun = makeGun(inp.sw, u.loadout.weapons[inp.sw], u.dmgPerk);
       if (inp.reload) reload(u);
-      let mx = +inp.mx || 0, my = +inp.my || 0; const m = Math.hypot(mx, my);
-      if (m > 1) { mx /= m; my /= m; }
-      if (!hitsWall(u.x + mx * SPEED * dt, u.y, R)) u.x += mx * SPEED * dt;
-      if (!hitsWall(u.x, u.y + my * SPEED * dt, R)) u.y += my * SPEED * dt;
+      moveUnit(A.walls, u, inp.mx, inp.my, u.speed, dt);
       if (typeof inp.ang === 'number' && isFinite(inp.ang)) u.ang = inp.ang;
       if (inp.shoot && A.t > 0.8) shoot(A, u, i);
     });
@@ -146,13 +227,13 @@
         A.fx.push({ x: b.x, y: b.y, r: b.splash, t: .3 });
         for (const u of A.units) { const d = Math.hypot(u.x - b.x, u.y - b.y); if (d < b.splash) damage(u, b.dmg * (1 - d / b.splash) * (u === tgt ? 1 : 0.4)); }
       };
-      if (hitsWall(b.x, b.y, 2)) boom();
+      if (hitsWall(A.walls, b.x, b.y, 2)) boom();
       else if (Math.hypot(tgt.x - b.x, tgt.y - b.y) < R + 1) { if (!b.splash) damage(tgt, b.dmg); boom(); A.fx.push({ x: b.x, y: b.y, r: 8, t: .15 }); }
     }
     A.bullets = A.bullets.filter(b => b.life > 0);
     A.fx.forEach(f => f.t -= dt); A.fx = A.fx.filter(f => f.t > 0);
     const [a, b] = A.units;
-    if (a.hp <= 0 || b.hp <= 0) return a.hp > b.hp ? 0 : b.hp > a.hp ? 1 : (Math.random() < .5 ? 0 : 1);
+    if (a.hp <= 0 || b.hp <= 0) return a.hp / a.mhp > b.hp / b.mhp ? 0 : b.hp / b.mhp > a.hp / a.mhp ? 1 : (Math.random() < .5 ? 0 : 1);
     return -1;
   }
 
@@ -160,26 +241,29 @@
   function botInput(A, i, skill) {
     const e = A.units[i], p = A.units[1 - i];
     const ai = e.ai || (e.ai = { strafe: 1, think: 0 });
-    const dx = p.x - e.x, dy = p.y - e.y, dist = Math.hypot(dx, dy) || 1, see = lineClear(e, p);
+    const dx = p.x - e.x, dy = p.y - e.y, dist = Math.hypot(dx, dy) || 1, see = lineClear(A.walls, e, p);
     if ((ai.think -= 1 / 60) <= 0) { ai.think = 0.6 + Math.random(); ai.strafe = Math.random() < .5 ? -1 : 1; }
     const pref = e.gun.id === 'shotgun' ? 120 : e.gun.id === 'sniper' ? 420 : 260;
     let ax = 0, ay = 0;
     if (!see || dist > pref + 40) { ax = dx / dist; ay = dy / dist; } else if (dist < pref - 40) { ax = -dx / dist; ay = -dy / dist; }
     ax += -dy / dist * ai.strafe * .8; ay += dx / dist * ai.strafe * .8;
     const m = Math.hypot(ax, ay) || 1; ax /= m; ay /= m;
-    if (hitsWall(e.x + ax * 8, e.y + ay * 8, R)) ai.strafe *= -1;
+    if (hitsWall(A.walls, e.x + ax * 8, e.y + ay * 8, R)) ai.strafe *= -1;
     const scale = 0.8 + 0.2 * skill;
     return { mx: ax * scale, my: ay * scale, ang: Math.atan2(dy, dx) + (Math.random() - .5) * (0.5 - 0.4 * skill), shoot: see };
   }
 
-  // Compact state for rendering / sending over the network.
+  // Compact state for rendering / sending over the network. Bullets carry velocity so clients can extrapolate.
   const snapshot = A => ({
-    t: A.t,
-    u: A.units.map(u => ({ x: Math.round(u.x), y: Math.round(u.y), hp: Math.max(0, Math.round(u.hp)), ang: +u.ang.toFixed(3), g: { id: u.gun.id, ammo: u.gun.ammo, mag: u.gun.mag, rl: u.gun.reloading > 0 } })),
-    b: A.bullets.map(b => [Math.round(b.x), Math.round(b.y), b.splash ? 1 : 0]),
+    t: +A.t.toFixed(3), m: A.map,
+    u: A.units.map(u => ({ x: +u.x.toFixed(1), y: +u.y.toFixed(1), hp: Math.max(0, Math.round(u.hp)), mhp: Math.round(u.mhp), ang: +u.ang.toFixed(3), sp: u.speed,
+      g: { id: u.gun.id, ammo: u.gun.ammo, mag: u.gun.mag, rl: u.gun.reloading > 0 } })),
+    b: A.bullets.map(b => [Math.round(b.x), Math.round(b.y), b.splash ? 1 : 0, Math.round(b.vx), Math.round(b.vy)]),
     fx: A.fx.map(f => [Math.round(f.x), Math.round(f.y), f.r, +f.t.toFixed(2)]),
   });
 
-  return { BUILDINGS, WEAPONS, STATS, MAX_LVL, STEAL, fmt, newTycoon, owned, bLevel, bCost, bUpCost, bIncome, income, upCost, offlineEarnings,
-    applyAction, sanitizeTycoon, wealthDistance, searchWindow, W, H, WALLS, hitsWall, newArena, stepArena, botInput, snapshot };
+  return { BUILDINGS, WEAPONS, STATS, MAX_LVL, STEAL, LEVELS, MAX_BIZ, PERKS, EVENTS, MAPS, TICK, fmt,
+    newTycoon, upgradeSave, owned, bLevel, unlocked, bCost, bUpCost, bIncome, income, globalMult, milestoneMult, nextMilestone, upCost, offlineEarnings,
+    perk, perkCost, rebootCost, prestigePoints, eventOn, rollEvent, applyAction, sanitizeTycoon, wealthDistance, searchWindow,
+    W, H, hitsWall, moveUnit, newArena, stepArena, botInput, snapshot };
 });

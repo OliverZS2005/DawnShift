@@ -13,12 +13,13 @@ const PORT = +process.env.PORT || 8080;
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'players.json');
 const ALLOW_IMPORT = process.env.ALLOW_IMPORT !== '0';
 const SERVER_NAME = process.env.SERVER_NAME || 'Cash Clash Server';
-const TICK = 1 / 30;
+const TICK = CC.TICK;
 
 // ---------- Persistence ----------
 // players: token -> { id, name, tycoon, wins, losses, last }
 let players = {};
 try { players = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); } catch {}
+for (const p of Object.values(players)) p.tycoon = CC.upgradeSave(p.tycoon);
 let dirty = false;
 setInterval(() => { if (!dirty) return; dirty = false; fs.writeFile(DATA_FILE + '.tmp', JSON.stringify(players), e => { if (!e) fs.rename(DATA_FILE + '.tmp', DATA_FILE, () => {}); }); }, 5000);
 
@@ -78,7 +79,10 @@ wss.on('connection', ws => {
       s.queuedAt = 0; send(ws, { type: 'queue', status: 'idle' });
     } else if (m.type === 'input' && s.match) {
       const i = m.input || {};
-      s.match.inputs[s.match.sessions.indexOf(s)] = { mx: +i.mx || 0, my: +i.my || 0, ang: +i.ang || 0, shoot: !!i.shoot, reload: !!i.reload, sw: typeof i.sw === 'string' ? i.sw : undefined };
+      const idx = s.match.sessions.indexOf(s), prev = s.match.inputs[idx];
+      if (+i.seq > 0) s.match.acks[idx] = +i.seq;
+      // one-shot inputs (reload / weapon switch) survive until the next tick consumes them
+      s.match.inputs[idx] = { reload: !!i.reload || !!prev.reload, sw: (typeof i.sw === 'string' ? i.sw : undefined) || prev.sw, mx: +i.mx || 0, my: +i.my || 0, ang: +i.ang || 0, shoot: !!i.shoot };
     }
   });
   ws.on('close', () => {
@@ -93,7 +97,10 @@ wss.on('connection', ws => {
 let lastEco = Date.now();
 setInterval(() => {
   const now = Date.now(), dt = (now - lastEco) / 1000; lastEco = now;
-  for (const s of online.values()) { s.p.tycoon.money += CC.income(s.p.tycoon) * dt; s.p.last = now; send(s.ws, { type: 'state', state: publicState(s.p) }); }
+  for (const s of online.values()) {
+    const ev = CC.rollEvent(s.p.tycoon);
+    if (ev) send(s.ws, { type: 'event', event: ev });
+    s.p.tycoon.money += CC.income(s.p.tycoon) * dt; s.p.last = now; send(s.ws, { type: 'state', state: publicState(s.p) }); }
   dirty = true;
 }, 1000);
 
@@ -121,11 +128,11 @@ setInterval(() => {
 // ---------- Battles (server-authoritative) ----------
 const matches = new Set();
 function startMatch(a, b) {
-  const M = { sessions: [a, b], arena: CC.newArena(a.p.tycoon, b.p.tycoon), inputs: [{}, {}], over: false };
+  const M = { sessions: [a, b], arena: CC.newArena(a.p.tycoon, b.p.tycoon), inputs: [{}, {}], acks: [0, 0], over: false };
   // The pot is fixed when the match starts, so earning/spending mid-fight can't change the stakes.
   M.pot = [a.p.tycoon.money * CC.STEAL, b.p.tycoon.money * CC.STEAL];
   a.queuedAt = b.queuedAt = 0; a.match = b.match = M; matches.add(M);
-  M.sessions.forEach((s, i) => { const o = M.sessions[1 - i]; send(s.ws, { type: 'match', you: i, opp: { name: o.p.name, money: o.p.tycoon.money }, pot: { win: M.pot[1 - i], lose: M.pot[i] } }); });
+  M.sessions.forEach((s, i) => { const o = M.sessions[1 - i]; send(s.ws, { type: 'match', you: i, map: M.arena.map, opp: { name: o.p.name, money: o.p.tycoon.money }, pot: { win: M.pot[1 - i], lose: M.pot[i] } }); });
 }
 function endMatch(M, winner, reason) {
   if (M.over) return; M.over = true; matches.delete(M);
@@ -139,7 +146,7 @@ setInterval(() => {
     const w = CC.stepArena(M.arena, M.inputs, TICK);
     M.inputs.forEach(i => { i.reload = false; i.sw = undefined; }); // one-shot inputs
     const snap = CC.snapshot(M.arena);
-    M.sessions.forEach(s => send(s.ws, { type: 'snap', snap }));
+    M.sessions.forEach((s, i) => send(s.ws, { type: 'snap', snap, ack: M.acks[i] }));
     if (w >= 0) endMatch(M, w);
     else if (M.arena.t > 180) endMatch(M, M.arena.units[0].hp >= M.arena.units[1].hp ? 0 : 1, 'time limit');
   }
@@ -149,7 +156,7 @@ setInterval(() => {
 setInterval(() => {
   const onlineIds = new Set([...online.values()].map(s => s.p.id));
   const board = Object.values(players).sort((a, b) => b.tycoon.money - a.tycoon.money).slice(0, 25)
-    .map(p => ({ id: p.id, name: p.name, money: p.tycoon.money, wins: p.wins, losses: p.losses, online: onlineIds.has(p.id) }));
+    .map(p => ({ id: p.id, name: p.name, money: p.tycoon.money, level: p.tycoon.level, prestige: p.tycoon.prestige, wins: p.wins, losses: p.losses, online: onlineIds.has(p.id) }));
   for (const s of online.values()) send(s.ws, { type: 'board', board, you: s.p.id, online: online.size });
 }, 2000);
 

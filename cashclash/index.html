@@ -48,6 +48,11 @@
   .log div { padding: 3px 0; border-bottom: 1px dashed var(--line); }
   .win { color: var(--green); } .loss { color: var(--red); }
   .choice { cursor: pointer; text-align: left; padding: 14px; }
+  .banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #2a2410; border: 1px solid var(--gold); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; }
+  .locked { opacity: .55; }
+  .bar { height: 8px; background: var(--panel2); border-radius: 4px; overflow: hidden; margin-top: 8px; }
+  .bar > i { display: block; height: 100%; background: var(--gold); }
+  .lvl { font-size: 12px; color: var(--blue); }
   .choice b { display: block; font-size: 15px; margin-bottom: 4px; }
 </style>
 </head>
@@ -61,6 +66,7 @@
     <button data-tab="tycoon">🏭 Tycoon</button>
     <button data-tab="armory">🔫 Armory</button>
     <button data-tab="battle">⚔️ Battle</button>
+    <button data-tab="reboot">🔄 Reboot</button>
   </nav>
 </header>
 <main id="view"></main>
@@ -90,6 +96,7 @@ const freshSP = () => ({
 });
 let SP = store.get('cc_sp');
 if (!SP) { const old = store.get('cashclash'); SP = freshSP(); if (old) { SP.tycoon = CC.sanitizeTycoon(old); Object.assign(SP, { rivals: old.rivals || SP.rivals, wins: old.wins || 0, losses: old.losses || 0, log: old.log || [] }); } }
+SP.tycoon = CC.upgradeSave(SP.tycoon);
 { const earned = CC.offlineEarnings(SP.tycoon, (Date.now() - SP.last) / 1000); if (earned > 1) { SP.tycoon.money += earned; setTimeout(() => toast(`Welcome back! Offline earnings: ${fmt(earned)}`), 300); } }
 const saveSP = () => { SP.last = Date.now(); store.set('cc_sp', SP); };
 function resetSP() {
@@ -130,7 +137,8 @@ function onNet(n, m) {
   else if (m.type === 'board') { Object.assign(n, { board: m.board, you: m.you, online: m.online }); if (tab === 'battle' && mode === 'mp') renderSoon(); }
   else if (m.type === 'queue') { n.queue = m.status; const el = $('#mm'); if (el) el.textContent = m.status === 'searching' ? `Searching… ${m.wait.toFixed(1)}s · range ±${m.window.toFixed(2)} orders of magnitude · ${m.inQueue} in queue` : ''; }
   else if (m.type === 'match') { n.queue = 'idle'; openArena({ mp: true, you: m.you, oppName: m.opp.name, pot: m.pot }); }
-  else if (m.type === 'snap') { if (G && G.mp) G.snap = m.snap; }
+  else if (m.type === 'snap') { if (G && G.mp) onSnap(m.snap, m.ack); }
+  else if (m.type === 'event') eventToast(m.event);
   else if (m.type === 'result') { showResult(m.won, `${m.won ? 'Beat' : 'Lost to'} ${m.opp} → ${m.won ? '+' : '-'}${fmt(m.amount)}${m.reason ? ` (${m.reason})` : ''}`); }
   else if (m.type === 'toast') toast(m.msg);
   else if (m.type === 'error') toast(m.msg);
@@ -155,10 +163,12 @@ function render() {
   const pill = $('#modePill'); pill.className = 'mode' + (mode === 'mp' ? ' mp' : ''); pill.textContent = mode === 'mp' ? `🌐 ${NET?.server || 'Multiplayer'}` : '💻 Singleplayer';
   const v = $('#view'), t = T();
   if (tab === 'play') v.innerHTML = renderPlay();
-  else if (tab === 'tycoon') v.innerHTML = `<div class="grid">${BUILDINGS.map(b => `
+  else if (tab === 'tycoon') v.innerHTML = eventBanner(t) + `<p class="muted"><b class="lvl">${CC.LEVELS[t.level - 1]}</b> · income x${CC.globalMult(t).toFixed(2)} · Owning 25/50/100/200 of a building doubles its output each time.</p>
+    <div class="grid">${BUILDINGS.map(b => !CC.unlocked(t, b) ? `
+      <div class="card locked"><h3>🔒 ${b.icon} ${b.name}</h3><div class="muted">Unlocks at business level ${b.unlock}: <b>${CC.LEVELS[b.unlock - 1]}</b>. Reboot to get there.</div></div>` : `
       <div class="card">
         <h3>${b.icon} ${b.name} <span class="tag">x${CC.owned(t, b.id)}</span> <span class="tag">Lv ${CC.bLevel(t, b.id)}</span></h3>
-        <div class="muted">Each earns ${fmt(b.income * Math.pow(2, CC.bLevel(t, b.id)))}/s · Total ${fmt(CC.bIncome(t, b))}/s</div>
+        <div class="muted">Total ${fmt(CC.bIncome(t, b))}/s${CC.nextMilestone(CC.owned(t, b.id)) ? ` · next x2 at ${CC.nextMilestone(CC.owned(t, b.id))} owned` : ' · all milestones!'}</div>
         <div class="row"><button data-a='{"type":"buy","id":"${b.id}"}' ${t.money < CC.bCost(t, b) ? 'disabled' : ''}>Buy · ${fmt(CC.bCost(t, b))}</button>
         <button data-a='{"type":"bup","id":"${b.id}"}' ${CC.owned(t, b.id) && t.money >= CC.bUpCost(t, b) ? '' : 'disabled'}>Upgrade x2 · ${fmt(CC.bUpCost(t, b))}</button></div>
       </div>`).join('')}</div>`;
@@ -173,8 +183,39 @@ function render() {
           `<div class="row"><span></span><button data-a='{"type":"equip","id":"${w.id}"}' ${t.equipped === w.id ? 'disabled' : ''}>${t.equipped === w.id ? 'Equipped' : 'Equip'}</button></div>`
         : `<div class="row"><span></span><button class="primary" data-a='{"type":"wbuy","id":"${w.id}"}' ${t.money < w.price ? 'disabled' : ''}>Buy · ${fmt(w.price)}</button></div>`}
       </div>`; }).join('')}</div>`;
+  else if (tab === 'reboot') v.innerHTML = renderReboot(t);
   else v.innerHTML = mode === 'mp' ? renderBattleMP() : renderBattleSP();
   updateMoney();
+}
+
+function eventBanner(t) {
+  if (!t.event || t.event.until < Date.now()) return '';
+  const e = CC.EVENTS[t.event.type], left = Math.ceil((t.event.until - Date.now()) / 1000);
+  return `<div class="banner"><span>${e.icon} <b>${e.name}</b> — ${e.desc} <span class="muted">(${left}s)</span></span>${t.event.type === 'crate' ? `<button class="primary" data-a='{"type":"claim"}'>Claim ${fmt(Math.max(100, CC.income(t) * 90))}</button>` : ''}</div>`;
+}
+function eventToast(type) { const e = CC.EVENTS[type]; toast(`${e.icon} ${e.name}! ${e.desc}`); if (tab === 'tycoon') render(); }
+
+function renderReboot(t) {
+  const cost = CC.rebootCost(t), pct = Math.min(100, t.money / cost * 100), top = t.level >= CC.MAX_BIZ;
+  const next = CC.BUILDINGS.filter(b => b.unlock === t.level + 1);
+  return `<div class="grid">
+    <div class="card current"><h3>🔄 ${top ? 'Prestige reboot' : 'Reboot to the next business level'}</h3>
+      <p>Current level: <b class="lvl">${t.level}/${CC.MAX_BIZ} · ${CC.LEVELS[t.level - 1]}</b>${t.prestige ? ` · Prestige ${t.prestige}` : ''}</p>
+      <p class="muted">Rebooting wipes your <b>money, buildings and weapons</b>. ${top
+        ? `At the top level, each reboot gives <b>Boost Points</b> (more if you overshoot the goal). You'd get <b>${CC.prestigePoints(t)}</b> right now.`
+        : `You'll reach <b>${CC.LEVELS[t.level]}</b>: income x2 forever${next.length ? `, and you unlock ${next.map(b => b.icon + ' ' + b.name).join(', ')}` : ''}.`}</p>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+      <div class="row"><span>${fmt(t.money)} / ${fmt(cost)}</span>
+        <button class="primary" data-reboot ${t.money >= cost ? '' : 'disabled'}>${top ? 'Prestige!' : 'Reboot'}</button></div>
+    </div>
+    <div class="card"><h3>📈 Levels</h3><table>${CC.LEVELS.map((n, i) => `<tr class="${i + 1 === t.level ? 'you' : ''}"><td>${i + 1 <= t.level ? '✅' : '🔒'}</td><td>${n}</td><td class="muted">x${Math.pow(2, i)} income</td></tr>`).join('')}</table></div>
+  </div>
+  <div class="card" style="margin-top:12px"><h3>⭐ Boost Points: ${t.points}</h3>
+    <p class="muted">${top ? 'Spend points on permanent perks. They survive every reboot and work in battle too.' : `Reach level ${CC.MAX_BIZ} (${CC.LEVELS[CC.MAX_BIZ - 1]}) to earn Boost Points.`}</p>
+    <div class="grid">${Object.entries(CC.PERKS).map(([k, p]) => `<div class="card"><h3>${p.icon} ${p.name} <span class="tag">${CC.perk(t, k)}/${p.max}</span></h3>
+      <div class="muted">${p.desc} per level</div>
+      <div class="row"><span></span><button data-a='{"type":"perk","id":"${k}"}' ${CC.perk(t, k) >= p.max || t.points < CC.perkCost(t, k) ? 'disabled' : ''}>${CC.perk(t, k) >= p.max ? 'MAX' : `${CC.perkCost(t, k)} pt`}</button></div></div>`).join('')}</div>
+  </div>`;
 }
 
 function renderPlay() {
@@ -219,7 +260,7 @@ function renderBattleSP() {
       <h3 style="margin-top:14px">Battle log</h3>
       <div class="log">${SP.log.slice(-20).reverse().map(l => `<div class="${l.w ? 'win' : 'loss'}">${esc(l.t)}</div>`).join('') || '<span class="muted">No battles yet.</span>'}</div>
     </div>
-    <div class="card"><h3>🏆 Leaderboard</h3><table>${ladder.map((r, i) => `<tr class="${r.you ? 'you' : ''}"><td>#${i + 1}</td><td>${r.name}</td><td>${fmt(r.money)}</td></tr>`).join('')}</table></div>
+    <div class="card"><h3>🏆 Leaderboard</h3><table>${ladder.map((r, i) => `<tr class="${r.you ? 'you' : ''}"><td>#${i + 1}</td><td>${r.name}${r.you ? ` <span class="lvl">L${SP.tycoon.level}</span>` : ''}</td><td>${fmt(r.money)}</td></tr>`).join('')}</table></div>
   </div>`;
 }
 function renderBattleMP() {
@@ -232,7 +273,7 @@ function renderBattleMP() {
       <button id="cancelQ" ${searching ? '' : 'style="display:none"'}>Cancel search</button>
       <div id="mm" class="muted" style="margin-top:8px"></div>
     </div>
-    <div class="card"><h3>🏆 Server leaderboard</h3><table>${NET.board.map((r, i) => `<tr class="${r.id === NET.you ? 'you' : ''}"><td>#${i + 1}</td><td><span class="dot ${r.online ? 'on' : ''}"></span>${esc(r.name)}</td><td>${fmt(r.money)}</td><td class="muted">${r.wins}W/${r.losses}L</td></tr>`).join('')}</table></div>
+    <div class="card"><h3>🏆 Server leaderboard</h3><table>${NET.board.map((r, i) => `<tr class="${r.id === NET.you ? 'you' : ''}"><td>#${i + 1}</td><td><span class="dot ${r.online ? 'on' : ''}"></span>${esc(r.name)} <span class="lvl">L${r.level || 1}${r.prestige ? '★' + r.prestige : ''}</span></td><td>${fmt(r.money)}</td><td class="muted">${r.wins}W/${r.losses}L</td></tr>`).join('')}</table></div>
   </div>`;
 }
 
@@ -241,6 +282,7 @@ $('#view').addEventListener('click', e => {
   const d = b.dataset;
   if (d.a) { act(JSON.parse(d.a)); if (mode === 'sp') render(); }
   else if ('reset' in d) resetSP();
+  else if ('reboot' in d) { const t = T(); if (confirm(t.level < CC.MAX_BIZ ? `Reboot to ${CC.LEVELS[t.level]}? You lose all money, buildings and weapons.` : `Prestige for ${CC.prestigePoints(t)} Boost Points? You lose all money, buildings and weapons.`)) { act({ type: 'reboot' }); toast('🔄 Rebooted!'); if (mode === 'sp') render(); } }
   else if ('sp' in d) { mode = 'sp'; render(); }
   else if ('mp' in d) { mode = 'mp'; render(); }
   else if ('disconnect' in d) { const n = NET; NET = null; mode = 'sp'; n.ws.close(); render(); }
@@ -292,35 +334,87 @@ cv.addEventListener('pointermove', e => { const r = cv.getBoundingClientRect(); 
 cv.addEventListener('pointerdown', e => { mouse.down = true; cv.dispatchEvent(new PointerEvent('pointermove', e)); });
 addEventListener('pointerup', () => mouse.down = false);
 
+const readMove = () => ({
+  mx: (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0),
+  my: (keys.s || keys.arrowdown ? 1 : 0) - (keys.w || keys.arrowup ? 1 : 0),
+});
 function readInput(me) {
   const inp = {
-    mx: (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0),
-    my: (keys.s || keys.arrowdown ? 1 : 0) - (keys.w || keys.arrowup ? 1 : 0),
+    ...readMove(),
     ang: me ? Math.atan2(mouse.y - me.y, mouse.x - me.x) : 0, shoot: mouse.down, ...oneShot,
   };
   oneShot = {}; return inp;
 }
 
+// ----- Lag smoothing (multiplayer) -----
+// * Own player: client-side prediction. Every input gets a sequence number; the server echoes the
+//   last one it applied. We take the server's position and re-apply our not-yet-acknowledged
+//   inputs with the same movement code the server uses, then ease the drawn position toward it.
+// * Opponent / bullets: drawn INTERP_DELAY behind the newest server state, blended between the
+//   two snapshots around that moment, so 30Hz updates and network jitter look smooth.
+const INTERP_DELAY = 0.1;
+function onSnap(snap, ack) {
+  const g = G; g.buf.push({ snap, at: performance.now() });
+  while (g.buf.length > 2 && g.buf[1].snap.t < snap.t - 1) g.buf.shift();
+  g.pending = g.pending.filter(p => p.seq > ack);
+}
+const lerp = (a, b, k) => a + (b - a) * k;
+const lerpAng = (a, b, k) => { let d = b - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return a + d * k; };
+function predictMe(g) {
+  const latest = g.buf[g.buf.length - 1].snap, u = latest.u[g.you], p = { x: u.x, y: u.y };
+  const walls = CC.MAPS[latest.m].walls;
+  for (const inp of g.pending) CC.moveUnit(walls, p, inp.mx, inp.my, u.sp, CC.TICK);
+  // plus the movement held since the last send, so we move every frame, not every 1/30s
+  if (g.live) CC.moveUnit(walls, p, g.live.mx, g.live.my, u.sp, g.live.dt);
+  return p;
+}
+function interpolatedView(g, dt) {
+  const last = g.buf[g.buf.length - 1];
+  const rt = last.snap.t + (performance.now() - last.at) / 1000 - INTERP_DELAY;
+  let i = g.buf.length - 1; while (i > 0 && g.buf[i].snap.t > rt) i--;
+  const s0 = g.buf[i].snap, s1 = (g.buf[i + 1] || g.buf[i]).snap;
+  const k = s1.t > s0.t ? Math.max(0, Math.min(1, (rt - s0.t) / (s1.t - s0.t))) : 1;
+  const u = s1.u.map((b, j) => ({ ...last.snap.u[j], x: lerp(s0.u[j].x, b.x, k), y: lerp(s0.u[j].y, b.y, k), ang: lerpAng(s0.u[j].ang, b.ang, k) }));
+  // own player: prediction, eased so server corrections never look like teleports
+  const target = predictMe(g);
+  if (!g.me || Math.hypot(g.me.x - target.x, g.me.y - target.y) > 120) g.me = target;
+  else { const e = Math.min(1, dt * 18); g.me = { x: lerp(g.me.x, target.x, e), y: lerp(g.me.y, target.y, e) }; }
+  u[g.you] = { ...last.snap.u[g.you], x: g.me.x, y: g.me.y, ang: g.myAng ?? last.snap.u[g.you].ang };
+  const age = Math.max(0, rt - s0.t);
+  return { m: last.snap.m, u, b: s0.b.map(([x, y, big, vx, vy]) => [x + vx * age, y + vy * age, big]), fx: s0.fx };
+}
+
 function openArena(opts) {
-  G = { ...opts, over: false };
+  G = { ...opts, over: false, buf: [], pending: [], seq: 0 };
   if (!opts.mp) { G.you = 0; G.oppName = opts.rival.name; G.A = CC.newArena(SP.tycoon, rivalLoadout(opts.rival)); G.pot = { win: opts.rival.money * CC.STEAL, lose: SP.tycoon.money * CC.STEAL }; }
   $('#arenaWrap').style.display = 'flex';
   let last = performance.now(), sendT = 0;
   const g = G;
   (function loop(now) {
     if (G !== g) return;
-    const dt = Math.min(0.033, (now - last) / 1000); last = now;
-    if (!g.over) {
-      if (g.mp) {
-        const me = g.snap?.u[g.you];
-        if ((sendT += dt) >= 1 / 30 || oneShot.sw || oneShot.reload) { sendT = 0; netSend({ type: 'input', input: readInput(me) }); }
-      } else {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    let view = null;
+    if (g.mp) {
+      if (g.buf.length) {
+        const held = readMove();
+        g.live = { ...held, dt: Math.min(sendT + dt, CC.TICK) };
+        view = interpolatedView(g, dt);
+        g.myAng = Math.atan2(mouse.y - g.me.y, mouse.x - g.me.x);
+        if (!g.over && (sendT += dt) >= CC.TICK) {
+          sendT = 0;
+          const inp = readInput(g.me); inp.seq = ++g.seq;
+          g.pending.push({ seq: inp.seq, mx: inp.mx, my: inp.my });
+          netSend({ type: 'input', input: inp });
+        }
+      }
+    } else {
+      if (!g.over) {
         const w = CC.stepArena(g.A, [readInput(g.A.units[0]), CC.botInput(g.A, 1, g.rival.skill)], dt);
-        g.snap = CC.snapshot(g.A);
         if (w >= 0) endSP(w === 0);
       }
+      view = CC.snapshot(g.A);
     }
-    if (g.snap) draw(g.snap);
+    if (view) draw(view);
     requestAnimationFrame(loop);
   })(last);
 }
@@ -340,23 +434,23 @@ function showResult(won, text) {
 function closeArena() { $('#arenaWrap').style.display = 'none'; G = null; render(); }
 
 function draw(s) {
-  const { W, H } = CC;
+  const { W, H } = CC, map = CC.MAPS[s.m];
   cx.clearRect(0, 0, W, H);
   cx.strokeStyle = '#1a1f2b';
   for (let x = 0; x < W; x += 40) { cx.beginPath(); cx.moveTo(x, 0); cx.lineTo(x, H); cx.stroke(); }
   for (let y = 0; y < H; y += 40) { cx.beginPath(); cx.moveTo(0, y); cx.lineTo(W, y); cx.stroke(); }
-  cx.fillStyle = '#3a4258'; CC.WALLS.forEach(w => cx.fillRect(...w));
+  cx.fillStyle = '#3a4258'; map.walls.forEach(w => cx.fillRect(...w));
   s.u.forEach((u, i) => {
     const mine = i === G.you;
     cx.save(); cx.translate(u.x, u.y); cx.rotate(u.ang); cx.fillStyle = '#ccc'; cx.fillRect(4, -3, 20, 6); cx.restore();
     cx.fillStyle = mine ? '#f5c542' : '#f87171'; cx.beginPath(); cx.arc(u.x, u.y, 14, 0, 7); cx.fill();
-    cx.fillStyle = '#000a'; cx.fillRect(u.x - 20, u.y - 28, 40, 5); cx.fillStyle = mine ? '#4ade80' : '#f87171'; cx.fillRect(u.x - 20, u.y - 28, 40 * u.hp / 100, 5);
+    cx.fillStyle = '#000a'; cx.fillRect(u.x - 20, u.y - 28, 40, 5); cx.fillStyle = mine ? '#4ade80' : '#f87171'; cx.fillRect(u.x - 20, u.y - 28, 40 * u.hp / u.mhp, 5);
   });
   cx.fillStyle = '#ffe28a'; s.b.forEach(([x, y, big]) => { cx.beginPath(); cx.arc(x, y, big ? 5 : 3, 0, 7); cx.fill(); });
   s.fx.forEach(([x, y, r, t]) => { cx.fillStyle = `rgba(255,150,50,${t * 2})`; cx.beginPath(); cx.arc(x, y, r, 0, 7); cx.fill(); });
   const me = s.u[G.you], op = s.u[1 - G.you], wi = id => WEAPONS.find(w => w.id === id);
-  $('#hud').innerHTML = `<b style="color:var(--gold)">YOU</b> ${wi(me.g.id).icon} ${wi(me.g.id).name} · ${me.g.rl ? 'Reloading…' : `${me.g.ammo}/${me.g.mag}`} · HP ${me.hp}
-    &nbsp; vs &nbsp; <b style="color:var(--red)">${esc(G.oppName)}</b> ${wi(op.g.id).icon} ${wi(op.g.id).name} · HP ${op.hp}
+  $('#hud').innerHTML = `<span class="muted">🗺️ ${map.name}</span> · <b style="color:var(--gold)">YOU</b> ${wi(me.g.id).icon} ${wi(me.g.id).name} · ${me.g.rl ? 'Reloading…' : `${me.g.ammo}/${me.g.mag}`} · HP ${me.hp}/${me.mhp}
+    &nbsp; vs &nbsp; <b style="color:var(--red)">${esc(G.oppName)}</b> ${wi(op.g.id).icon} ${wi(op.g.id).name} · HP ${op.hp}/${op.mhp}
     &nbsp;·&nbsp; Win <span class="win">+${fmt(G.pot.win)}</span> / Lose <span class="loss">-${fmt(G.pot.lose)}</span>`;
   if (G.result) {
     cx.fillStyle = '#000b'; cx.fillRect(0, 0, W, H);
@@ -368,15 +462,16 @@ function draw(s) {
 
 // ---------- Main loop ----------
 function updateMoney() { const t = T(); $('#money').textContent = fmt(t.money); $('#rate').textContent = `+${fmt(CC.income(t))}/s`; }
-let lastTick = performance.now(), saveT = 0, renderT = 0;
+let lastTick = performance.now(), saveT = 0, renderT = 0, eventT = 0;
 setInterval(() => {
   const now = performance.now(), dt = (now - lastTick) / 1000; lastTick = now;
   // Singleplayer keeps earning in the background even while you're on a server.
   SP.tycoon.money += CC.income(SP.tycoon) * dt;
   for (const r of SP.rivals) r.money *= 1 + 0.0015 * dt * (0.5 + r.skill);
+  if ((eventT += dt) >= 1) { eventT = 0; const ev = CC.rollEvent(SP.tycoon); if (ev && mode === 'sp') eventToast(ev); }
   updateMoney();
   if ((saveT += dt) > 5) { saveT = 0; saveSP(); }
-  if ((renderT += dt) > 1 && (tab === 'tycoon' || tab === 'armory') && !G) { renderT = 0; render(); }
+  if ((renderT += dt) > 1 && (tab === 'tycoon' || tab === 'armory' || tab === 'reboot') && !G) { renderT = 0; render(); }
 }, 100);
 addEventListener('beforeunload', saveSP);
 render();
