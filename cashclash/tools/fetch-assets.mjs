@@ -2,11 +2,12 @@
 //   cd cashclash && npm install && node tools/fetch-assets.mjs
 // Sources (all CC0 / public domain):
 //   * Poly Haven (https://polyhaven.com): photo-scanned props, PBR textures and HDRI skies
-//   * Quaternius (https://quaternius.com) animated characters, via the @netforge/asset-library-files npm package
+//   * OpenGameArt (https://opengameart.org) CC0 gun models, converted with Blender (tools/guns.py)
+//   * ambientCG (https://ambientcg.com) photographed building facades, by day and at night (CC0)
 //   * Microsoft Rocketbox (https://github.com/microsoft/Microsoft-Rocketbox, MIT licence): realistic people
 //     and their animations. Converting those from FBX needs Blender on the PATH (tools/people.py).
 // The downloaded files are committed, so you only need this to change or refresh the art.
-// Pass a section name to redo just that part: models, textures, skies, characters, people, fonts.
+// Pass a section name to redo just that part: models, textures, skies, facades, guns, people, fonts.
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -38,9 +39,26 @@ const TEXTURES = {
   asphalt: 'asphalt_02', brick: 'brick_wall_10', grass: 'leafy_grass', pavers: 'concrete_pavers', slate: 'patterned_slate_tiles',
   plaster: 'grey_plaster', concrete_wall: 'concrete_wall_008', roof: 'clay_roof_tiles', shutter: 'painted_metal_shutter',
 };
+// Building fronts: the daytime set (colour, normal, roughness, metalness) and the same building at night
+// (colour with lights on, emission). res: download size; the night maps are always 1K.
+const FACADES = {
+  brick: { day: 'Facade018A', night: 'Facade018B', res: '2K' },
+  brick2: { day: 'Facade020A', night: 'Facade020B', res: '2K' },
+  concrete: { day: 'Facade019A', night: 'Facade019B', res: '2K' },
+  tower: { day: 'Facade012', night: 'Facade015', res: '1K' },
+};
 const SKIES = { day: 'kloofendal_48d_partly_cloudy_puresky', sunset: 'qwantani_sunset_puresky', dusk: 'qwantani_dusk_2_puresky', night: 'rogland_clear_night' };
-// From the npm package's library/lowpoly/: the soldier, whose armoury supplies the guns.
-const CHARACTERS = { soldier: 'soldier.glb' };
+// The guns (OpenGameArt pages, all CC0). file: the download; model: the file inside it to convert;
+// muzzle: which way the barrel points in it; drop: stray parts (spare magazine, silencer); finish:
+// paint a model that ships without textures; level: straighten one saved at an angle.
+const OGA = 'https://opengameart.org/sites/default/files/';
+const GUNS = {
+  pistol: { page: 'pistol-5', file: 'pistolfbxgltftexturesblend_1.zip', model: 'GLTF/Pistol.gltf', muzzle: '+x', drop: '^Pistol_Magazine$' },
+  smg: { page: 'micro-uzi-untextured', file: 'uzi.blend', muzzle: '-x', drop: '^Cylinder$', finish: true },
+  shotgun: { page: 'benelli-m1', file: 'Benelli%20M1.blend', muzzle: '-x', finish: true },
+  sniper: { page: 'bolt-action-rifle-lee-enfield', file: 'Lee%20Enfield.zip', model: 'FP Hunting Rifle.fbx', muzzle: '-x' },
+  rocket: { page: 'low-poly-rpg7', file: 'RPG7.zip', model: 'RPG7.fbx', muzzle: '+x', level: true },
+};
 // Rocketbox people: game name -> avatar folder. Each gets these clips (Rocketbox animation files;
 // "xy" ones have the walking movement taken out so they run on the spot).
 const PEOPLE = { hoodie: 'Male_Adult_04', jacket: 'Male_Adult_10', denim: 'Male_Adult_12' };
@@ -85,12 +103,39 @@ for (const [name, id] of want('textures') ? Object.entries(TEXTURES) : []) {
 }
 if (want('skies')) console.log('Skies (Poly Haven)');
 for (const [name, id] of want('skies') ? Object.entries(SKIES) : []) save(`sky/${name}.hdr`, await get((await api(id)).hdri['1k'].hdr.url));
-if (want('characters')) {
-console.log('Characters (Quaternius)');
-const meta = JSON.parse((await get('https://registry.npmjs.org/@netforge/asset-library-files/0.2.0')).toString());
-fs.writeFileSync(path.join(TMP, 'pkg.tgz'), await get(meta.dist.tarball));
-execFileSync('tar', ['xzf', 'pkg.tgz'], { cwd: TMP });
-for (const [name, file] of Object.entries(CHARACTERS)) await writeGlb(await io.read(path.join(TMP, 'package/library/lowpoly', file)), `characters/${name}.glb`);
+if (want('facades')) {
+  console.log('Facades (ambientCG)');
+  const set = async (id, res) => {
+    const dir = path.join(TMP, id); fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'set.zip'), await get(`https://ambientcg.com/get?file=${id}_${res}-JPG.zip`));
+    execFileSync('unzip', ['-o', '-q', 'set.zip'], { cwd: dir });
+    return map => path.join(dir, `${id}_${res}-JPG_${map}.jpg`);
+  };
+  const jpg = async (from, size, rel) => save(rel, await sharp(from).resize(size, size).jpeg({ quality: 82, mozjpeg: true }).toBuffer());
+  for (const [name, f] of Object.entries(FACADES)) {
+    const day = await set(f.day, f.res), size = f.res === '2K' ? 2048 : 1024;
+    await jpg(day('Color'), size, `textures/facade_${name}_diff.jpg`);
+    await jpg(day('NormalGL'), size, `textures/facade_${name}_nor.jpg`);
+    await jpg(day('Roughness'), 1024, `textures/facade_${name}_rough.jpg`);
+    if (fs.existsSync(day('Metalness'))) await jpg(day('Metalness'), 1024, `textures/facade_${name}_metal.jpg`);
+    const night = await set(f.night, '1K');
+    await jpg(night('Color'), 1024, `textures/facade_${name}_night.jpg`);
+    if (fs.existsSync(night('Emission'))) await jpg(night('Emission'), 1024, `textures/facade_${name}_emit.jpg`);
+  }
+}
+
+if (want('guns')) {
+  console.log('Guns (OpenGameArt, converted with Blender)');
+  for (const [id, g] of Object.entries(GUNS)) {
+    const dir = path.join(TMP, 'gun-' + id); fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, decodeURIComponent(g.file));
+    fs.writeFileSync(file, await get(OGA + g.file));
+    if (file.endsWith('.zip')) execFileSync('unzip', ['-o', '-q', file, '-d', dir]);
+    const raw = path.join(dir, 'out.glb');
+    execFileSync('blender', ['-b', '--python', path.join(path.dirname(fileURLToPath(import.meta.url)), 'guns.py'), '--', g.model ? path.join(dir, g.model) : file, raw,
+      g.muzzle, g.drop || '', g.finish ? 'finish' : '', g.level ? 'level' : ''], { stdio: 'ignore' });
+    await writeGlb(await io.read(raw), `guns/${id}.glb`, 0, 1024);
+  }
 }
 
 if (want('people')) {
@@ -132,7 +177,8 @@ fs.writeFileSync(path.join(ROOT, 'CREDITS.md'), `# Art credits
 Everything here is CC0 (public domain) unless noted. Credit isn't required for CC0, but it's deserved.
 
 - **Poly Haven** (https://polyhaven.com), CC0: ${Object.values(MODELS).join(', ')} (models); ${Object.values(TEXTURES).join(', ')} (textures); ${Object.values(SKIES).join(', ')} (HDRI skies).
-- **Quaternius** (https://quaternius.com), CC0: ${Object.values(CHARACTERS).join(', ')} (its guns), taken from the @netforge/asset-library-files npm package.
+- **ambientCG** (https://ambientcg.com), CC0: building facades ${Object.values(FACADES).flatMap(f => [f.day, f.night]).join(', ')}.
+- **OpenGameArt** (https://opengameart.org), CC0 guns: ${Object.values(GUNS).map(g => g.page).join(', ')} (https://opengameart.org/content/<name>).
 
 People (MIT licence, notice below): **Microsoft Rocketbox** avatars ${Object.values(PEOPLE).join(', ')} and animations ${Object.values(PEOPLE_CLIPS).map(c => c.split('/')[1]).join(', ')} (https://github.com/microsoft/Microsoft-Rocketbox), converted to glTF.
 

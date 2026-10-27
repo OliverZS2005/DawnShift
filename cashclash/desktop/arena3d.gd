@@ -429,13 +429,12 @@ func _puff(pos: Vector3, color: Color, size: float, life: float, rise: float) ->
 	p.vel = Vector3((randf() - 0.5) * 1.2, rise, (randf() - 0.5) * 1.2)
 
 # ---------- First-person weapon ----------
-# The soldier's own gun. We pose a soldier in his aiming animation, read how the gun sits relative to
-# his body (he faces +Z), straighten its barrel (longest axis) to point exactly forward and turn it to
-# the camera's forward (-Z). Same approach as makeViewmodel() in ../render3d.js.
+# A realistic gun model, already turned so its barrel points down -Z (the camera's forward), sights up.
+# Same as makeViewmodel() in ../render3d.js.
 func _set_viewmodel(id: String) -> void:
 	vm_id = id
 	raise_k = 0.0
-	var wrap = await _posed_gun(id, VM_LEN[id])
+	var wrap = _posed_gun(id, VM_LEN[id])
 	if vm_id != id:
 		wrap.queue_free()
 		return
@@ -449,7 +448,7 @@ func _set_viewmodel(id: String) -> void:
 # Puts the equipped gun in the opponent's hand (the same models as the first-person view).
 func _set_fighter_gun(ch: Dictionary, id: String) -> void:
 	var length = float(R3D.M.ASSETS.fighter.gunLen[id])
-	var gun = await _posed_gun(id, length)
+	var gun = _posed_gun(id, length)
 	if ch.gun_id != id or not is_instance_valid(ch.gun_holder):
 		gun.queue_free()
 		return
@@ -459,50 +458,16 @@ func _set_fighter_gun(ch: Dictionary, id: String) -> void:
 	ch.gun = gun
 	ch.gun_holder.add_child(gun)
 
-# A gun model held the way the soldier holds it in his aiming animation, barrel straightened to point
-# down -Z, centred and scaled to `length` metres. Barrel direction and roll come from the artist's pose.
+# A gun model with its barrel down -Z, centred and scaled to `length` metres.
 func _posed_gun(id: String, length: float) -> Node3D:
 	var wrap = Node3D.new()
 	var orient = Node3D.new()
 	wrap.add_child(orient)
-	var ps = R3D.scene(R3D.M.ASSETS.characters.soldier)
+	var ps = R3D.scene(R3D.M.ASSETS.guns[id])
 	var gun: Node3D = null
 	if ps:
-		var body: Node3D = ps.instantiate()
-		body.visible = false
-		v.world.add_child(body)
-		var ap: AnimationPlayer = _find(body, "AnimationPlayer")
-		if ap:
-			for nm in ap.get_animation_list():
-				if nm.ends_with("|" + R3D.M.ASSETS.gunPose) or nm.ends_with("/" + R3D.M.ASSETS.gunPose):
-					ap.play(nm)
-					ap.seek(0.0, true)
-		await get_tree().process_frame # let the skeleton and bone attachments take the pose
-		await get_tree().process_frame
-		var found = body.find_children(R3D.M.ASSETS.characterGuns[id], "", true, false)
-		if found.size():
-			var node: Node3D = found[0]
-			var rel: Transform3D = body.global_transform.affine_inverse() * node.global_transform
-			gun = node.duplicate()
-			gun.visible = true
-			gun.transform = Transform3D.IDENTITY
-			var size = R3D.aabb(gun).size
-			var along = Vector3.RIGHT if size.x >= size.y and size.x >= size.z else (Vector3.UP if size.y >= size.z else Vector3.BACK)
-			var rot = rel.basis.orthonormalized()
-			var d = (rot * along).normalized()
-			if d.z < 0:
-				d = -d
-			gun.basis = Basis(Quaternion(d, Vector3.BACK)) * rot
-			for mi in gun.find_children("*", "MeshInstance3D", true, false): # real-world finishes
-				for si in mi.mesh.get_surface_count():
-					var m = mi.get_active_material(si)
-					if m is StandardMaterial3D:
-						m = m.duplicate()
-						R3D.gun_finish(m)
-						mi.set_surface_override_material(si, m)
-			orient.add_child(gun)
-			orient.rotation.y = PI # his forward (+Z) -> camera forward (-Z)
-		body.queue_free()
+		gun = ps.instantiate()
+		orient.add_child(gun)
 	if gun == null: # fallback: procedural gun (built facing +X)
 		gun = R3D.build(R3D.M.GUNS[id]).root
 		orient.add_child(gun)

@@ -200,9 +200,12 @@
     skies: { day: 'sky/day.hdr', sunset: 'sky/sunset.hdr', dusk: 'sky/dusk.hdr', night: 'sky/night.hdr' },
     models: Object.fromEntries(['crate', 'military_crate', 'barrel', 'barrier', 'street_lamp', 'trash_can', 'hydrant', 'utility_box',
       'plastic_crate', 'covered_car', 'shrub', 'bench'].map(n => [n, `models/${n}.glb`])),
-    characters: { soldier: 'characters/soldier.glb', hoodie: 'characters/hoodie.glb', jacket: 'characters/jacket.glb', denim: 'characters/denim.glb' },
+    characters: { hoodie: 'characters/hoodie.glb', jacket: 'characters/jacket.glb', denim: 'characters/denim.glb' },
+    // realistic guns (OpenGameArt, CC0), already turned barrel-forward (-Z) and centred by tools/guns.py
+    guns: { pistol: 'guns/pistol.glb', smg: 'guns/smg.glb', shotgun: 'guns/shotgun.glb', sniper: 'guns/sniper.glb', rocket: 'guns/rocket.glb' },
     textures: ['concrete_floor', 'corrugated', 'metal_plate', 'marble', 'asphalt', 'brick', 'grass', 'pavers', 'slate', 'plaster', 'concrete_wall', 'roof', 'shutter'],
-    heights: { soldier: 1.8 }, // the Rocketbox people are already real size
+    facades: ['brick', 'brick2', 'concrete', 'tower'], // textures/facade_<name>_{diff,nor,rough,metal,night,emit}.jpg
+    heights: {}, // everything is already real size
     // The fighters: photoreal people (Microsoft Rocketbox), one per opponent. Their legs play the run,
     // walk and idle clips in the direction they move; the upper body turns to where they aim and both
     // hands hold the gun out in front (posed in code each frame, the way GTA does it).
@@ -214,10 +217,6 @@
       // where the gun is held: [ahead of the chest, below it, right of centre] in metres
       hold: { pistol: [0.53, 0.04, 0.04], smg: [0.38, 0.08, 0.1], shotgun: [0.34, 0.06, 0.13], sniper: [0.32, 0.04, 0.13], rocket: [0.18, -0.16, 0.17] },
     },
-    // The guns: nodes in the soldier model, taken in the pose of his aiming clip (names end with it,
-    // e.g. "CharacterArmature|Idle_Shoot") so barrel and roll come from the artist's pose.
-    gunPose: 'Idle_Shoot',
-    characterGuns: { pistol: 'Pistol', smg: 'SMG', shotgun: 'Shotgun', sniper: 'Sniper_2', rocket: 'RocketLauncher' },
   };
   // Texture path for a material set: tex('brick', 'diff') -> 'textures/brick_diff.jpg'
   const tex = (name, map) => `textures/${name}_${map}.jpg`;
@@ -298,13 +297,17 @@
     fog: 0.0062,          // exponential fog density (web); distant blocks fade into the smog
     storey: 3.3,          // metres per floor
     street: 13, sidewalk: 2.6, block: 46, depth: 15, radius: 150,
-    near: 105,            // buildings closer than this get real windows; further ones a painted window grid
+    near: 105,            // buildings closer than this get storefronts, ledges, cornices and roof tanks
     shadows: 60,          // buildings closer than this cast shadows (the sun's shadow map covers the middle)
+    // photographed building fronts (ambientCG); tints vary them a little. `tile`: metres one copy of the
+    // photo covers (6 floors of 3.3 m for the apartment blocks)
     facades: [
-      { tex: 'brick', tints: ['#c08f7a', '#a87563', '#cfa58d', '#93695a'] },
-      { tex: 'plaster', tints: ['#d3c7b1', '#bdb3a3', '#c9b89c'] },
-      { tex: 'concrete_wall', tints: ['#b0aea8', '#97958f'] },
+      { facade: 'brick', tints: ['#ffffff', '#efe4da', '#e2d6cc'] },
+      { facade: 'brick2', tints: ['#ffffff', '#e9e3dc'] },
+      { facade: 'concrete', tints: ['#ffffff', '#e6e4df'] },
     ],
+    facadeTile: { brick: 19.8, brick2: 19.8, concrete: 19.8, tower: 80 },
+    marking: { dash: 3, gap: 4, crosswalk: 4.2 }, // centre-line dashes and crosswalk depth (m)
     skyline: { count: 64, radius: [230, 430], size: [14, 30], floors: [18, 58] },
     // clear: half-extents (m) of the open ground in the middle; ring: buildings wall it in (a courtyard)
     arena: { clear: [30, 21], ring: true, seed: 77 },
@@ -318,7 +321,7 @@
     function building(x0, z0, x1, z1, floors) {
       const f = pick(U.facades), x = (x0 + x1) / 2, z = (z0 + z1) / 2;
       buildings.push({ x: round2(x), z: round2(z), w: round2(x1 - x0), d: round2(z1 - z0), floors, h: round2(floors * U.storey + 0.6),
-        tex: f.tex, tint: pick(f.tints), near: Math.hypot(x, z) < U.near, shade: Math.hypot(x, z) < U.shadows, tank: floors <= 10 && r() < 0.35, seed: Math.floor(r() * 1e6) });
+        facade: f.facade, tint: pick(f.tints), near: Math.hypot(x, z) < U.near, shade: Math.hypot(x, z) < U.shadows, tank: floors <= 10 && r() < 0.35, seed: Math.floor(r() * 1e6) });
     }
     // fill one side of a rectangle with buildings of varied width; `gap` leaves the odd alley
     function row(along0, along1, across0, across1, vertical, floorsMin, floorsMax, gap) {
@@ -371,28 +374,38 @@
       const floors = S.floors[0] + Math.floor(r() * (S.floors[1] - S.floors[0]));
       skyline.push({ x: round2(Math.cos(a) * d), z: round2(Math.sin(a) * d), w: round2(w), d: round2(w * (0.7 + r() * 0.5)), floors, h: round2(floors * U.storey), tint: pick(pick(U.facades).tints) });
     }
-    return { buildings, sidewalks: sidewalks.map(a => a.map(round2)), lamps, cars, props, skyline };
-  }
-  // Windows on the sides of a building you can see from the middle (the arena or the business):
-  // [x, y, z, rotationY, width, height, lit]; rotationY turns the window to face out of that side.
-  // Ground floors get wide shop windows. `night` lights some of them.
-  function windowsOf(b, night) {
-    const U = URBAN, r = rng(b.seed), out = [];
-    const sides = [[0, -1, b.w, 0], [0, 1, b.w, PI], [-1, 0, b.d, -PI / 2], [1, 0, b.d, PI / 2]];
-    for (const [sx, sz, len, ry] of sides) {
-      if (sx * -b.x + sz * -b.z < -1) continue; // faces away from the middle
-      const n = Math.max(1, Math.floor((len - 1.4) / 3.1)), step = len / n;
-      for (let f = 0; f < b.floors; f++) {
-        const shop = f === 0, y = shop ? 1.55 : f * U.storey + 1.75, ww = shop ? Math.min(step - 0.8, 2.6) : 1.25, wh = shop ? 2.1 : 1.65;
-        for (let k = 0; k < n; k++) {
-          const t = -len / 2 + step * (k + 0.5);
-          const x = b.x + (sx ? sx * (b.w / 2 + 0.03) : t), z = b.z + (sz ? sz * (b.d / 2 + 0.03) : t);
-          out.push([round2(x), round2(y), round2(z), ry, round2(ww), wh, night && r() < 0.38 ? 1 : 0]);
+    // road paint: yellow centre-line dashes along every street (not through the junctions) and zebra
+    // crossings around the four junctions next to the middle; then oil stains and manhole covers
+    const M = U.marking, road = U.street / 2 - U.sidewalk, near = 110;
+    const gaps = c => { const iv = spans(c).sort((a, b) => a[0] - b[0]), out = []; for (let i = 0; i + 1 < iv.length; i++) out.push((iv[i][1] + iv[i + 1][0]) / 2); return out; };
+    const gx = gaps(Cx), gz = gaps(Cz), dashes = [], stripes = [], stains = [], manholes = [];
+    const inJunction = (v, list) => list.some(g => Math.abs(v - g) < U.street / 2 + 0.5);
+    for (const [list, cross, vertical] of [[gx, gz, true], [gz, gx, false]]) for (const g of list) {
+      if (Math.abs(g) > near) continue;
+      for (let t = -near; t < near; t += M.dash + M.gap) {
+        if (inJunction(t, cross) || inJunction(t + M.dash, cross)) continue;
+        dashes.push(vertical ? [g - 0.08, t, g + 0.08, t + M.dash] : [t, g - 0.08, t + M.dash, g + 0.08]);
+      }
+    }
+    for (const x of gx.filter(g => Math.abs(Math.abs(g) - Cx - U.street / 2) < 0.01)) for (const z of gz.filter(g => Math.abs(Math.abs(g) - Cz - U.street / 2) < 0.01)) {
+      const off = U.street / 2 + M.crosswalk / 2 + 0.3;
+      for (const k of [-1, 1]) {
+        for (let a = -road + 0.5; a < road - 0.3; a += 1.0) { // across the street running along z, and the one along x
+          stripes.push([x + a, z + k * off - M.crosswalk / 2, x + a + 0.5, z + k * off + M.crosswalk / 2]);
+          stripes.push([x + k * off - M.crosswalk / 2, z + a, x + k * off + M.crosswalk / 2, z + a + 0.5]);
         }
       }
     }
-    return out;
+    for (let i = 0; i < 48; i++) {
+      const vertical = r() < 0.5, list = (vertical ? gx : gz).filter(g => Math.abs(g) < 90), g = list[Math.floor(r() * list.length)];
+      const across = g + (r() * 2 - 1) * (road - 0.5), along = (r() * 2 - 1) * 90;
+      const [x, z] = vertical ? [across, along] : [along, across];
+      if (i % 4) stains.push([round2(x), round2(z), round2(0.8 + r() * 2.2), round2(r() * PI)]);
+      else manholes.push([round2(x), round2(z)]);
+    }
+    const r4 = a => a.map(round2);
+    return { buildings, sidewalks: sidewalks.map(r4), lamps, cars, props, skyline, dashes: dashes.map(r4), stripes: stripes.map(r4), stains, manholes };
   }
 
-  return { BUILDINGS, LOT, SOLDIER, GUNS, ARENA, CITY, ASSETS, URBAN, tex, cityLayout, windowsOf };
+  return { BUILDINGS, LOT, SOLDIER, GUNS, ARENA, CITY, ASSETS, URBAN, tex, cityLayout };
 });

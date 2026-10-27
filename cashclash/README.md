@@ -16,9 +16,9 @@ A money tycoon with a first-person arena shooter. Win a battle and you take 10% 
 The HUD shows your health and ammo, the opponent's name and health, what's at stake, and a minimap. The opponent only appears on the minimap while you can see them, or for a moment after they fire.
 
 ## Graphics
-Both the web and desktop versions are fully 3D and aim for a GTA IV look: photoreal people (Microsoft Rocketbox) who run, back-pedal and turn to aim with both hands on the gun, guns in real gunmetal, polymer and wood, photo-scanned props and materials, real HDRI skies, shadows, ambient occlusion and bloom. Fights take place in courtyards inside city blocks, and your business sits in a plaza in the middle of the city: brick, plaster and concrete apartment buildings with real windows, storefronts and rooftop water tanks, streets with parked cars and lamps, and a skyline that fades into the smog. A washed-out, sepia colour grade with film grain finishes it off. The tycoon tab shows your business as a 3D city you can rotate, zoom and click to buy.
+Both the web and desktop versions are fully 3D and aim for a GTA IV look: photoreal people (Microsoft Rocketbox) who run, back-pedal and turn to aim with both hands on the gun; real gun models (a 1911-style pistol, a Micro Uzi, a Benelli shotgun, a hunting rifle and an RPG-7); photo-scanned props and materials, real HDRI skies, shadows, ambient occlusion and bloom. Fights take place in courtyards inside city blocks, and your business sits in a plaza in the middle of the city: buildings with photographed fronts (lights on in the windows at night), storefronts and rooftop water tanks, wet streets with puddles that mirror the sky, lane markings, crossings, oil stains and manholes, parked cars and lamps, and a skyline that fades into the smog. A washed-out, sepia colour grade with film grain finishes it off. The tycoon tab shows your business as a 3D city you can rotate, zoom and click to buy.
 - `models.js` describes every scene once (buildings, arena themes, decoration and prop placement). `render3d.js` (web, Three.js) and `desktop/r3d.gd`, `city3d.gd`, `arena3d.gd` (Godot) both build from it, so the two versions look the same.
-- The art lives in `desktop/assets/` (credits in `desktop/assets/CREDITS.md`). It's CC0, except the people (Microsoft Rocketbox, MIT licence) and the HUD fonts (SIL Open Font License). `tools/fetch-assets.mjs` downloads and converts it; the people need Blender for the conversion.
+- The art lives in `desktop/assets/` (credits in `desktop/assets/CREDITS.md`). It's CC0, except the people (Microsoft Rocketbox, MIT licence) and the HUD fonts (SIL Open Font License). `tools/fetch-assets.mjs` downloads and converts it; the people and guns need Blender for the conversion.
 - The web page loads that art over HTTP, so play it through a server (`npm start`). If you open `index.html` straight from disk it still works, with simple shapes instead.
 - The web version lowers its own quality on slow computers. Add `?quality=low`, `medium` or `high` to the address to choose yourself.
 
@@ -76,7 +76,7 @@ Matchmaking pairs the queued players whose wealth is closest on a log scale. The
 You only need these to change the art or upgrade Three.js:
 ```
 npm install
-npm run fetch-assets          # downloads the art into desktop/assets (the people need Blender on the PATH)
+npm run fetch-assets          # downloads the art into desktop/assets (the people and guns need Blender on the PATH)
 npm run build:three           # rebuilds vendor/three.bundle.js
 node tools/build-models.js    # refreshes desktop/models.json after editing models.js (CI checks this)
 ```

@@ -1,5 +1,4 @@
-# Prints rule calculations for a fixed tycoon, and the window layout of a few city buildings, so they
-# can be diffed against shared.js and models.js (see parity.js).
+# Prints rule calculations for a fixed tycoon so they can be diffed against shared.js (see parity.js).
 extends SceneTree
 func _init():
 	var CCs = load("res://rules.gd").new()
@@ -16,15 +15,5 @@ func _init():
 		CCs.apply_action(t, {"type": "reboot"})
 		row.append_array([t.level, t.money, t.points])
 		out.append(row)
-	# the window layout ported from models.js windowsOf() (see parity.js)
-	var R = load("res://r3d.gd").new()
-	R._ready()
-	var wins = []
-	var near = R.M.LAYOUT.arena.buildings.filter(func(b): return b.near)
-	for b in near.slice(0, 4):
-		for w in R.windows_of(b, true):
-			wins.append_array(w)
-	out.append(wins)
-	R.free()
 	print("PARITY " + JSON.stringify(out))
 	quit()

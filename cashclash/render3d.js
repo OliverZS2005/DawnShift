@@ -266,79 +266,100 @@
     out.setIndex(new THREE.BufferAttribute(idx, 1));
     return out;
   }
-  // Painted facade for distant buildings: 4 windows by 4 floors per tile (12.4 m x 13.2 m), with a
-  // matching glow map of lit windows for night.
-  const gridTex = {};
-  function windowGrid(kind) {
-    if (gridTex[kind]) return gridTex[kind];
-    const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d'), r = rng(kind === 'map' ? 11 : 23);
-    x.fillStyle = kind === 'map' ? '#d9d6d0' : '#000'; x.fillRect(0, 0, 256, 256);
-    if (kind === 'map') for (let i = 0; i < 900; i++) { x.fillStyle = `rgba(60,50,40,${r() * 0.08})`; x.fillRect(r() * 256, r() * 256, 2 + r() * 6, 2 + r() * 10); } // grime
-    for (let fy = 0; fy < 4; fy++) for (let fx = 0; fx < 4; fx++) {
-      const wx = fx * 64 + 17, wy = fy * 64 + 14;
-      if (kind === 'map') { const g = 34 + r() * 18 | 0; x.fillStyle = `rgb(${g},${g + 6},${g + 12})`; x.fillRect(wx, wy, 30, 36); x.fillStyle = 'rgba(255,255,255,.08)'; x.fillRect(wx, wy, 30, 10); }
-      else if (r() < 0.36) { x.fillStyle = r() < 0.7 ? '#ffcf86' : '#cfe3ff'; x.fillRect(wx, wy, 30, 36); }
-    }
-    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace;
-    return (gridTex[kind] = t);
+  // Photographed building fronts (ambientCG): colour, relief, roughness and metal (the glass) by day; at
+  // night the same building with its lights on, glowing through an emission map.
+  const facadeMats = new Map();
+  function facadeMat(name, night, tint) {
+    const key = [name, night, tint].join('|');
+    if (facadeMats.has(key)) return facadeMats.get(key);
+    loaders();
+    const load = (map, srgb) => { const t = texLoader.load(BASE + `textures/facade_${name}_${map}.jpg`); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
+    const m = !ASSETS_OK ? new THREE.MeshStandardMaterial({ color: '#8a7f75', roughness: 0.85 }) : new THREE.MeshStandardMaterial({
+      map: load(night ? 'night' : 'diff', true), normalMap: load('nor'), roughnessMap: load('rough'), color: tint,
+      metalnessMap: name === 'tower' ? null : load('metal'), metalness: name === 'tower' ? 0.1 : 1,
+      emissiveMap: night ? load('emit', true) : null, emissive: night ? '#ffffff' : '#000000', emissiveIntensity: night ? 0.55 : 0 });
+    facadeMats.set(key, m);
+    return m;
   }
-  // The streets, sidewalks, buildings (real windows up close, painted ones further out), rooftop
-  // water tanks, the skyline in the haze, and street furniture. Returns the group. `detail` false
-  // (the lowest quality) paints the windows on every building.
+  // Wet asphalt: puddles (a tiling noise pattern) are glassy and darker, so they mirror the sky and lights.
+  let puddleTex = null;
+  function puddles() {
+    if (puddleTex) return puddleTex;
+    const N = 256, c = document.createElement('canvas'); c.width = c.height = N; const x = c.getContext('2d'), img = x.createImageData(N, N);
+    const h = (i, j) => { const s = Math.sin(((i % 16 + 16) % 16) * 127.1 + ((j % 16 + 16) % 16) * 311.7) * 43758.5453; return s - Math.floor(s); };
+    const vn = (u, v) => { const i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j, a = h(i, j), b = h(i + 1, j), cc = h(i, j + 1), d = h(i + 1, j + 1), su = fu * fu * (3 - 2 * fu), sv = fv * fv * (3 - 2 * fv); return a + (b - a) * su + (cc - a) * sv + (a - b - cc + d) * su * sv; };
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const u = i / N * 16, v = j / N * 16, n = vn(u, v) * 0.6 + vn(u * 2, v * 2) * 0.3 + vn(u * 4, v * 4) * 0.1; // tiles: periodic at 16 cells
+      const wet = THREE.MathUtils.smoothstep(n, 0.6, 0.68), g = Math.round(255 * (0.8 - wet * 0.66 + (vn(u * 8, v * 8) - 0.5) * 0.1));
+      const k = (j * N + i) * 4; img.data[k] = img.data[k + 1] = img.data[k + 2] = g; img.data[k + 3] = 255;
+    }
+    x.putImageData(img, 0, 0);
+    puddleTex = new THREE.CanvasTexture(c); puddleTex.wrapS = puddleTex.wrapT = THREE.RepeatWrapping;
+    return puddleTex;
+  }
+  function wetGround() {
+    const m = pbr('asphalt', { tint: '#8d8c88', fallback: '#3d3e40' }).clone();
+    if (!m.map) return m;
+    m.roughnessMap = puddles(); m.roughnessMap.repeat.set(7 / 34, 7 / 34); m.roughness = 1; m.envMapIntensity = 1.3;
+    m.onBeforeCompile = sh => { // puddles also look darker: wet surfaces absorb more light
+      sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n diffuseColor.rgb *= mix(0.5, 1.0, smoothstep(0.1, 0.7, roughnessFactor));');
+    };
+    return m;
+  }
+  // Soft dark blotch for oil stains.
+  let stainTex = null;
+  function stain() {
+    if (stainTex) return stainTex;
+    const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d'), r = rng(5);
+    for (let i = 0; i < 9; i++) { const g = x.createRadialGradient(64 + (r() - 0.5) * 50, 64 + (r() - 0.5) * 50, 0, 64, 64, 30 + r() * 30); g.addColorStop(0, 'rgba(8,7,6,.45)'); g.addColorStop(1, 'rgba(8,7,6,0)'); x.fillStyle = g; x.fillRect(0, 0, 128, 128); }
+    return (stainTex = new THREE.CanvasTexture(c));
+  }
+  // The streets (wet asphalt, lane paint, crossings, stains, manholes), sidewalks, buildings with photo
+  // facades (storefronts, ledges, cornices and roof tanks up close), the skyline in the haze, and street
+  // furniture. Returns the group. `detail` false (the lowest quality) leaves out the small stuff.
   function buildCity(where, night, detail = true) {
-    const group = new THREE.Group(), L = M.cityLayout(where), batches = new Map();
+    const group = new THREE.Group(), L = M.cityLayout(where), batches = new Map(), T = U.facadeTile;
     const add = (key, mat, geo) => { if (!batches.has(key)) batches.set(key, { mat, geos: [] }); batches.get(key).geos.push(geo); };
-    const ground = new THREE.Mesh(tiledPlane(1000, 1000, 7), pbr('asphalt', { tint: '#8d8c88', fallback: '#3d3e40' })); ground.position.y = -0.04; ground.receiveShadow = true; group.add(ground);
+    const ground = new THREE.Mesh(tiledPlane(1000, 1000, 7), wetGround()); ground.position.y = -0.04; ground.receiveShadow = true; group.add(ground);
     const pav = pbr('pavers', { tint: '#b7b1a7', fallback: '#77746f' });
     for (const [x0, z0, x1, z1] of L.sidewalks) add('pav', pav, boxGeo(x1 - x0, 0.15, z1 - z0, 2.5, 2.5, (x0 + x1) / 2, 0.075, (z0 + z1) / 2));
-    const far = new THREE.MeshStandardMaterial({ map: windowGrid('map'), vertexColors: true, roughness: 0.85, metalness: 0,
-      emissive: night ? '#ffffff' : '#000000', emissiveMap: night ? windowGrid('glow') : null, emissiveIntensity: night ? 1.1 : 0 });
     const trim = pbr('concrete_wall', { tint: '#a9a49b', fallback: '#8a857d' }), tankMat = new THREE.MeshStandardMaterial({ color: '#5e4a3a', roughness: 0.9 });
     const shops = [pbr('shutter', { tint: '#8d8f8c', fallback: '#4a4c4b' }), pbr('plaster', { tint: '#5a514a', fallback: '#4a443e' })];
-    const windows = [];
     for (const b of L.buildings) {
-      if (!b.near || !detail) { add('far', far, boxGeo(b.w, b.h, b.d, 12.4, 13.2, b.x, b.h / 2, b.z, b.tint)); continue; }
       const k = b.shade ? '+' : ''; // buildings near the middle cast shadows; batched separately
-      add(b.tex + b.tint + k, pbr(b.tex, { tint: b.tint, fallback: b.tint }), boxGeo(b.w, b.h, b.d, 2.5, 2.5, b.x, b.h / 2, b.z));
+      add(b.facade + b.tint + k, facadeMat(b.facade, night, b.tint), boxGeo(b.w, b.h, b.d, T[b.facade], T[b.facade], b.x, b.h / 2, b.z));
+      add('trim' + k, trim, boxGeo(b.w + 0.5, 0.5, b.d + 0.5, 2.5, 2.5, b.x, b.h - 0.1, b.z)); // cornice (also the roof)
+      if (!b.near || !detail) continue;
       add('shop' + (b.seed % 2) + k, shops[b.seed % 2], boxGeo(b.w + 0.12, 3.25, b.d + 0.12, 2.5, 2.5, b.x, 1.625, b.z)); // ground-floor storefronts
       add('trim' + k, trim, boxGeo(b.w + 0.3, 0.35, b.d + 0.3, 2.5, 2.5, b.x, 3.42, b.z)); // ledge over the shops
-      add('trim' + k, trim, boxGeo(b.w + 0.5, 0.5, b.d + 0.5, 2.5, 2.5, b.x, b.h - 0.1, b.z)); // cornice
       if (b.tank) { // a timber water tank on legs, New York style
         const tx = b.x + (b.seed % 3 - 1) * b.w * 0.2, tz = b.z + ((b.seed >> 2) % 3 - 1) * b.d * 0.2;
         for (const [lx, lz] of [[-0.9, -0.9], [0.9, -0.9], [-0.9, 0.9], [0.9, 0.9]]) add('tank', tankMat, boxGeo(0.18, 2.2, 0.18, 1, 1, tx + lx, b.h + 1.1, tz + lz));
         const cyl = new THREE.CylinderGeometry(1.6, 1.6, 3.2, 14); cyl.translate(tx, b.h + 3.8, tz); add('tank', tankMat, cyl);
         const cone = new THREE.ConeGeometry(1.75, 1.1, 14); cone.translate(tx, b.h + 5.95, tz); add('tank', tankMat, cone);
       }
-      windows.push(...M.windowsOf(b, night));
     }
-    for (const t of L.skyline) add('far', far, boxGeo(t.w, t.h, t.d, 12.4, 13.2, t.x, t.h / 2, t.z, t.tint));
+    for (const t of L.skyline) add('tower', facadeMat('tower', night, t.tint), boxGeo(t.w, t.h, t.d, T.tower, T.tower, t.x, t.h / 2, t.z));
+    // road paint
+    const yellow = new THREE.MeshStandardMaterial({ color: '#c9a227', roughness: 0.55 }), white = new THREE.MeshStandardMaterial({ color: '#d9d6cc', roughness: 0.55 });
+    for (const [x0, z0, x1, z1] of L.dashes) add('yellow', yellow, boxGeo(x1 - x0, 0.01, z1 - z0, 1, 1, (x0 + x1) / 2, -0.03, (z0 + z1) / 2));
+    for (const [x0, z0, x1, z1] of L.stripes) add('white', white, boxGeo(x1 - x0, 0.01, z1 - z0, 1, 1, (x0 + x1) / 2, -0.03, (z0 + z1) / 2));
     for (const [key, { mat, geos }] of batches) {
       const mesh = new THREE.Mesh(mergeGeos(geos), mat);
       mesh.castShadow = key.endsWith('+'); mesh.receiveShadow = true; group.add(mesh);
     }
-    // real windows: a painted frame of four bars (the bottom one a deeper sill) with the glass set back
-    // inside it, reflective panes, and warm lit panes at night (three instanced draws)
-    const frameMat = new THREE.MeshStandardMaterial({ color: '#b9b2a5', roughness: 0.7 });
-    const glassMat = new THREE.MeshStandardMaterial({ color: '#232b31', roughness: 0.12, metalness: 0.6, envMapIntensity: 0.9 });
-    const litMat = new THREE.MeshStandardMaterial({ color: '#2a2216', emissive: '#ffbf6e', emissiveIntensity: 0.75, roughness: 0.3 });
-    const unit = new THREE.BoxGeometry(1, 1, 1), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), p = new THREE.Vector3(), s = new THREE.Vector3();
-    const lit = windows.filter(w => w[6]), dark = windows.filter(w => !w[6]);
-    const frames = new THREE.InstancedMesh(unit, frameMat, windows.length * 4), off = new THREE.Vector3();
-    windows.forEach((w, i) => {
-      q.setFromAxisAngle(up, w[3]);
-      const bars = [[0, w[5] / 2 + 0.055, w[4] + 0.22, 0.11, 0.18], [0, -w[5] / 2 - 0.05, w[4] + 0.34, 0.1, 0.26], [-w[4] / 2 - 0.055, 0, 0.11, w[5], 0.18], [w[4] / 2 + 0.055, 0, 0.11, w[5], 0.18]];
-      bars.forEach(([bx, by, sx, sy, sz], k) => frames.setMatrixAt(i * 4 + k, m4.compose(p.set(w[0], w[1], w[2]).add(off.set(bx, by, 0).applyQuaternion(q)), q, s.set(sx, sy, sz))));
-    });
-    group.add(frames);
-    for (const [list, mat] of [[dark, glassMat], [lit, litMat]]) {
-      if (!list.length) continue;
-      const im = new THREE.InstancedMesh(unit, mat, list.length);
-      list.forEach((w, i) => { q.setFromAxisAngle(up, w[3]); const n = new THREE.Vector3(0, 0, 1).applyQuaternion(q); im.setMatrixAt(i, m4.compose(p.set(w[0], w[1], w[2]).addScaledVector(n, -0.02), q, s.set(w[4], w[5], 0.04))); });
-      group.add(im);
+    if (detail) { // oil stains and manhole covers
+      const stainMat = new THREE.MeshBasicMaterial({ map: stain(), transparent: true, depthWrite: false, color: '#ffffff' });
+      const blot = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-PI / 2), stainMat, L.stains.length), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3();
+      L.stains.forEach(([x, z, s, a], i) => blot.setMatrixAt(i, m4.compose(p.set(x, -0.02, z), q.setFromAxisAngle(UP, a), sc.set(s, 1, s * 0.7))));
+      blot.renderOrder = 1; group.add(blot);
+      const cover = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.42, 0.42, 0.02, 20), new THREE.MeshStandardMaterial({ color: '#2a2724', roughness: 0.45, metalness: 0.7 }), L.manholes.length);
+      L.manholes.forEach(([x, z], i) => cover.setMatrixAt(i, m4.compose(p.set(x, -0.03, z), q.identity(), sc.set(1, 1, 1))));
+      cover.receiveShadow = true; group.add(cover);
     }
     // street lamps (the nearest few light up at night), parked cars, hydrants and bins
     let lights = 0;
-    for (const d of [...L.lamps, ...L.cars, ...L.props]) prop(d.model).then(o => {
+    for (const d of [...L.lamps, ...L.cars, ...(detail ? L.props : [])]) prop(d.model).then(o => {
       if (!o) return; o.position.set(...d.p); o.rotation.y = d.ry; group.add(o);
       if (d.light && night && lights++ < 6) { const l = new THREE.PointLight('#ffd49a', 60, 22, 2); l.position.set(d.p[0], 5.3, d.p[2]); group.add(l); }
     });
@@ -448,46 +469,14 @@
     if (ch.gun) { ch.gun.updateMatrixWorld(true); return ch.gun.localToWorld(out.set(0, 0, -(ch.gun.userData.len || 0.5) / (ch.gun.scale.x || 1) * 0.5)); }
     return out.set(ch.root.position.x + Math.cos(ang) * 0.8, 1.3, ch.root.position.z + Math.sin(ang) * 0.8);
   }
-  // Real-world finishes for the guns (the source models are toy-coloured): gunmetal, black polymer,
-  // oiled wood and olive drab, picked from each part's original colour.
-  function gunFinish(m) {
-    const hsl = m.color.getHSL({});
-    const finish = hsl.s > 0.3 && hsl.h > 0.03 && hsl.h < 0.13 ? ['#4a2e1c', 0.65, 0] // orange/brown: wood
-      : hsl.s > 0.35 ? ['#3b3f33', 0.6, 0.15] // any bright colour: olive drab
-      : hsl.l > 0.45 ? ['#45484c', 0.34, 0.85] // light grey: gunmetal
-      : ['#171819', 0.52, 0.2]; // dark: black polymer
-    m.color.set(finish[0]); m.roughness = finish[1]; m.metalness = finish[2]; m.map = null; if (m.emissive) m.emissive.set('#000000');
-  }
-
   // ---------- First-person weapon ----------
-  // The same gun model the soldiers carry. To hold it right we pose a soldier in his aiming animation,
-  // read how the gun sits relative to his body (he faces +Z), and turn that so his forward becomes the
-  // camera's forward (-Z). Barrel direction and roll come straight from the artist's pose.
+  // Realistic gun models, already turned so the barrel points down -Z (the camera's forward), sights up.
   const VM_LEN = { pistol: 0.24, smg: 0.44, shotgun: 0.62, sniper: 0.62, rocket: 0.62 };
   async function makeViewmodel(id, length = VM_LEN[id]) {
     const wrap = new THREE.Group(), orient = new THREE.Group(); wrap.add(orient);
-    const g = await loadGLB(A.characters.soldier);
+    const g = await loadGLB(A.guns[id]);
     let gun = null;
-    if (g) {
-      const body = THREE.SkeletonUtils.clone(g.scene), mixer = new THREE.AnimationMixer(body);
-      const clip = findClip(g.animations, A.gunPose);
-      if (clip) { mixer.clipAction(clip).play(); mixer.update(0); }
-      body.updateMatrixWorld(true);
-      let node = null; body.traverse(o => { if (!node && o.name === A.characterGuns[id]) node = o; });
-      if (node) {
-        const rel = new THREE.Matrix4().copy(body.matrixWorld).invert().multiply(node.matrixWorld);
-        gun = node.clone(true); gun.visible = true;
-        rel.decompose(gun.position, gun.quaternion, gun.scale); gun.position.set(0, 0, 0);
-        // straighten the barrel (the gun's longest axis) so it points exactly where he faces
-        const bare = node.clone(true); bare.position.set(0, 0, 0); bare.quaternion.identity(); bare.scale.set(1, 1, 1); bare.updateMatrixWorld(true);
-        const ls = new THREE.Box3().setFromObject(bare).getSize(new THREE.Vector3()); // the gun in its own space
-        const along = ls.x >= ls.y && ls.x >= ls.z ? new THREE.Vector3(1, 0, 0) : ls.y >= ls.z ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1);
-        const d = along.applyQuaternion(gun.quaternion).normalize(); if (d.z < 0) d.negate();
-        gun.quaternion.premultiply(new THREE.Quaternion().setFromUnitVectors(d, new THREE.Vector3(0, 0, 1)));
-        gun.traverse(c => { if (c.isMesh) { c.material = c.material.clone(); gunFinish(c.material); c.castShadow = false; c.frustumCulled = false; } });
-        orient.add(gun); orient.rotation.y = PI; // his forward (+Z) -> camera forward (-Z)
-      }
-    }
+    if (g) { gun = g.scene.clone(true); gun.traverse(c => { if (c.isMesh) { c.castShadow = false; c.frustumCulled = false; } }); orient.add(gun); }
     if (!gun) { gun = build(M.GUNS[id]).root; orient.add(gun); orient.rotation.y = PI / 2; } // procedural guns face +X
     // centre it and scale to a believable length along the barrel (now -Z)
     orient.updateMatrixWorld(true);
@@ -769,7 +758,7 @@
         eye = EYE; roll = 0; kick = 0; lastYaw = null; shake = 0;
         for (const ch of chars) if (ch) { ch.prev = null; ch.dead = false; ch.lastHp = ch.lastAmmo = undefined; ch.root.rotation.z = 0; if (ch.mixer) { ch.mixer.stopAllAction(); ch.current = null; play(ch, 'idle', 0); } }
       },
-      preload() { for (const p of F.people) loadGLB(A.characters[p]); loadGLB(A.characters.soldier); },
+      preload() { for (const p of F.people) loadGLB(A.characters[p]); for (const g of Object.values(A.guns)) loadGLB(g); },
     };
   }
 
