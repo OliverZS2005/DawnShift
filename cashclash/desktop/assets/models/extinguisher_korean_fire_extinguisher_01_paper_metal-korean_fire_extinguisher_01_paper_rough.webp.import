@@ -1,0 +1,37 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://ua3aihti83q1"
+path="res://.godot/imported/extinguisher_korean_fire_extinguisher_01_paper_metal-korean_fire_extinguisher_01_paper_rough.webp-bdf81d5adef3271ecd1df269d312332d.ctex"
+metadata={
+"vram_texture": false
+}
+generator_parameters={
+"md5": "511f3e5518b03b558fc5b28ed2a9644a"
+}
+
+[deps]
+
+source_file="res://assets/models/extinguisher_korean_fire_extinguisher_01_paper_metal-korean_fire_extinguisher_01_paper_rough.webp"
+dest_files=["res://.godot/imported/extinguisher_korean_fire_extinguisher_01_paper_metal-korean_fire_extinguisher_01_paper_rough.webp-bdf81d5adef3271ecd1df269d312332d.ctex"]
+
+[params]
+
+compress/mode=0
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=1
