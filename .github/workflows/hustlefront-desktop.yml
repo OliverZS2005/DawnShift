@@ -109,12 +109,6 @@ jobs:
           godot --headless --path . --export-release "iOS" build/ios/Hustlefront.ipa
           ls -la build/ios
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: hustlefront-ios-project
-          path: cashclash/desktop/build/ios
-          retention-days: 1 # only for the iphone job; keeps the Actions storage quota free
-
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -156,16 +150,30 @@ jobs:
             --title "Hustlefront (build $RUN)" \
             --notes-file notes.md
 
+      # Hands the Xcode project to the iphone job through a temporary release, which that job deletes: a
+      # release, unlike a workflow artifact, doesn't count against the Actions storage quota.
+      - name: Hand the Xcode project to the iphone job
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          (cd build/ios && zip -qry ../../ios-project.zip .)
+          gh release delete hustlefront-ios-build --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
+          gh release create hustlefront-ios-build ios-project.zip -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "Temporary: the iPhone build's Xcode project" --notes "Used by the workflow while it builds the iPhone app; deleted again straight after."
+
   # Compiles the Xcode project from the export job into an unsigned iPhone app (.ipa) and adds it to the
   # release. Unsigned because signing needs an Apple account: you sign it with yours as you install it.
   iphone:
     needs: export
     runs-on: macos-latest
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: hustlefront-ios-project
-          path: ios
+      - name: Fetch the Xcode project
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download hustlefront-ios-build -p ios-project.zip -R "$GITHUB_REPOSITORY"
+          mkdir ios && unzip -q ios-project.zip -d ios
+          gh release delete hustlefront-ios-build --yes --cleanup-tag -R "$GITHUB_REPOSITORY"
 
       - name: Build the iPhone app
         working-directory: ios
