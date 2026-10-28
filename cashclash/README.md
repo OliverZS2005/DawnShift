@@ -37,10 +37,18 @@ Both the web and desktop versions are fully 3D and aim for a GTA IV look: photor
 
 ## Desktop app (Godot)
 The desktop version lives in [`desktop/`](desktop/). It's a Godot 4.3 project with the same game, the same save format and the same multiplayer protocol, so desktop and web players fight each other on the same servers.
-- **Download:** every change builds Windows, Mac and Linux versions with the *Hustlefront desktop* GitHub workflow and publishes them as the [hustlefront-latest release](https://github.com/OliverZS2005/DawnShift/releases/tag/hustlefront-latest). The Mac build isn't signed with a paid certificate, so right-click it and choose **Open** the first time.
+- **Download:** every change builds Windows, Mac, Linux and Android versions with the *Hustlefront desktop* GitHub workflow and publishes them as the [hustlefront-latest release](https://github.com/OliverZS2005/DawnShift/releases/tag/hustlefront-latest). The Mac build isn't signed with a paid certificate, so right-click it and choose **Open** the first time.
 - **Graphics:** the desktop app renders with Vulkan (Forward+; Macs run it through MoltenVK), which adds screen-space bounce light, reflections on smooth floors, volumetric haze and light shining through the grass. A computer with no Vulkan support at all falls back to OpenGL with simpler lighting instead of refusing to start.
 - **Run from source:** open `desktop/project.godot` in Godot 4.3+ and press Play.
 - `desktop/rules.gd` is a port of `shared.js`. CI fails if the two ever calculate different numbers (`tests/parity.gd` vs. `tests/parity.js`).
+
+## Android
+The same Godot app runs on Android phones and tablets (64-bit, Android 7 or newer): the same game, save format, servers and sync.
+- **Download:** `Hustlefront-Android.apk` in the [hustlefront-latest release](https://github.com/OliverZS2005/DawnShift/releases/tag/hustlefront-latest). Open the page on your phone, tap the APK and open it; the first time, Android asks you to allow installs from your browser.
+- **Controls:** your left thumb walks (a stick appears where it lands; push it all the way to run), dragging anywhere else looks around, and round buttons on the right do the rest: Buy, Upgrade and Talk in your business, Take job / Other job / Leave in a conversation, and FIRE, Reload and Weapon in a fight. The ⤢ button makes the city fill the screen.
+- **Graphics:** phones use Godot's Mobile renderer (shadows, glow, fog and the colour grade, but no ambient occlusion, screen-space reflections or volumetric haze, so Settings hides those). Auto quality starts at Medium.
+- **Updates and signing:** Android only installs a new build over the old one (keeping your game) if both are signed with the same key. The workflow makes a key the first time and keeps it in the repository's private Actions cache; GitHub drops a cache nobody has used for a week, and the APK after that needs uninstalling the old one first (sync your game first). To keep one key for good, or to publish on Google Play, make your own (`keytool -genkeypair -keystore release.keystore -alias hustlefront -keyalg RSA -validity 10000`) and add it as the `ANDROID_KEYSTORE_BASE64` (the file, base64-encoded) and `ANDROID_KEYSTORE_PASSWORD` repository secrets.
+- **Try it on a PC:** `godot --path desktop -- --touch` shows the phone layout and touch controls (drive them with a touchscreen, or Godot's touch emulation).
 
 ## Sync between web and desktop
 In the 🎮 Play tab, under **Sync**, create a sync code on one device and enter it on the other. Your singleplayer game and your multiplayer logins are then stored on a Hustlefront server under that code and stay in sync. Each device pushes its save every 20 seconds and when you close it, and loads the other device's progress if that's newer. Play on one device at a time; if both play at once, the device that saves second loses its progress since the last sync.

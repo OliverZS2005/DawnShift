@@ -17,12 +17,18 @@ R3D="*res://r3d.gd"
 window/size/viewport_width=1280
 window/size/viewport_height=800
 window/stretch/aspect="expand"
+; phones and tablets: landscape either way up
+window/handheld/orientation=4
 
 [rendering]
 ; Vulkan everywhere (Forward+): global illumination, volumetric fog, reflections, ambient occlusion,
 ; glow and soft shadows. Macs run Vulkan through MoltenVK. Only a PC with no Vulkan support at all
 ; falls back to OpenGL (simpler lighting) instead of refusing to start.
 renderer/rendering_method="forward_plus"
+; phones and tablets use Godot's Mobile renderer (Vulkan, made for phone GPUs: glow, shadows and fog, but
+; no screen-space AO, reflections or volumetric haze); phones without Vulkan fall back to OpenGL ES
+renderer/rendering_method.mobile="mobile"
+rendering_device/driver.android="vulkan"
 rendering_device/driver="vulkan"
 rendering_device/driver.windows="vulkan"
 rendering_device/driver.linuxbsd="vulkan"

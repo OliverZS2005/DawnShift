@@ -31,9 +31,18 @@ var rerender_acc := 0.0
 var dirty := true
 var queue_lbl: Label
 var fps_lbl: Label
+var city_full := false # phones: the city fills the screen (the ⤢ button)
+var header: PanelContainer
 
 func _ready() -> void:
 	R3D.set_options(Game.settings.get("options", {}))
+	if Game.mobile:
+		# phones: lay the UI out on a 500-unit-tall canvas scaled up to the screen, so text and buttons are a
+		# comfortable size for fingers (the 3D views render at that resolution too, which phones need)
+		var w = get_tree().root
+		w.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+		w.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
+		w.content_scale_size = Vector2i(800, 500)
 	theme = _make_theme()
 	var bg = ColorRect.new()
 	bg.color = C_BG
@@ -45,13 +54,14 @@ func _ready() -> void:
 	root.add_theme_constant_override("separation", 0)
 	add_child(root)
 
-	var header = PanelContainer.new()
+	header = PanelContainer.new()
 	header.add_theme_stylebox_override("panel", _box(C_BG, C_LINE, 0, 12, Vector4(0, 0, 0, 1)))
 	root.add_child(header)
 	var hb = HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 16)
 	header.add_child(hb)
-	hb.add_child(_label("💼 Hustlefront", 22, C_TEXT))
+	if not Game.mobile: # no room on a phone
+		hb.add_child(_label("💼 Hustlefront", 22, C_TEXT))
 	var mv = VBoxContainer.new()
 	mv.add_theme_constant_override("separation", 0)
 	money_lbl = _label("$0", 22, C_GOLD)
@@ -83,6 +93,7 @@ func _ready() -> void:
 		if op == "claim":
 			show_toast("%s: +%s%s" % [before.name, CC.fmt(before.reward), " and a Boost Point" if before.points else ""])
 		render())
+	city.expand_toggled.connect(func(): city_full = not city_full)
 	city.crate_clicked.connect(func():
 		if CC.event_on(Game.tycoon(), "crate"):
 			Game.act({"type": "claim"})
@@ -153,7 +164,10 @@ func _process(dt: float) -> void:
 		fps_lbl.text = "%d fps" % Engine.get_frames_per_second()
 		move_child(fps_lbl, -1)
 	if city.visible:
-		city.custom_minimum_size.y = max(340.0, size.y * 0.62)
+		if Game.mobile:
+			city.custom_minimum_size.y = size.y - header.size.y if city_full else size.y * 0.6
+		else:
+			city.custom_minimum_size.y = max(340.0, size.y * 0.62)
 		city.update_city(t)
 	# The Play tab has text fields, so it only re-renders when something actually changes.
 	rerender_acc += dt
@@ -190,7 +204,7 @@ func _make_theme() -> Theme:
 	for st in ["normal", "hover", "pressed", "disabled", "focus"]:
 		var col = C_PANEL2
 		var border = C_GOLD if st == "hover" else C_LINE
-		th.set_stylebox(st, "Button", _box(col, border, 8, 8))
+		th.set_stylebox(st, "Button", _box(col, border, 8, 11 if Game.mobile else 8)) # bigger to tap on phones
 	th.set_color("font_color", "Button", C_TEXT)
 	th.set_color("font_hover_color", "Button", C_TEXT)
 	th.set_color("font_disabled_color", "Button", Color(C_TEXT, 0.35))
@@ -578,6 +592,9 @@ func _render_reboot() -> void:
 # ---------- Settings ----------
 # Every option comes from models.json SETTINGS (the web version shows the same list). Picking a quality preset
 # fills in its values; changing one of those by hand turns the preset into Custom, starting from what was on.
+# the phone renderer can't do these (and phones always wait for the screen)
+const MOBILE_HIDDEN = ["ao", "reflections", "haze", "vsync"]
+
 func _set_opt(id: String, v) -> void:
 	var S = R3D.M.SETTINGS
 	var o: Dictionary = Game.settings.get("options", {}).duplicate()
@@ -618,6 +635,8 @@ func _render_settings() -> void:
 		for it in g.items:
 			if it.get("only", "") == "web":
 				continue
+			if Game.mobile and it.id in MOBILE_HIDDEN:
+				continue
 			if not first:
 				var line = ColorRect.new()
 				line.color = C_LINE
@@ -626,7 +645,7 @@ func _render_settings() -> void:
 			first = false
 			_setting_row(card, it, o)
 	var r = _row(content)
-	r.add_child(_label("Film grain is in the web version only.", 13, C_MUTED))
+	r.add_child(_label("Film grain is in the web version only." + (" Phones can't do ambient occlusion, reflections or haze." if Game.mobile else ""), 13, C_MUTED, true))
 	_spacer(r)
 	r.add_child(_button("Reset to defaults", func():
 		Game.settings.options = {}

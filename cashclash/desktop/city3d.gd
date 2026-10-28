@@ -10,6 +10,7 @@ signal lot_clicked(i: int)
 signal upgrade_clicked(i: int)
 signal crate_clicked
 signal quest_action(area: String, op: String) # take, hand in or drop the job of the person in `area`
+signal expand_toggled # the ⤢ button on phones: the city fills the screen, or makes room for the cards again
 
 const EYE := 1.62
 const SENS := 0.0022
@@ -58,6 +59,8 @@ var talk_body: Label
 var talk_opts: Label
 var aim = -1
 var own_mouse := false
+var pad = null # touch.gd on phones and tablets
+const TOUCH_SENS := 0.006 # radians per canvas unit dragged
 var sun_light: DirectionalLight3D
 var steel: StandardMaterial3D
 var belt_mat: StandardMaterial3D
@@ -94,6 +97,12 @@ func _init() -> void:
 	belt_mat.roughness = 0.85
 	belt_mat.uv1_scale = Vector3(float(LINE.length) / 0.6, 1, 1)
 	_overlay()
+	if Game.mobile:
+		pad = preload("res://touch.gd").new()
+		add_child(pad)
+		pad.pressed.connect(_on_pad)
+		hint.text = "Left thumb walks (push it all the way to run) · drag anywhere else to look · walk through a front door to go inside · the buttons on the right buy, upgrade and talk"
+		talk_opts.visible = false
 	pv = SubViewport.new()
 	pv.use_hdr_2d = true # linear colour, tone-mapped once by the main view
 	pv.render_target_update_mode = SubViewport.UPDATE_DISABLED
@@ -701,12 +710,18 @@ func _push(x0: float, z0: float, x1: float, z1: float, rad: float) -> void:
 func _move(dt: float) -> float:
 	if _typing() or talking != null:
 		return 0.0
-	var f = int(Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP)) - int(Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN))
-	var s = int(Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT)) - int(Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT))
+	var f = float(int(Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP)) - int(Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN)))
+	var s = float(int(Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT)) - int(Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT)))
+	var run = Input.is_key_pressed(KEY_SHIFT)
+	var len = Vector2(f, s).length()
+	if pad and pad.stick.length() > 0.15: # the stick walks as far as it's pushed; all the way runs
+		f = pad.stick.y
+		s = pad.stick.x
+		run = pad.stick.length() > 0.92
+		len = 1.0
 	if f == 0 and s == 0:
 		return 0.0
-	var speed = 7.0 if Input.is_key_pressed(KEY_SHIFT) else 4.2
-	var len = Vector2(f, s).length()
+	var speed = 7.0 if run else 4.2
 	var sn = sin(me.yaw)
 	var cs = cos(me.yaw)
 	var pz = me.z
@@ -805,6 +820,8 @@ func _prompt() -> void:
 			if n > 0:
 				txt += "    [R] Upgrade %s%s" % [CC.fmt(up), " (not enough)" if tycoon.money < up else ""]
 			prompt_lbl.text = txt
+	if Game.mobile: # the buttons on the right do it, not keys
+		prompt_lbl.text = prompt_lbl.text.replace("[E] ", "").replace("[R] ", "")
 	prompt.visible = true
 
 func _process(dt: float) -> void:
@@ -830,6 +847,11 @@ func _process(dt: float) -> void:
 			rooms.erase(i)
 	if want >= 0 and not rooms.has(want):
 		rooms[want] = _build_room(want, lots[want].ms)
+	if pad:
+		var look = pad.take_look()
+		var o = R3D.opts()
+		me.yaw -= look.x * TOUCH_SENS * o.sens / 100.0
+		me.pitch = clamp(me.pitch - look.y * TOUCH_SENS * o.sens / 100.0 * (-1 if o.invert else 1), -1.3, 1.3)
 	var speed = _move(dt)
 	me.walk += speed * dt * 1.9
 	var bob = 0.0 if speed == 0.0 else abs(cos(me.walk)) * 0.04
@@ -871,6 +893,8 @@ func _process(dt: float) -> void:
 		aim = a
 		_prompt()
 	_layout_overlay()
+	if pad:
+		pad.set_buttons(_pad_buttons())
 	if streets:
 		R3D.tick_city(streets, t)
 	for i in lots.size():
@@ -977,7 +1001,44 @@ func talk(area) -> void:
 	else:
 		_start_talk(area)
 
+# The touch buttons for what you're doing: talking, looking at a lot or at someone with a job.
+func _pad_buttons() -> Array:
+	var out = [{"id": "full", "label": "⤢", "at": Vector2(34, 34), "r": 22, "top": true}]
+	var spot = func(i): return [Vector2(80, 95), Vector2(185, 70), Vector2(80, 195)][i] # the main one, then beside and above it
+	if talking != null and tycoon != null:
+		var a = CC.quest_area(tycoon, talking).active
+		if a == null:
+			out.append({"id": "e", "label": "Take job", "at": spot.call(0), "r": 42, "accent": true})
+			out.append({"id": "q", "label": "Other job", "at": spot.call(1), "r": 36})
+		elif CC.quest_done(tycoon, talking):
+			out.append({"id": "e", "label": "Hand in", "at": spot.call(0), "r": 42, "accent": true})
+		else:
+			out.append({"id": "q", "label": "Drop job", "at": spot.call(1), "r": 36})
+		out.append({"id": "esc", "label": "Leave", "at": spot.call(2), "r": 34})
+	elif typeof(aim) == TYPE_STRING and aim.begins_with("talk:"):
+		out.append({"id": "talk", "label": "Talk", "at": spot.call(0), "r": 42, "accent": true})
+	elif typeof(aim) == TYPE_INT and aim >= 0:
+		out.append({"id": "buy", "label": "Buy", "at": spot.call(0), "r": 42, "accent": true})
+		if CC.owned(tycoon, CC.BUILDINGS[aim].id) > 0:
+			out.append({"id": "up", "label": "Upgrade", "at": spot.call(1), "r": 38})
+	return out
+
+func _on_pad(id: String) -> void:
+	match id:
+		"full": expand_toggled.emit()
+		"buy": if typeof(aim) == TYPE_INT and aim >= 0: lot_clicked.emit(aim)
+		"up": if typeof(aim) == TYPE_INT and aim >= 0: upgrade_clicked.emit(aim)
+		"talk": if typeof(aim) == TYPE_STRING and aim.begins_with("talk:"): _start_talk(aim.substr(5))
+		"esc": _talk_do("leave")
+		"q": _talk_do("drop")
+		"e":
+			if talking != null:
+				var a = CC.quest_area(tycoon, talking).active
+				_talk_do("accept" if a == null else ("claim" if CC.quest_done(tycoon, talking) else "leave"))
+
 func _gui_input(e: InputEvent) -> void:
+	if Game.mobile: # touch.gd does the walking and looking
+		return
 	if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT and e.pressed:
 		if not own_mouse:
 			own_mouse = true

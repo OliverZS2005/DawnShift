@@ -41,6 +41,8 @@ var hit_t := 0.0
 var hurt_t := 0.0
 var foe_seen := -100000
 var foe_ammo := -1
+var pad = null # touch.gd on phones and tablets
+const TOUCH_SENS := 0.006 # radians per canvas unit dragged
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -53,6 +55,18 @@ func _ready() -> void:
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.draw.connect(_draw_overlay)
 	add_child(overlay)
+	if Game.mobile: # left thumb moves, dragging aims, FIRE on the right (above the ammo)
+		pad = preload("res://touch.gd").new()
+		pad.hint_at = Vector2(300, 110)
+		pad.buttons = [{"id": "fire", "label": "FIRE", "at": Vector2(100, 200), "r": 52, "accent": true},
+			{"id": "reload", "label": "Reload", "at": Vector2(212, 152), "r": 34},
+			{"id": "swap", "label": "Weapon", "at": Vector2(212, 252), "r": 34}]
+		pad.pressed.connect(func(id):
+			if id == "reload":
+				one_shot.reload = true
+			elif id == "swap" and view != null:
+				one_shot.sw = _next_weapon(str(view.u[info.you].g.id)))
+		add_child(pad)
 	Game.snap_received.connect(_on_snap)
 	Game.battle_result.connect(func(won, text): _finish(won, text))
 
@@ -75,7 +89,8 @@ func open(i: Dictionary) -> void:
 		yaw = A.units[0].ang
 	view3d.reset()
 	visible = true
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	if not Game.mobile:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 func _finish(won: bool, text: String) -> void:
 	if not visible or result != null:
@@ -102,8 +117,18 @@ func _on_snap(snap: Dictionary, ack: int) -> void:
 func _captured() -> bool:
 	return Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 
+# the next weapon you own after `id` (the Weapon button)
+func _next_weapon(id: String) -> String:
+	var own = []
+	for w in CC.WEAPONS:
+		if Game.tycoon().weapons.has(w.id):
+			own.append(w.id)
+	return own[(own.find(id) + 1) % own.size()] if own.size() else id
+
 func _input(e: InputEvent) -> void:
 	if not visible or result != null:
+		return
+	if Game.mobile and (e is InputEventMouseMotion or e is InputEventMouseButton): # touch.gd handles touches
 		return
 	if e is InputEventMouseMotion and _captured() and yaw != null:
 		var o = R3D.opts()
@@ -126,15 +151,18 @@ func _key(k) -> bool:
 
 # Movement keys are relative to where you face; the game itself moves in map directions.
 func _move() -> Vector2:
-	var f = int(_key(KEY_W) or _key(KEY_UP)) - int(_key(KEY_S) or _key(KEY_DOWN))
-	var r = int(_key(KEY_D)) - int(_key(KEY_A))
+	var f = float(int(_key(KEY_W) or _key(KEY_UP)) - int(_key(KEY_S) or _key(KEY_DOWN)))
+	var r = float(int(_key(KEY_D)) - int(_key(KEY_A)))
+	if pad and pad.stick.length() > 0.15:
+		f = pad.stick.y
+		r = pad.stick.x
 	var a = yaw if yaw != null else 0.0
 	return Vector2(f * cos(a) - r * sin(a), f * sin(a) + r * cos(a))
 
 func _read_input() -> Dictionary:
 	var mv = _move()
 	var inp = {"mx": mv.x, "my": mv.y, "ang": yaw if yaw != null else 0.0,
-		"shoot": force_shoot or (_captured() and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT))}
+		"shoot": force_shoot or (_captured() and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)) or (pad != null and pad.held("fire"))}
 	for k in one_shot:
 		inp[k] = one_shot[k]
 	one_shot = {}
@@ -147,6 +175,11 @@ func _process(dt: float) -> void:
 	dt = min(dt, 0.05)
 	if yaw != null:
 		yaw += (int(_key(KEY_RIGHT)) - int(_key(KEY_LEFT))) * TURN * dt # keyboard turning
+		if pad and result == null:
+			var look = pad.take_look()
+			var o = R3D.opts()
+			yaw += look.x * TOUCH_SENS * o.sens / 100.0
+			pitch = clamp(pitch - look.y * TOUCH_SENS * o.sens / 100.0 * (-1 if o.invert else 1), -0.6, 0.45)
 	if info.mp:
 		if buf.size() > 0:
 			view = _interpolated(dt)
@@ -305,11 +338,11 @@ func _draw_overlay() -> void:
 	var age = (Time.get_ticks_msec() - started) / 1000.0
 	if age < 7.2 and R3D.opts().hints:
 		var alpha = clamp(7.2 - age, 0.0, 1.0)
-		var tip = "W A S D move · mouse looks · click fires · R reload · 1–5 weapons · Esc frees the mouse"
+		var tip = "Left thumb moves · drag to aim · FIRE shoots · Reload · Weapon switches guns" if Game.mobile else "W A S D move · mouse looks · click fires · R reload · 1–5 weapons · Esc frees the mouse"
 		var tw = label_f.get_string_size(tip, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x + 24
 		overlay.draw_rect(Rect2(W / 2 - tw / 2, H - 16 - 30, tw, 30), Color(INK, INK.a * alpha))
 		_text(Vector2(W / 2 - tw / 2 + 12, H - 16 - 10), tip, label_f, 15, Color(DIM, alpha))
-	if not _captured() and result == null:
+	if not _captured() and result == null and not Game.mobile:
 		var pr = Rect2(W / 2 - 230, H * 0.58, 460, 70)
 		_plate(pr)
 		_text(pr.position + Vector2(0, 32), "Click to take aim", bold_f, 26, HUD, HORIZONTAL_ALIGNMENT_CENTER, pr.size.x)

@@ -13,6 +13,8 @@ const SAVE_PATH = "user://cashclash_save.json"
 const SETTINGS_PATH = "user://cashclash_settings.json"
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
+# phones and tablets: touch controls and a layout for small screens (--touch on the command line tries it on a PC)
+var mobile := OS.has_feature("mobile") or OS.get_cmdline_user_args().has("--touch")
 var sp := {}
 # server: last server typed; tokens: { serverUrl: multiplayer login }; sync: { server, code, base, at, err }
 # options: the ⚙️ Settings tab's choices (this device only; see R3D.opts())

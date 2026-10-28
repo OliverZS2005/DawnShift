@@ -43,6 +43,8 @@ func opts() -> Dictionary:
 	return _opts
 
 func set_options(saved: Dictionary) -> void:
+	if _saved.is_empty() and _views.is_empty() and Game.mobile:
+		_auto_step = 1 # phones start Auto at medium
 	_saved = saved.duplicate()
 	_apply()
 

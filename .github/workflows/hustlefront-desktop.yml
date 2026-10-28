@@ -1,4 +1,4 @@
-# Builds the Hustlefront desktop app (Godot) for Windows, Mac and Linux on every change to the game,
+# Builds the Hustlefront app (Godot) for Windows, Mac, Linux and Android on every change to the game,
 # and publishes them as the "hustlefront-latest" release (Releases page). A release, unlike workflow
 # artifacts, doesn't count against the account's Actions storage quota.
 name: Hustlefront desktop
@@ -40,6 +40,11 @@ jobs:
           curl -sSLo /tmp/templates.tpz $base/Godot_v${GODOT_VERSION}-stable_export_templates.tpz
           dir=~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
           mkdir -p $dir && unzip -q /tmp/templates.tpz -d /tmp && mv /tmp/templates/* $dir/
+          # the runner's Android SDK and Java 17, for the Android export
+          mkdir -p ~/.config/godot
+          for f in editor_settings-4.3.tres editor_settings-4.tres; do
+            printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/java_sdk_path = "%s"\n' "$ANDROID_HOME" "$JAVA_HOME_17_X64" > ~/.config/godot/$f
+          done
 
       - name: Check desktop/models.json matches models.js
         run: node ../tools/build-models.js --check
@@ -60,6 +65,42 @@ jobs:
           godot --headless --path . --export-release "macOS" build/mac/Hustlefront.zip
           ls -la build/*
 
+      # The APK must be signed with the same key every time, or Android won't install a new build over the
+      # last one. With the ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD repository secrets set, that's
+      # your key; otherwise the workflow makes one the first time and keeps it in the Actions cache (private
+      # to this repo; it's dropped if no build runs for a week, and then the next APK needs a fresh install).
+      - name: Signing key (cached)
+        uses: actions/cache@v4
+        with:
+          path: ~/.android-key
+          key: hustlefront-android-key-v1
+
+      - name: Export for Android
+        env:
+          RUN: ${{ github.run_number }}
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > /tmp/release.keystore
+            export GODOT_ANDROID_KEYSTORE_RELEASE_PATH=/tmp/release.keystore GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD="$KEYSTORE_PASS"
+            export GODOT_ANDROID_KEYSTORE_RELEASE_USER=$(keytool -list -keystore /tmp/release.keystore -storepass "$KEYSTORE_PASS" | grep -m1 PrivateKeyEntry | cut -d, -f1)
+          else
+            mkdir -p ~/.android-key
+            if [ ! -f ~/.android-key/release.keystore ]; then
+              openssl rand -hex 24 > ~/.android-key/pass
+              keytool -genkeypair -keystore ~/.android-key/release.keystore -alias hustlefront -keyalg RSA -keysize 2048 -validity 10000 \
+                -storepass "$(cat ~/.android-key/pass)" -keypass "$(cat ~/.android-key/pass)" -dname "CN=Hustlefront" > /dev/null
+            fi
+            export GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$HOME/.android-key/release.keystore GODOT_ANDROID_KEYSTORE_RELEASE_USER=hustlefront
+            export GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD="$(cat ~/.android-key/pass)"
+          fi
+          # every build a higher version, so Android installs it as an update
+          sed -i "s/^version\/code=.*/version\/code=$RUN/; s/^version\/name=.*/version\/name=\"1.$RUN\"/" export_presets.cfg
+          mkdir -p build/android
+          godot --headless --path . --export-release "Android" build/android/Hustlefront.apk
+          ls -la build/android
+
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -69,20 +110,24 @@ jobs:
           cp build/windows/Hustlefront.exe out/Hustlefront-Windows.exe
           cp build/linux/Hustlefront.x86_64 out/Hustlefront-Linux.x86_64
           cp build/mac/Hustlefront.zip out/Hustlefront-Mac.zip
+          cp build/android/Hustlefront.apk out/Hustlefront-Android.apk
           cat > notes.md <<'EOF'
-          Hustlefront for your computer. Pick the file for your system:
+          Hustlefront for your computer or phone. Pick the file for your system:
 
-          | Computer | File |
+          | Device | File |
           |---|---|
           | Windows | `Hustlefront-Windows.exe` |
           | Mac (Apple chip or Intel) | `Hustlefront-Mac.zip` |
           | Linux | `Hustlefront-Linux.x86_64` |
+          | Android phone or tablet (64-bit, Android 7+) | `Hustlefront-Android.apk` |
 
           **Windows:** open the `.exe`. If Windows says it protected your PC, click **More info → Run anyway**.
 
           **Mac:** unzip it, then right-click **Hustlefront** and choose **Open**, then **Open** again (it isn't signed with a paid Apple certificate).
 
           **Linux:** make it executable (`chmod +x Hustlefront-Linux.x86_64`) and run it.
+
+          **Android:** open this page on your phone, tap `Hustlefront-Android.apk`, then open the download. Android asks you to allow installs from your browser the first time (**Settings → Install unknown apps**). New builds install over the old one and keep your game.
 
           Singleplayer works offline. For multiplayer and syncing with the web version, join a Hustlefront server from the Play tab.
           EOF
@@ -91,5 +136,5 @@ jobs:
           gh release delete dawnshift-latest --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
           gh release create hustlefront-latest out/* -R "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" --prerelease \
-            --title "Hustlefront desktop (build $RUN)" \
+            --title "Hustlefront (build $RUN)" \
             --notes-file notes.md
