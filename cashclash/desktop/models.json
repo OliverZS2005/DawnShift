@@ -69173,5 +69173,32 @@
    "ailab": "AI Labs",
    "dyson": "Dyson Spheres"
   }
+ },
+ "REBOOT_GOALS": {
+  "cash": {
+   "name": "Cash",
+   "icon": "💵",
+   "desc": "Money in the bank."
+  },
+  "wins": {
+   "name": "Fights won",
+   "icon": "⚔️",
+   "desc": "Battles won since your last reboot."
+  },
+  "jobs": {
+   "name": "Jobs done",
+   "icon": "📋",
+   "desc": "Jobs finished for the people round your business since your last reboot."
+  },
+  "milestones": {
+   "name": "Milestones",
+   "icon": "🏭",
+   "desc": "Owning 25, 50, 100 or 200 of a building: each one reached counts."
+  },
+  "gear": {
+   "name": "Weapon upgrades",
+   "icon": "🔫",
+   "desc": "Upgrade levels across all your weapons."
+  }
  }
 }

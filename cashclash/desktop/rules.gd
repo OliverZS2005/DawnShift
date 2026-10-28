@@ -68,7 +68,14 @@ func fmt(n: float) -> String:
 	while abs(x) >= 1000.0 and i < units.size() - 1:
 		x /= 1000.0
 		i += 1
-	return "$" + ("%.2f" % x if i > 0 else str(int(x))) + units[i]
+	if i == 0:
+		return "$" + str(int(x)) + units[i]
+	# "%.2f" rounds like JavaScript's toFixed except on exact ties (x.125, x.375, x.625, x.875), which it
+	# rounds to even and toFixed rounds up
+	var e = x * 8.0
+	if e == floor(e) and int(e) % 2 == 1:
+		x += 0.001
+	return "$" + ("%.2f" % x) + units[i]
 
 func weapon(id: String) -> Dictionary:
 	for w in WEAPONS:
@@ -240,9 +247,12 @@ func reboots(t) -> int:
 func qseed(area: String, rb: int, n: int, salt := 0) -> int:
 	return qhash([quest_areas().find(area) + 1, rb, n + 1, salt])
 
+# stats count for good; run counts since the last reboot (what a reboot asks for: reboot_goals)
 func quest_state(t) -> Dictionary:
 	if typeof(t.get("quest")) != TYPE_DICTIONARY:
 		t.quest = {"stats": {"wins": 0, "crates": 0, "with": {}}, "areas": {}}
+	if typeof(t.quest.get("run")) != TYPE_DICTIONARY:
+		t.quest.run = {"wins": 0, "jobs": 0}
 	return t.quest
 
 func quest_area(t, area: String) -> Dictionary:
@@ -397,11 +407,51 @@ func quest_talk(t, area: String) -> Dictionary:
 	return {"name": g.name, "role": g.role, "mood": g.mood, "look": g.look, "hi": qpick(r, m.hi), "take": qpick(r, m.take), "wait": qpick(r, m.wait), "done": qpick(r, m.done),
 		"why": why[int(o.why) % why.size()], "ask": text, "reward": quest_reward(t, area), "points": 1 if int(t.level) >= MAX_BIZ and (int(st.n) + 1) % 3 == 0 else 0}
 
-# A battle won: counts towards win jobs.
+# A battle won: counts towards win jobs and the next reboot.
 func record_win(t) -> void:
-	var s = quest_state(t).stats
+	var q = quest_state(t)
+	var s = q.stats
 	s.wins = int(s.wins) + 1
 	s.with[t.equipped] = int(s.with.get(t.equipped, 0)) + 1
+	q.run.wins = int(q.run.wins) + 1
+
+# ---------- What a reboot takes ----------
+# Money alone only takes waiting, so a reboot also asks for work done since the last one: fights won, jobs
+# finished for the people round your business, milestones reached and weapon upgrades. Every goal grows with
+# each reboot, up to the 16th. (Names and descriptions: REBOOT_GOALS in models.json, from shared.js.)
+func milestones_reached(t) -> int:
+	var s = 0
+	for b in BUILDINGS:
+		for m in MILESTONES:
+			if owned(t, b.id) >= m:
+				s += 1
+	return s
+
+func reboot_goals(t) -> Array:
+	var n = min(reboots(t) + 1, 16)
+	var run = quest_state(t).run
+	return [
+		{"id": "cash", "have": float(t.money), "need": reboot_cost(t)},
+		{"id": "wins", "have": int(run.wins), "need": min(3 + 2 * (n - 1), 25)},
+		{"id": "jobs", "have": int(run.jobs), "need": min(1 + n, 10)},
+		{"id": "milestones", "have": milestones_reached(t), "need": n + 1},
+		{"id": "gear", "have": weapon_ups(t), "need": 2 + 2 * n},
+	]
+
+# Why you can't reboot yet ("": you can).
+func reboot_blocker(t) -> String:
+	for g in reboot_goals(t):
+		if g.have >= g.need:
+			continue
+		var left = int(ceil(g.need - g.have))
+		var s = "" if left == 1 else "s"
+		match g.id:
+			"cash": return "Need %s to reboot" % fmt(g.need)
+			"wins": return "Win %d more fight%s first" % [left, s]
+			"jobs": return "Finish %d more job%s for the people round your business first" % [left, s]
+			"milestones": return "Reach %d more milestone%s first" % [left, s]
+			_: return "Upgrade your weapons %d more time%s first" % [left, s]
+	return ""
 
 # Applies a player action. Returns an error message, or "" on success.
 func apply_action(t, a: Dictionary) -> String:
@@ -463,13 +513,15 @@ func apply_action(t, a: Dictionary) -> String:
 					t.points = int(t.points) + talk.points
 					st.n = int(st.n) + 1
 					st.active = null
+					quest_state(t).run.jobs = int(quest_state(t).run.jobs) + 1
 				"drop": # a new job next time
 					st.n = int(st.n) + 1
 					st.active = null
 				_:
 					return "Bad action"
 		"reboot":
-			if t.money < reboot_cost(t): return "Need %s to reboot" % fmt(reboot_cost(t))
+			var blocked = reboot_blocker(t)
+			if blocked != "": return blocked
 			if int(t.level) < MAX_BIZ:
 				t.level = int(t.level) + 1
 			else:
@@ -480,7 +532,8 @@ func apply_action(t, a: Dictionary) -> String:
 			t.weapons = fresh_weapons()
 			t.equipped = "pistol"
 			t.event = null
-			quest_state(t).areas = {} # new people, new jobs
+			quest_state(t).areas = {} # new people, new jobs, new goals
+			quest_state(t).run = {"wins": 0, "jobs": 0}
 		"perk":
 			if not PERKS.has(a.id): return "Unknown perk"
 			if perk(t, a.id) >= PERKS[a.id].max: return "Already maxed"

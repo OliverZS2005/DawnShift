@@ -371,6 +371,13 @@ func _render_tycoon() -> void:
 		if t.event.type == "crate":
 			r.add_child(_button("Claim " + CC.fmt(max(100.0, CC.income(t) * 90.0)), func(): Game.act({"type": "claim"}), false, true))
 	_jobs(t)
+	# how close the next reboot is
+	var goals = CC.reboot_goals(t)
+	var left = []
+	for x in goals:
+		if x.have < x.need:
+			left.append(R3D.M.REBOOT_GOALS[x.id].name.to_lower())
+	content.add_child(_label("🔄 Next reboot: %d of %d goals done · %s" % [goals.size() - left.size(), goals.size(), (", ".join(left) + " to go") if left.size() else "ready on the Reboot tab"], 13, C_MUTED, true))
 	content.add_child(_label("%s · income x%.2f · Owning 25/50/100/200 of a building doubles its output each time." % [CC.LEVELS[t.level - 1], CC.global_mult(t)], 13, C_MUTED, true))
 	var g = _grid(content)
 	for b in CC.BUILDINGS:
@@ -497,9 +504,37 @@ func _render_battle() -> void:
 		rows.sort_custom(func(a, b): return a.money > b.money)
 		_board(lb, rows)
 
+# What the next reboot still asks for: one row per goal (CC.reboot_goals), ticked when it's met.
+func _reboot_goals(parent: Control, t) -> void:
+	for g in CC.reboot_goals(t):
+		var d = R3D.M.REBOOT_GOALS[g.id]
+		var done = g.have >= g.need
+		var amt = func(x): return CC.fmt(x) if g.id == "cash" else str(int(x))
+		var r = _row(parent)
+		var icon = _label("✅" if done else d.icon, 18)
+		icon.custom_minimum_size.x = 26
+		icon.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		r.add_child(icon)
+		var v = VBoxContainer.new()
+		v.add_theme_constant_override("separation", 2)
+		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		r.add_child(v)
+		var top = _row(v)
+		top.add_child(_label(d.name, 14))
+		top.add_child(_label("%s / %s" % [amt.call(min(g.have, g.need)), amt.call(g.need)], 14, C_MUTED))
+		v.add_child(_label(d.desc, 12, C_MUTED, true))
+		var bar = ProgressBar.new()
+		bar.max_value = 1.0
+		bar.step = 0.0
+		bar.value = min(1.0, float(g.have) / float(g.need))
+		bar.show_percentage = false
+		bar.custom_minimum_size.y = 8
+		bar.add_theme_stylebox_override("background", _box(C_PANEL2, C_PANEL2, 4, 0))
+		bar.add_theme_stylebox_override("fill", _box(C_GREEN if done else C_GOLD, C_GREEN if done else C_GOLD, 4, 0))
+		v.add_child(bar)
+
 func _render_reboot() -> void:
 	var t = Game.tycoon()
-	var cost = CC.reboot_cost(t)
 	var top = int(t.level) >= CC.MAX_BIZ
 	var g = _grid(content)
 	var c = _card(g, "🔄 Prestige reboot" if top else "🔄 Reboot to the next business level", true)
@@ -514,19 +549,14 @@ func _render_reboot() -> void:
 	else:
 		desc += "You'll reach %s: income x2 forever%s." % [CC.LEVELS[t.level], (", and you unlock " + ", ".join(unlocks)) if unlocks.size() else ""]
 	c.add_child(_label(desc, 13, C_MUTED, true))
-	var bar = ProgressBar.new()
-	bar.max_value = 100
-	bar.value = min(100.0, t.money / cost * 100.0)
-	bar.show_percentage = false
-	bar.custom_minimum_size.y = 8
-	bar.add_theme_stylebox_override("background", _box(C_PANEL2, C_PANEL2, 4, 0))
-	bar.add_theme_stylebox_override("fill", _box(C_GOLD, C_GOLD, 4, 0))
-	c.add_child(bar)
+	c.add_child(_label("A reboot takes work: the money, and the goals below done since your last reboot. They grow every time.", 13, C_MUTED, true))
+	_reboot_goals(c, t)
+	var blocked = CC.reboot_blocker(t)
 	var r = _row(c)
-	r.add_child(_label("%s / %s" % [CC.fmt(t.money), CC.fmt(cost)]))
+	r.add_child(_label(blocked if blocked != "" else "Everything done: ready when you are.", 14, C_MUTED if blocked != "" else C_GREEN, true))
 	_spacer(r)
 	var q = ("Prestige for %d Boost Points?" % CC.prestige_points(t)) if top else ("Reboot to %s?" % CC.LEVELS[min(t.level, CC.MAX_BIZ - 1)])
-	r.add_child(_button("Prestige!" if top else "Reboot", func(): ask(q + " You lose all money, buildings and weapons.", func(): Game.act({"type": "reboot"}); show_toast("🔄 Rebooted!")), t.money < cost, true))
+	r.add_child(_button("Prestige!" if top else "Reboot", func(): ask(q + " You lose all money, buildings and weapons.", func(): Game.act({"type": "reboot"}); show_toast("🔄 Rebooted!")), blocked != "", true))
 
 	var lc = _card(g, "📈 Levels")
 	for i in CC.MAX_BIZ:
@@ -618,6 +648,8 @@ func _setting_row(card: VBoxContainer, it: Dictionary, o: Dictionary) -> void:
 			cb.focus_mode = Control.FOCUS_NONE
 			cb.add_theme_icon_override("checked", _switch(true))
 			cb.add_theme_icon_override("unchecked", _switch(false))
+			for st in ["normal", "hover", "pressed", "hover_pressed"]:
+				cb.add_theme_stylebox_override(st, StyleBoxEmpty.new())
 			cb.toggled.connect(func(on): _set_opt(it.id, on); render())
 			r.add_child(cb)
 		"range":

@@ -180,7 +180,8 @@
   const qpick = (r, list) => list[Math.floor(r() * list.length)];
   const reboots = t => (t.level - 1) + t.prestige;
   const qseed = (area, rb, n, salt = 0) => qhash([QUEST_AREAS.indexOf(area) + 1, rb, n + 1, salt]);
-  const questState = t => (t.quest = t.quest || { stats: { wins: 0, crates: 0, with: {} }, areas: {} });
+  // stats count for good; run counts since the last reboot (what a reboot asks for: rebootGoals)
+  const questState = t => { const q = (t.quest = t.quest || { stats: { wins: 0, crates: 0, with: {} }, areas: {} }); q.run = q.run || { wins: 0, jobs: 0 }; return q; };
   const questArea = (t, area) => { const q = questState(t); return q.areas[area] || (q.areas[area] = { n: 0, active: null }); };
   // The person in an area for this reboot.
   function questGiver(t, area) {
@@ -257,8 +258,38 @@
     return { name: g.name, role: g.role, mood: g.mood, look: g.look, hi: qpick(r, m.hi), take: qpick(r, m.take), wait: qpick(r, m.wait), done: qpick(r, m.done),
       why: why[o.why % why.length], ask: fill(ask[o.ask % ask.length]), reward: questReward(t, area), points: t.level >= MAX_BIZ && (st.n + 1) % 3 === 0 ? 1 : 0 };
   }
-  // A battle won: counts towards win jobs.
-  function recordWin(t) { const s = questState(t).stats; s.wins++; s.with[t.equipped] = (s.with[t.equipped] || 0) + 1; }
+  // A battle won: counts towards win jobs and the next reboot.
+  function recordWin(t) { const q = questState(t), s = q.stats; s.wins++; s.with[t.equipped] = (s.with[t.equipped] || 0) + 1; q.run.wins++; }
+
+  // ---------- What a reboot takes ----------
+  // Money alone only takes waiting, so a reboot also asks for work done since the last one: fights won,
+  // jobs finished for the people round your business, milestones reached (25/50/100/200 of a building) and
+  // weapon upgrades. Every goal grows with each reboot, up to the 16th.
+  const REBOOT_GOALS = {
+    cash: { name: 'Cash', icon: '💵', desc: 'Money in the bank.' },
+    wins: { name: 'Fights won', icon: '⚔️', desc: 'Battles won since your last reboot.' },
+    jobs: { name: 'Jobs done', icon: '📋', desc: 'Jobs finished for the people round your business since your last reboot.' },
+    milestones: { name: 'Milestones', icon: '🏭', desc: 'Owning 25, 50, 100 or 200 of a building: each one reached counts.' },
+    gear: { name: 'Weapon upgrades', icon: '🔫', desc: 'Upgrade levels across all your weapons.' },
+  };
+  const milestonesReached = t => BUILDINGS.reduce((s, b) => s + MILESTONES.filter(m => owned(t, b.id) >= m).length, 0);
+  function rebootGoals(t) {
+    const n = Math.min(reboots(t) + 1, 16), run = questState(t).run;
+    return [
+      { id: 'cash', have: t.money, need: rebootCost(t) },
+      { id: 'wins', have: run.wins, need: Math.min(3 + 2 * (n - 1), 25) },
+      { id: 'jobs', have: run.jobs, need: Math.min(1 + n, 10) },
+      { id: 'milestones', have: milestonesReached(t), need: n + 1 },
+      { id: 'gear', have: weaponUps(t), need: 2 + 2 * n },
+    ];
+  }
+  // Why you can't reboot yet (null: you can).
+  function rebootBlocker(t) {
+    const g = rebootGoals(t).find(g => g.have < g.need); if (!g) return null;
+    const left = Math.ceil(g.need - g.have), s = left === 1 ? '' : 's';
+    return { cash: `Need ${fmt(g.need)} to reboot`, wins: `Win ${left} more fight${s} first`, jobs: `Finish ${left} more job${s} for the people round your business first`,
+      milestones: `Reach ${left} more milestone${s} first`, gear: `Upgrade your weapons ${left} more time${s} first` }[g.id];
+  }
 
   // Applies a player action to a tycoon. Returns an error message, or null on success.
   function applyAction(t, a) {
@@ -298,15 +329,15 @@
       } else if (a.op === 'claim') {
         if (!questDone(t, a.area)) return 'Not done yet';
         const talk = questTalk(t, a.area);
-        t.money += talk.reward; t.points += talk.points; st.n++; st.active = null;
+        t.money += talk.reward; t.points += talk.points; st.n++; st.active = null; questState(t).run.jobs++;
       } else if (a.op === 'drop') { st.n++; st.active = null; } // a new job next time
       else return 'Bad action';
     } else if (a.type === 'reboot') {
-      if (t.money < rebootCost(t)) return `Need ${fmt(rebootCost(t))} to reboot`;
+      const blocked = rebootBlocker(t); if (blocked) return blocked;
       if (t.level < MAX_BIZ) t.level++;
       else { t.points += prestigePoints(t); t.prestige++; }
       Object.assign(t, { money: startCash(t), buildings: {}, weapons: freshWeapons(), equipped: 'pistol', event: null });
-      questState(t).areas = {}; // new people, new jobs
+      questState(t).areas = {}; questState(t).run = { wins: 0, jobs: 0 }; // new people, new jobs, new goals
     } else if (a.type === 'perk') {
       const p = PERKS[a.id]; if (!p) return 'Unknown perk';
       if (perk(t, a.id) >= p.max) return 'Already maxed';
@@ -340,6 +371,7 @@
     if (rq && typeof rq === 'object') {
       const q = questState(t), rs = rq.stats || {};
       q.stats.wins = int(rs.wins, 0, 1e7); q.stats.crates = int(rs.crates, 0, 1e7);
+      q.run = { wins: int(rq.run?.wins, 0, 1e7), jobs: int(rq.run?.jobs, 0, 1e7) };
       for (const w of WEAPONS) { const v = int(rs.with?.[w.id], 0, 1e7); if (v) q.stats.with[w.id] = v; }
       for (const area of QUEST_AREAS) {
         const ra = rq.areas?.[area]; if (!ra) continue;
@@ -531,6 +563,7 @@
   return { BUILDINGS, WEAPONS, STATS, MAX_LVL, STEAL, LEVELS, MAX_BIZ, PERKS, EVENTS, MAPS, TICK, fmt,
     newTycoon, upgradeSave, owned, bLevel, unlocked, bCost, bUpCost, bIncome, income, globalMult, milestoneMult, nextMilestone, upCost, offlineEarnings,
     perk, perkCost, rebootCost, prestigePoints, eventOn, rollEvent, applyAction, sanitizeTycoon,
+    REBOOT_GOALS, rebootGoals, rebootBlocker,
     QUEST_AREAS, QUEST_KINDS, QUEST_PAY, QUEST_TEXT, questGiver, questOffer, questProgress, questDone, questTalk, questArea, recordWin, reboots, wealthDistance, matchDistance, searchWindow, newRivals, tickRival, rivalLoadout,
     W, H, hitsWall, moveUnit, nextWaypoint, newArena, stepArena, botInput, snapshot };
 });

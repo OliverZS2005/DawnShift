@@ -137,6 +137,13 @@
   .lvl { font-size: 12px; color: var(--blue); }
   .choice b { display: block; font-size: 15px; margin-bottom: 4px; }
   .job { padding: 6px 0; border-bottom: 1px dashed var(--line); } .job:last-child { border-bottom: 0; }
+  /* ---------- Reboot goals ---------- */
+  .goals { display: grid; gap: 10px; margin-top: 10px; }
+  .goal { display: grid; grid-template-columns: 26px 1fr; gap: 8px; align-items: start; }
+  .goal .gi { font-size: 18px; line-height: 1.2; }
+  .goal .desc { font-size: 12px; margin: 1px 0 4px; }
+  .goal .bar { margin-top: 0; }
+  .goal.done .bar i { background: var(--green); }
   /* ---------- Settings tab ---------- */
   .sets { columns: 2 400px; column-gap: 12px; }
   .sets .card { break-inside: avoid; margin-bottom: 12px; }
@@ -344,7 +351,7 @@ function render() {
   const pill = $('#modePill'); pill.className = 'mode' + (mode === 'mp' ? ' mp' : ''); pill.textContent = mode === 'mp' ? `🌐 ${NET?.server || 'Multiplayer'}` : '💻 Singleplayer';
   const v = $('#view'), t = T();
   if (tab === 'play') setView(v, renderPlay());
-  else if (tab === 'tycoon') setView(v, eventBanner(t) + jobsCard(t) + `<p class="muted"><b class="lvl">${CC.LEVELS[t.level - 1]}</b> · income x${CC.globalMult(t).toFixed(2)} · Owning 25/50/100/200 of a building doubles its output each time.</p>
+  else if (tab === 'tycoon') setView(v, eventBanner(t) + jobsCard(t) + rebootLine(t) + `<p class="muted"><b class="lvl">${CC.LEVELS[t.level - 1]}</b> · income x${CC.globalMult(t).toFixed(2)} · Owning 25/50/100/200 of a building doubles its output each time.</p>
     <div class="grid">${BUILDINGS.map(b => !CC.unlocked(t, b) ? `
       <div class="card locked"><h3>🔒 ${b.icon} ${b.name}</h3><div class="muted">Unlocks at business level ${b.unlock}: <b>${CC.LEVELS[b.unlock - 1]}</b>. Reboot to get there.</div></div>` : `
       <div class="card">
@@ -380,8 +387,22 @@ function eventBanner(t) {
 }
 function eventToast(type) { const e = CC.EVENTS[type]; toast(`${e.icon} ${e.name}! ${e.desc}`); if (tab === 'tycoon') render(); }
 
+// One line on the tycoon tab: how close the next reboot is.
+function rebootLine(t) {
+  const g = CC.rebootGoals(t), n = g.filter(x => x.have >= x.need).length;
+  return `<p class="muted">🔄 Next reboot: <b>${n} of ${g.length}</b> goals done${n < g.length ? ` · ${g.filter(x => x.have < x.need).map(x => CC.REBOOT_GOALS[x.id].name.toLowerCase()).join(', ')} to go` : ' · <b class="win">ready on the Reboot tab</b>'}</p>`;
+}
+// What the next reboot still asks for: one row per goal (CC.rebootGoals), ticked when it's met.
+function rebootGoalRows(t) {
+  return CC.rebootGoals(t).map(g => {
+    const d = CC.REBOOT_GOALS[g.id], done = g.have >= g.need, f = Math.min(1, g.have / g.need);
+    const amt = x => g.id === 'cash' ? fmt(x) : Math.floor(x);
+    return `<div class="goal${done ? ' done' : ''}"><span class="gi">${done ? '✅' : d.icon}</span><div><b>${d.name}</b> <span class="muted">${amt(Math.min(g.have, g.need))} / ${amt(g.need)}</span>
+      <div class="desc muted">${d.desc}</div><div class="bar"><i style="width:${(f * 100).toFixed(0)}%"></i></div></div></div>`;
+  }).join('');
+}
 function renderReboot(t) {
-  const cost = CC.rebootCost(t), pct = Math.min(100, t.money / cost * 100), top = t.level >= CC.MAX_BIZ;
+  const top = t.level >= CC.MAX_BIZ, blocked = CC.rebootBlocker(t);
   const next = CC.BUILDINGS.filter(b => b.unlock === t.level + 1);
   return `<div class="grid">
     <div class="card current"><h3>🔄 ${top ? 'Prestige reboot' : 'Reboot to the next business level'}</h3>
@@ -389,9 +410,10 @@ function renderReboot(t) {
       <p class="muted">Rebooting wipes your <b>money, buildings and weapons</b>. ${top
         ? `At the top level, each reboot gives <b>Boost Points</b> (more if you overshoot the goal). You'd get <b>${CC.prestigePoints(t)}</b> right now.`
         : `You'll reach <b>${CC.LEVELS[t.level]}</b>: income x2 forever${next.length ? `, and you unlock ${next.map(b => b.icon + ' ' + b.name).join(', ')}` : ''}.`}</p>
-      <div class="bar"><i style="width:${pct}%"></i></div>
-      <div class="row"><span>${fmt(t.money)} / ${fmt(cost)}</span>
-        <button class="primary" data-reboot ${t.money >= cost ? '' : 'disabled'}>${top ? 'Prestige!' : 'Reboot'}</button></div>
+      <p class="muted">A reboot takes work: the money, and the goals below done since your last reboot. They grow every time.</p>
+      <div class="goals">${rebootGoalRows(t)}</div>
+      <div class="row"><span class="${blocked ? 'muted' : 'win'}">${blocked ? esc(blocked) : 'Everything done: ready when you are.'}</span>
+        <button class="primary" data-reboot ${blocked ? 'disabled' : ''}>${top ? 'Prestige!' : 'Reboot'}</button></div>
     </div>
     <div class="card"><h3>📈 Levels</h3><table>${CC.LEVELS.map((n, i) => `<tr class="${i + 1 === t.level ? 'you' : ''}"><td>${i + 1 <= t.level ? '✅' : '🔒'}</td><td>${n}</td><td class="muted">x${Math.pow(2, i)} income</td></tr>`).join('')}</table></div>
   </div>

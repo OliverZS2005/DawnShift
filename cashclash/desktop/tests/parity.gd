@@ -12,8 +12,23 @@ func _init():
 		t.buildings = {"lemon": {"count": 30, "level": 2}, "bank": {"count": 5, "level": 0}}
 		t.weapons["smg"] = {"dmg": 3, "rate": 1, "mag": 0, "armor": 2}
 		var row = [CCs.income(t), CCs.reboot_cost(t), CCs.prestige_points(t), CCs.b_cost(t, CCs.BUILDINGS[0]), CCs.b_up_cost(t, CCs.BUILDINGS[4]), CCs.up_cost(t, CCs.weapon("smg"), "dmg"), CCs.offline_earnings(t, 99999), CCs.match_distance(t, {"money": 1234.0, "level": 2, "prestige": 0})]
-		CCs.apply_action(t, {"type": "reboot"})
-		row.append_array([t.level, t.money, t.points])
+		# what the reboot still asks for, then everything done but the cash, then all of it
+		row.append(CCs.apply_action(t, {"type": "reboot"}))
+		for g in CCs.reboot_goals(t):
+			row.append_array([g.id, g.have, g.need])
+		CCs.record_win(t)
+		t.quest.run.jobs = 99
+		row.append(CCs.reboot_blocker(t))
+		t.quest.run.wins = 99
+		for id in ["lemon", "cafe", "bank"]:
+			t.buildings[id] = {"count": 200, "level": 0}
+		t.weapons.pistol = {"dmg": 10, "rate": 10, "mag": 10, "armor": 10}
+		row.append(CCs.reboot_blocker(t))
+		t.money = 1.0
+		row.append(CCs.reboot_blocker(t))
+		t.money = 5e12
+		row.append(CCs.apply_action(t, {"type": "reboot"}))
+		row.append_array([t.level, t.money, t.points, t.quest.run.wins])
 		out.append(row)
 	print("PARITY " + JSON.stringify(out))
 	# quests: who's in each area, what they say and ask, and a job taken, done and handed in
@@ -38,4 +53,11 @@ func _init():
 				CCs.apply_action(t, {"type": "quest", "area": area, "op": "drop" if step % 2 else "claim"})
 				CCs.record_win(t)
 	print("QUESTS " + JSON.stringify(words))
+	# money formatting, ties included
+	var money = []
+	for i in 400:
+		money.append(CCs.fmt(floor(pow(1.37, i % 90) * (1 + i * 7919 % 1000))))
+	for v in [15625000.0, 15635000.0, 1125.0, 2375.0, 9875.0, 160845.0, 541505.0]:
+		money.append(CCs.fmt(v))
+	print("FMT " + JSON.stringify(money))
 	quit()
