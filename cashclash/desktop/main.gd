@@ -417,7 +417,7 @@ func _jobs(t) -> void:
 		if a != null:
 			rows.append(area)
 	if rows.is_empty():
-		content.add_child(_label("📋 People round your business have jobs for you: walk up to them in the tycoon view and press E. New people and new jobs come with every reboot.", 13, C_MUTED, true))
+		content.add_child(_label("📋 People round your business have jobs for you: walk up to them in the tycoon view and %s. New people and new jobs come with every reboot." % ("tap Talk" if Game.mobile else "press E"), 13, C_MUTED, true))
 		return
 	var c = _card(content, "📋 Jobs")
 	for area in rows:
