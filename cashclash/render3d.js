@@ -144,8 +144,9 @@
     ao.blendIntensity = 0.85; ao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.6, thickness: 1.5, scale: 1 });
     composer.addPass(ao);
     if (overlay) { const vm = new THREE.RenderPass(overlay, camera); vm.clear = false; vm.clearDepth = true; composer.addPass(vm); }
-    // GTA IV-style bloom: bright sky and highlights bleed a soft glow
-    const bloom = new THREE.UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.65, 1.25);
+    // GTA IV-style bloom: lamps, lit windows and bright sky bleed a soft glow. The threshold is above a white
+    // car in full sun (albedo ~0.8 x sun 3), so sunlit paint and signs don't glow.
+    const bloom = new THREE.UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.65, 2.6);
     composer.addPass(bloom);
     composer.addPass(new THREE.OutputPass());
     const grade = new THREE.ShaderPass(GRADE); composer.addPass(grade);
@@ -460,7 +461,7 @@
     let lights = 0;
     for (const d of [...L.lamps, ...L.cars, ...(detail ? L.props : [])]) prop(d.model).then(o => {
       if (!o) return; o.position.set(...d.p); o.rotation.y = d.ry; group.add(o);
-      if (d.light && night && lights++ < 6) { const l = new THREE.PointLight('#ffd49a', 60, 22, 2); l.position.set(d.p[0], 5.3, d.p[2]); group.add(l); }
+      if (d.light && night && lights++ < 6) { const l = new THREE.PointLight('#ffd49a', 20, 22, 2); l.position.set(d.p[0], 5.3, d.p[2]); group.add(l); }
     });
     // traffic (positions from models.js trafficAt(), so the desktop app drives the same cars)
     const cars = [];
@@ -930,7 +931,7 @@
       for (const d of M.CITY.props) prop(d.model).then(o => {
         if (!o || my !== token) return;
         o.position.set(...d.p); o.rotation.y = d.ry; if (d.s) o.scale.multiplyScalar(d.s); world.add(o);
-        if (d.light && night) { const l = new THREE.PointLight('#ffd49a', 70, 20, 2); l.position.set(d.p[0], 5.3, d.p[2]); world.add(l); }
+        if (d.light && night) { const l = new THREE.PointLight('#ffd49a', 20, 20, 2); l.position.set(d.p[0], 5.3, d.p[2]); world.add(l); }
       });
       for (const l of lots) l.key = ''; // rebuild buildings for the new look
     }
@@ -963,10 +964,11 @@
       addBuilding(spec, spec.faces, night, '+', (key, mat, geo) => { if (!batches.has(key)) batches.set(key, { mat, geos: [] }); batches.get(key).geos.push(geo); }, kits);
       for (const { mat, geos } of batches.values()) g.add(shadows(new THREE.Mesh(mergeGeos(geos), mat)));
       instanceKits(kits, g);
-      g.add(signBoard(b.name.toUpperCase(), M.SHOPS[b.id].sign, 5.2, 0.62, [0, 3.3, spec.z + spec.d / 2 + 0.18], night ? 0.9 : 0.1));
+      g.add(signBoard(b.name.toUpperCase(), M.SHOPS[b.id].sign, 5.2, 0.62, [0, 3.3, spec.z + spec.d / 2 + 0.18], night ? 0.45 : 0));
       return g;
     }
-    // A painted sign board facing +Z: `text` in colors[0] on colors[1], w x h metres, centred at `at`.
+    // A painted sign board facing +Z: `text` in colors[0] on colors[1], w x h metres, centred at `at`; `glow`
+    // lights the letters (at night).
     function signBoard(text, [fg, bg], w, h, at, glow) {
       const c = document.createElement('canvas'); c.width = 1024; c.height = Math.round(1024 * h / w);
       const x = c.getContext('2d'), H = c.height; x.fillStyle = bg; x.fillRect(0, 0, 1024, H);
@@ -974,9 +976,16 @@
       x.fillStyle = fg; x.font = `800 ${Math.round(H * 0.62)}px 'Barlow Condensed', 'Arial Narrow', sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
       x.fillText(text, 512, H * 0.54, 1024 - H * 0.5);
       const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
-      const g = new THREE.Group();
-      const board = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.06), new THREE.MeshStandardMaterial({ color: bg, roughness: 0.55 }));
-      const face = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.45, emissive: '#ffffff', emissiveMap: tex, emissiveIntensity: glow }));
+      const g = new THREE.Group(), lit = { roughness: 0.6 };
+      if (glow) { // lit at night: only the letters glow (white on black), not the whole board
+        const e = document.createElement('canvas'); e.width = c.width; e.height = H; const y = e.getContext('2d');
+        y.fillStyle = '#000'; y.fillRect(0, 0, 1024, H); y.fillStyle = fg; y.font = x.font; y.textAlign = 'center'; y.textBaseline = 'middle';
+        y.fillText(text, 512, H * 0.54, 1024 - H * 0.5);
+        Object.assign(lit, { emissive: '#ffffff', emissiveMap: new THREE.CanvasTexture(e), emissiveIntensity: glow });
+        lit.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+      }
+      const board = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.06), new THREE.MeshStandardMaterial({ color: bg, roughness: 0.6 }));
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, ...lit }));
       face.position.z = 0.031; g.add(shadows(board), face); g.position.set(...at);
       return g;
     }
@@ -999,7 +1008,7 @@
       lot.key = key; lot.holder.clear(); lot.anims = []; lot.line = null;
       const add = (model, x, z, s) => { const m = build(model); m.root.position.set(x, 0, z); m.root.scale.setScalar(s); lot.holder.add(m.root); lot.anims.push(...m.anims); };
       const night = M.CITY.levels[level - 1].lampsOn;
-      const board = kind => { const d = M.LOT.boards[kind]; add(M.LOT[kind], 0, 0, 1); lot.holder.add(signBoard(d.text, d.colors, 1.6, 0.85, d.at, 0.05)); };
+      const board = kind => { const d = M.LOT.boards[kind]; add(M.LOT[kind], 0, 0, 1); lot.holder.add(signBoard(d.text, d.colors, 1.6, 0.85, d.at, 0)); };
       if (!unl) { board('locked'); lot.holder.add(fence()); }
       else if (!n) board('forSale');
       else {

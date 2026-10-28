@@ -153,8 +153,8 @@
     forSale: { parts: clean([[-0.75, 0.75].map(x => box(0.07, 1.9, 0.07, x, 0, 3.2, '#e8e4dc', { ro: 0.5 }))]) },
     locked: { parts: clean([[-0.75, 0.75].map(x => box(0.07, 1.9, 0.07, x, 0, 4.05, '#6b6f73', { m: 0.7, ro: 0.45 }))]) },
     // the boards on those posts: text, [letters, board] colours, centre [x, y, z] (signs facing +Z)
-    boards: { forSale: { text: 'FOR SALE', colors: ['#b8352a', '#d6d0c4'], at: [0, 1.4, 3.24] },
-      locked: { text: 'COMING SOON', colors: ['#e6e1d6', '#9c2f27'], at: [0, 1.4, 4.09] } },
+    boards: { forSale: { text: 'FOR SALE', colors: ['#a3302a', '#bdb7ab'], at: [0, 1.4, 3.24] },
+      locked: { text: 'COMING SOON', colors: ['#cfc9bd', '#8a2a23'], at: [0, 1.4, 4.09] } },
     // chain-link fence round a lot you can't buy yet: [piece, x, z, rotation y] (models/kit_fence.glb,
     // panels 1.9 m wide from their origin towards -X, facing +Z)
     fence: (() => {

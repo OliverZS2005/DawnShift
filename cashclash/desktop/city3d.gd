@@ -159,7 +159,7 @@ func _set_level(lv: int) -> void:
 		world.add_child(o)
 		if d.get("light", false) and night:
 			var l = OmniLight3D.new()
-			l.light_color = Color("#ffd49a"); l.light_energy = 3.0; l.omni_range = 20
+			l.light_color = Color("#ffd49a"); l.light_energy = 1.2; l.omni_range = 20
 			l.position = Vector3(d.p[0], 5.3, d.p[2])
 			world.add_child(l)
 	R3D.shadows(world)
@@ -234,7 +234,7 @@ func _refresh_lot(i: int, tyc: Dictionary) -> void:
 		var built = R3D.build(R3D.M.LOT[kind])
 		lot.holder.add_child(built.root)
 		var bd = R3D.M.LOT.boards[kind]
-		lot.holder.add_child(R3D.sign_board(bd.text, bd.colors, 1.6, 0.85, Vector3(bd.at[0], bd.at[1], bd.at[2]), 0.05))
+		lot.holder.add_child(R3D.sign_board(bd.text, bd.colors, 1.6, 0.85, Vector3(bd.at[0], bd.at[1], bd.at[2]), 0.0))
 		if not unl:
 			lot.holder.add_child(R3D.fence())
 		top = 2.5

@@ -165,7 +165,7 @@ func _build_map(m: int) -> void:
 		if d.get("light", false) and th.lampsOn and lights < 6:
 			lights += 1
 			var l = OmniLight3D.new()
-			l.light_color = Color("#ffd8a0"); l.light_energy = 3.0; l.omni_range = 22
+			l.light_color = Color("#ffd8a0"); l.light_energy = 1.2; l.omni_range = 22
 			l.position = Vector3(d.p[0], 5.2, d.p[2])
 			map_root.add_child(l)
 	R3D.shadows(map_root)

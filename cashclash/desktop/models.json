@@ -3227,8 +3227,8 @@
    "forSale": {
     "text": "FOR SALE",
     "colors": [
-     "#b8352a",
-     "#d6d0c4"
+     "#a3302a",
+     "#bdb7ab"
     ],
     "at": [
      0,
@@ -3239,8 +3239,8 @@
    "locked": {
     "text": "COMING SOON",
     "colors": [
-     "#e6e1d6",
-     "#9c2f27"
+     "#cfc9bd",
+     "#8a2a23"
     ],
     "at": [
      0,

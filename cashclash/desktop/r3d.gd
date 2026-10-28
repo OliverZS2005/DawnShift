@@ -132,8 +132,8 @@ func environment(sky_name: String, exposure: float, _unused := Color.BLACK) -> E
 	# GTA IV-style bloom: bright sky and highlights bleed a soft glow
 	e.glow_enabled = true
 	e.glow_intensity = 0.8
-	e.glow_bloom = 0.06
-	e.glow_hdr_threshold = 1.0
+	e.glow_bloom = 0.02 # (a little of everything: more makes sunlit white cars and signs glow)
+	e.glow_hdr_threshold = 1.4
 	# city smog: distant blocks fade into the haze. Depth fog (rather than exponential) matches the web's
 	# curve and works the same in the OpenGL fallback.
 	var haze = Color(M.URBAN.haze[sky_name])
@@ -525,7 +525,7 @@ func city(where: String, night: bool) -> Node3D:
 		if d.get("light", false) and night and lights < 6:
 			lights += 1
 			var l = OmniLight3D.new()
-			l.light_color = Color("#ffd49a"); l.light_energy = 3.0; l.omni_range = 22
+			l.light_color = Color("#ffd49a"); l.light_energy = 1.2; l.omni_range = 22
 			l.position = Vector3(d.p[0], 5.3, d.p[2])
 			group.add_child(l)
 	# traffic driving round the middle; tick_city() moves it
@@ -622,7 +622,7 @@ func shop_building(b: Dictionary, milestones: int, night: bool) -> Node3D:
 		mi.material_override = batches[key].mat
 		g.add_child(mi)
 	kit_instances(placed, g)
-	g.add_child(sign_board(b.name.to_upper(), M.SHOPS[b.id].sign, 5.2, 0.62, Vector3(0, 3.3, float(spec.z) + float(spec.d) / 2 + 0.18), 0.9 if night else 0.1))
+	g.add_child(sign_board(b.name.to_upper(), M.SHOPS[b.id].sign, 5.2, 0.62, Vector3(0, 3.3, float(spec.z) + float(spec.d) / 2 + 0.18), 0.45 if night else 0.0))
 	shadows(g)
 	return g
 
@@ -654,8 +654,8 @@ func sign_board(text: String, colors: Array, w: float, h: float, at: Vector3, gl
 	l.font = font("barlow-condensed-800")
 	l.font_size = 128
 	l.outline_size = 0
-	l.modulate = fg
-	l.shaded = glow < 0.5 # lit like paint by day; a lit sign at night
+	l.modulate = fg * Color(0.7, 0.7, 0.7) if glow > 0 else fg
+	l.shaded = glow == 0 # lit like paint by day; at night the letters glow (dimmed: they're lit, not a lamp)
 	l.double_sided = false
 	var px = font("barlow-condensed-800").get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 128)
 	l.pixel_size = min(h * 0.62 / 128.0 / 0.75, (w - h * 0.5) / max(1.0, px.x))

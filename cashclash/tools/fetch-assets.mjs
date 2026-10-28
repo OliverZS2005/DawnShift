@@ -57,12 +57,12 @@ const FACADES = {
   tower: { day: 'Facade012', night: 'Facade015', res: '1K' },
 };
 // Cars (Grab3D slug -> paint). Their paint is baked into a pastel texture: the dominant body colour is
-// re-tinted to a real car colour (keeping the shading), the glass made dark and reflective, rims chrome.
+// re-tinted to a real car colour (keeping the shading), the glass made dark, rims chrome.
 const CARS = {
   sedan: { slug: '1990s-sedan', paint: '#1f2d45' },        // navy
   sedan2: { slug: '1980s-sedan', paint: '#5a1a1d' },       // maroon
   wagon: { slug: '1990s-station-wagon', paint: '#a3a7aa' }, // silver
-  van: { slug: '1990s-delivery-van', paint: '#e4e3de' },    // white
+  van: { slug: '1990s-delivery-van', paint: '#e4e3de', shade: 0.8 }, // white (shade: real white paint is greyer than the texture)
   suv: { slug: '1990s-suv', paint: '#151617' },            // black
   taxi: { slug: '1990s-taxi', paint: '#e8b10d' },          // taxi yellow
 };
@@ -209,11 +209,11 @@ if (want('cars')) {
     const doc = await io.read(raw), hex = car.paint.replace('#', ''), target = hsl(...[0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16) / 255));
     for (const m of doc.getRoot().listMaterials()) {
       const n = m.getName();
-      if (/glass/.test(n)) m.setBaseColorFactor([0.035, 0.045, 0.055, 1]).setRoughnessFactor(0.04).setMetallicFactor(0.55);
+      if (/glass/.test(n)) m.setBaseColorFactor([0.02, 0.025, 0.03, 1]).setRoughnessFactor(0.05).setMetallicFactor(0); // tinted glass: dark, reflects at grazing angles only
       else if (/rim/.test(n)) m.setMetallicFactor(1).setRoughnessFactor(0.16);
       else if (/_paint_/.test(n)) m.setBaseColorFactor([...rgb(...target), 1]);
       else if (/tire/.test(n)) m.setBaseColorFactor([0.32, 0.32, 0.33, 1]); // black rubber, not grey
-      if (/body_pbr/.test(n)) m.setRoughnessFactor(0.5); // glossier paint (scales the texture's roughness)
+      if (/body_pbr/.test(n)) m.setRoughnessFactor(0.5).setBaseColorFactor([car.shade || 1, car.shade || 1, car.shade || 1, 1]); // glossier paint (scales the texture's roughness)
       const tex = /body_pbr/.test(n) && m.getBaseColorTexture();
       if (!tex) continue;
       // find the body colour (the most common saturated hue) and move those pixels to the paint colour
