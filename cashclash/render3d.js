@@ -921,6 +921,51 @@
     }
     // the offset from lot i's door to its room's doorway
     const roomOffset = i => { const l = lots[i]; return ROOM_AT(i).sub(new THREE.Vector3(l.x + l.door.x, 0.2, l.z + l.door.z)); };
+    // People: workers at their stations, people walking their rounds (they stop if you're in the way) and
+    // in every area someone with a job for you (CC.questTalk), whom you talk to with E.
+    function townsperson(who, scale = 1) {
+      const root = new THREE.Group(), p = { root, actions: {}, current: null, mixer: null };
+      root.scale.setScalar(scale);
+      loadGLB(A.npcs[who]).then(g => {
+        if (!g) return;
+        const model = THREE.SkeletonUtils.clone(g.scene); root.add(model);
+        model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+        const bone = name => { const n = THREE.PropertyBinding.sanitizeNodeName(name); let b = null; model.traverse(o => { if (!b && o.isBone && o.name === n) b = o; }); return b; };
+        model.updateMatrixWorld(true);
+        const r = bone('Bip01 R UpperArm'), l = bone('Bip01 L UpperArm');
+        if (r && l) { // turn it to face +Z: its right is from the left shoulder to the right one
+          const right = r.getWorldPosition(new THREE.Vector3()).sub(l.getWorldPosition(new THREE.Vector3())).setY(0).normalize(), fwd = new THREE.Vector3().crossVectors(UP, right);
+          model.rotation.y = -Math.atan2(fwd.x, fwd.z);
+        }
+        p.mixer = new THREE.AnimationMixer(model);
+        for (const key of ['idle', 'walk', 'talk', 'work']) { const clip = findClip(g.animations, key); if (clip) p.actions[key] = p.mixer.clipAction(clip); }
+        const want = p.want || 'idle'; p.want = null; play(p, want, 0);
+        if (p.actions[want]) p.actions[want].time = Math.random() * 3; // not all in step
+      });
+      return p;
+    }
+    const doClip = (p, key, fade) => { if (p.mixer) play(p, key, fade); else p.want = key; };
+    const faceTo = (p, x, z, dt) => { // turn smoothly towards a point (world)
+      const w = p.root.getWorldPosition(new THREE.Vector3()), want = Math.atan2(x - w.x, z - w.z);
+      const parent = p.root.parent ? p.root.parent.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion();
+      const base = new THREE.Euler().setFromQuaternion(parent, 'YXZ').y;
+      p.root.rotation.y += wrapAng(want - base - p.root.rotation.y) * Math.min(1, dt * 6);
+    };
+    // people walking a closed path: [{ p, path, speed, d }]
+    function walkers(list, holder, scaleSeed = 0) {
+      return list.map((w, k) => {
+        const p = townsperson(w.who, 0.95 + ((k + scaleSeed) % 5) * 0.025);
+        const len = w.path.reduce((a, q, i) => { const r = w.path[(i + 1) % w.path.length]; return a + Math.hypot(r[0] - q[0], r[1] - q[1]); }, 0);
+        holder.add(p.root); return { p, path: w.path, speed: w.speed, d: w.phase * len };
+      });
+    }
+    let plazaWalkers = [];
+    let plazaGiver = null, plazaKey = '', talking = null; // talking: the area whose person you're talking to
+    function giverFor(area, crew, holder, at) { // the quest giver: who they look like changes each reboot
+      const look = tycoon ? CC.questGiver(tycoon, area).look : 0, p = townsperson(crew[look % crew.length], 0.97 + (look % 7) * 0.012);
+      p.root.position.set(at.p[0], 0, at.p[1]); p.root.rotation.y = at.ry; p.area = area; p.home = at.ry; holder.add(p.root);
+      return p;
+    }
     const coinGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.03, 20);
     const coinMat = new THREE.MeshStandardMaterial({ color: '#f5c542', metalness: 1, roughness: 0.2, transparent: true });
     const steel = new THREE.MeshStandardMaterial({ color: '#3d4045', metalness: 0.75, roughness: 0.4 });
@@ -1039,7 +1084,11 @@
       });
       // the doorway from inside shows the plaza
       const exit = new THREE.Mesh(new THREE.PlaneGeometry(R.door.w, R.door.h), portalMat); exit.position.set(0, R.door.h / 2, -0.01); g.add(exit);
-      return { i, ms, group: g, R, lines, exit };
+      // the people who work there
+      const crew = R.people.stand.map((st, k) => { const p = townsperson(st.who, 0.95 + (k % 5) * 0.025); p.root.position.set(st.p[0], 0, st.p[1]); p.root.rotation.y = st.ry; doClip(p, st.clip, 0); g.add(p.root); return p; });
+      const walking = walkers(R.people.walk, g, i);
+      const giver = giverFor(CC.BUILDINGS[i].id, R.people.crew, g, R.people.giver);
+      return { i, ms, group: g, R, lines, exit, crew, walking, giver };
     }
     function refreshLot(i, tyc) {
       const b = CC.BUILDINGS[i], lot = lots[i];
@@ -1070,6 +1119,14 @@
     function update(tyc) {
       tycoon = tyc;
       if (tyc.level !== level) setLevel(tyc.level);
+      const pk = CC.reboots(tyc) + '|' + CC.questGiver(tyc, 'plaza').name; // a new person each reboot
+      if (pk !== plazaKey) {
+        plazaKey = pk; if (plazaGiver) scene.remove(plazaGiver.root); plazaGiver = giverFor('plaza', M.CITY.town.crew, scene, M.CITY.town.giver);
+        // different people walk the routes after each reboot
+        const folk = M.CITY.town.folk, rb = CC.reboots(tyc);
+        for (const w of plazaWalkers) scene.remove(w.p.root);
+        plazaWalkers = walkers(M.CITY.town.walk.map((w, k) => ({ ...w, who: folk[(k * 5 + rb * 7) % folk.length] })), scene, rb);
+      }
       for (let i = 0; i < 9; i++) refreshLot(i, tyc);
       const crateOn = CC.eventOn(tyc, 'crate');
       if (crateOn && !crate) { crate = build(M.LOT.crate); crate.root.position.set(0, 0.5, 1.5 * L + 0.6); crate.root.userData.crate = true; scene.add(crate.root); }
@@ -1089,6 +1146,7 @@
       if (m === a) me.x = x0 - rad; else if (m === b) me.x = x1 + rad; else if (m === c) me.z = z0 - rad; else me.z = z1 + rad;
     };
     function move(dt) {
+      if (talking) return 0;
       const f = (keys.w || keys.arrowup ? 1 : 0) - (keys.s || keys.arrowdown ? 1 : 0), s = (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0);
       if (!f && !s) return 0;
       const speed = keys.shift ? 7 : 4.2, len = Math.hypot(f, s), sin = Math.sin(me.yaw), cos = Math.cos(me.yaw);
@@ -1103,6 +1161,7 @@
         return speed;
       }
       const lim = cx - 0.6; me.x = Math.max(-lim, Math.min(lim, me.x)); me.z = Math.max(-lim, Math.min(lim, me.z));
+      if (plazaGiver) { const p = plazaGiver.root.position; push(p.x - 0.25, p.z - 0.25, p.x + 0.25, p.z + 0.25, 0.3); }
       for (let i = 0; i < lots.length; i++) {
         const l = lots[i];
         if (l.door && rooms[i]) { // through the front door?
@@ -1116,7 +1175,17 @@
       return speed;
     }
     // what's under the crosshair (a lot index, 'crate', or -1), within reach
+    // the quest giver you're facing and close to (their area), if any
+    function talkable() {
+      const g = me.room >= 0 ? rooms[me.room] && rooms[me.room].giver : plazaGiver;
+      if (!g) return null;
+      const w = g.root.getWorldPosition(new THREE.Vector3()), dx = w.x - me.x, dz = w.z - me.z, d = Math.hypot(dx, dz);
+      if (d > 2.6) return null;
+      const ang = wrapAng(Math.atan2(-dx, -dz) - me.yaw); // the camera looks down -Z
+      return Math.abs(ang) < 0.5 || d < 1.1 ? g.area : null;
+    }
     function aimed() {
+      const tk = talkable(); if (tk) return 'talk:' + tk;
       if (me.room >= 0) return me.room; // inside a business: E and R act on it
       ray.setFromCamera({ x: 0, y: 0 }, camera); ray.far = 9;
       const targets = lots.map(l => l.pad).concat(lots.map(l => l.holder)).concat(crate ? [crate.root] : []);
@@ -1169,6 +1238,28 @@
           if (it.position.x > half + 0.1) { it.visible = false; coin(line.till.x, line.till.y, line.till.z, boom); }
         }
       }
+      // people
+      const stepWalkers = (list, origin) => {
+        for (const w of list) {
+          const pos = w.p.root.getWorldPosition(new THREE.Vector3());
+          if (Math.hypot(pos.x - me.x, pos.z - me.z) < 1.1) { doClip(w.p, 'idle'); faceTo(w.p, me.x, me.z, dt); } // you're in the way: wait
+          else {
+            w.d += w.speed * dt; const [x, z, ry] = M.pathAt(w.path, w.d);
+            w.p.root.position.set(x, 0, z); w.p.root.rotation.y = ry; doClip(w.p, 'walk');
+            if (w.p.actions.walk) w.p.actions.walk.timeScale = w.speed / 1.3;
+          }
+          if (w.p.mixer) w.p.mixer.update(dt);
+        }
+      };
+      stepWalkers(plazaWalkers);
+      const givers = [plazaGiver, ...rooms.map(r => r && r.giver)].filter(Boolean);
+      for (const g of givers) {
+        if (talking === g.area || (aim === 'talk:' + g.area)) faceTo(g, me.x, me.z, dt);
+        else g.root.rotation.y += wrapAng(g.home - g.root.rotation.y) * Math.min(1, dt * 2);
+        doClip(g, talking === g.area ? 'talk' : 'idle');
+        if (g.mixer) g.mixer.update(dt);
+      }
+      for (const r of rooms) if (r) { stepWalkers(r.walking); for (const p of r.crew) if (p.mixer) p.mixer.update(dt); }
       for (const c of coins) if (c.visible) {
         c.userData.t += dt; c.position.y += dt * 1.2; c.rotation.z += dt * 6; c.material.opacity = 1 - c.userData.t / 1.2;
         if (c.userData.t > 1.2) c.visible = false;
@@ -1195,17 +1286,23 @@
     }
     // mouse look (pointer lock) and keys
     const locked = () => document.pointerLockElement === canvas;
-    canvas.addEventListener('click', () => { if (!locked()) canvas.requestPointerLock(); else if (typeof aim === 'number' && aim >= 0) handlers.onLot(aim); });
+    canvas.addEventListener('click', () => {
+      if (!locked()) canvas.requestPointerLock();
+      else if (talking) return;
+      else if (typeof aim === 'string' && aim.startsWith('talk:')) handlers.onTalk(aim.slice(5));
+      else if (typeof aim === 'number' && aim >= 0) handlers.onLot(aim);
+    });
     addEventListener('mousemove', e => {
       if (!locked()) return;
       me.yaw -= e.movementX * 0.0022; me.pitch = Math.max(-1.3, Math.min(1.3, me.pitch - e.movementY * 0.0022));
     });
     const typing = () => /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName);
     addEventListener('keydown', e => {
-      if (!running || typing()) return;
+      if (!running || typing() || talking) return; // (the conversation takes the keys)
       const k = e.key.toLowerCase();
       if (['w', 'a', 's', 'd', 'shift', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) { keys[k] = true; if (locked()) e.preventDefault(); }
-      if (k === 'e' && typeof aim === 'number' && aim >= 0) handlers.onLot(aim);
+      if (k === 'e' && typeof aim === 'string' && aim.startsWith('talk:')) handlers.onTalk(aim.slice(5));
+      else if (k === 'e' && typeof aim === 'number' && aim >= 0) handlers.onLot(aim);
       if (k === 'r' && typeof aim === 'number' && aim >= 0) handlers.onUpgrade(aim);
     });
     addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
@@ -1213,6 +1310,7 @@
     return {
       update,
       start() { if (!running) { running = true; last = performance.now(); requestAnimationFrame(frame); } },
+      talk(area) { talking = area; for (const k in keys) keys[k] = false; }, // area: talking to its person (null: done)
       get room() { return me.room; }, // which business you're inside (-1: none), and where you are: for tests
       get spot() { return [me.x, me.z]; },
       stop() { running = false; for (const k in keys) keys[k] = false; if (locked()) document.exitPointerLock(); },

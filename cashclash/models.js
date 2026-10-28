@@ -210,12 +210,17 @@
   // A factory hall for the industries, a shop with a counter and customers' side for the rest; the
   // production lines (one more per milestone) run across the back. parts: plain boxes [size, centre,
   // texture, tint]; props: models; lights: [x, y, z]; blocks: footprints you can't walk through.
+  // crew: who works there (ASSETS.npcs); the quest giver is one of them too, picked per reboot
   const INSIDE = {
-    lemon: { kind: 'shop', floor: 'slate', walls: 'brick', front: 'stall' },
-    cafe: { kind: 'shop', floor: 'slate', walls: 'brick', front: 'cafe' },
-    arcade: { kind: 'shop', floor: 'concrete_floor', walls: 'plaster', front: 'arcade' },
-    bank: { kind: 'shop', floor: 'marble', walls: 'plaster', front: 'bank' },
-    fact: { kind: 'factory' }, oil: { kind: 'factory' }, space: { kind: 'factory' }, ailab: { kind: 'factory' }, dyson: { kind: 'factory' },
+    lemon: { kind: 'shop', floor: 'slate', walls: 'brick', front: 'stall', crew: ['woman2', 'man1', 'courier', 'woman4', 'man3'] },
+    cafe: { kind: 'shop', floor: 'slate', walls: 'brick', front: 'cafe', crew: ['chef', 'woman1', 'man2', 'woman3', 'courier'] },
+    arcade: { kind: 'shop', floor: 'concrete_floor', walls: 'plaster', front: 'arcade', crew: ['man3', 'woman4', 'man1', 'guard', 'woman1'] },
+    bank: { kind: 'shop', floor: 'marble', walls: 'plaster', front: 'bank', crew: ['banker', 'exec', 'guard', 'woman2', 'man2'] },
+    fact: { kind: 'factory', crew: ['builder', 'builder2', 'builder3', 'guard', 'courier'] },
+    oil: { kind: 'factory', crew: ['builder2', 'builder', 'builder3', 'man3', 'guard'] },
+    space: { kind: 'factory', crew: ['pilot', 'builder', 'builder3', 'exec', 'guard'] },
+    ailab: { kind: 'factory', crew: ['exec', 'banker', 'builder3', 'woman3', 'man2'] },
+    dyson: { kind: 'factory', crew: ['builder3', 'builder2', 'pilot', 'exec', 'builder'] },
   };
   function interior(id, milestones) {
     const I = INSIDE[id], door = DOORWAY[SHOPS[id].kit], fac = I.kind === 'factory';
@@ -297,7 +302,33 @@
       for (const z of [-3, -8, -13, -17.5]) for (const x of [-3.5, 3.5]) prop('fluorescent', x, h, z);
       lights.push([-3, h - 1.1, -3.5], [3, h - 1.1, -3.5], [0, h - 1.1, -9.5], [-2.5, h - 1.1, -15], [2.5, h - 1.1, -15]);
     }
-    return { kind: I.kind, w, d, h, door, parts, props, lights, lines, blocks };
+    // people: the quest giver by the way in; a worker at the first and last machine of each line and one
+    // at its till; staff behind the counter (shops); and people walking rounds, more as you grow.
+    // Positions are [x, z]; ry turns a person facing +Z; stand.clip: idle, talk or work
+    const stand = [], walk = [], crew = I.crew;
+    const giver = fac ? { p: [4, -3], ry: -0.6 } : { p: [3.3, -6.5], ry: -0.3 };
+    lines.forEach((ln, k) => {
+      for (const m of [0, 2]) stand.push({ p: [ln.x - half + 0.7 + m * 1.7, ln.z - 1.75].map(round2), ry: 0, clip: 'work', who: crew[(k * 2 + m) % crew.length] });
+      stand.push({ p: [ln.x + half + 0.45, ln.z - 0.95].map(round2), ry: 0, clip: 'idle', who: crew[(k + 3) % crew.length] });
+    });
+    if (!fac) {
+      stand.push({ p: [-2.6, -8.0], ry: 0, clip: 'idle', who: crew[0] });
+      stand.push({ p: [-0.6, -6.2], ry: PI, clip: 'talk', who: crew[3 % crew.length] }); // a customer at the counter
+    }
+    const rounds = fac ? [[-7.7, -3], [7.7, -3], [7.7, -24.3], [-7.7, -24.3]] : [[0.4, -2.2], [1.6, -2.2], [1.6, -5.9], [0.4, -5.9]];
+    for (let k = 0; k < Math.min(3, 1 + milestones); k++) walk.push({ path: rounds, speed: round2(1.1 + r() * 0.35), phase: round2(k / 3 + r() * 0.1), who: crew[(k + 1) % crew.length] });
+    for (const s of stand) blocks.push([s.p[0] - 0.25, s.p[1] - 0.25, s.p[0] + 0.25, s.p[1] + 0.25].map(round2));
+    blocks.push([giver.p[0] - 0.3, giver.p[1] - 0.3, giver.p[0] + 0.3, giver.p[1] + 0.3]);
+    return { kind: I.kind, w, d, h, door, parts, props, lights, lines, blocks, people: { giver, stand, walk, crew } };
+  }
+  // Where someone walking a closed path is after d metres: [x, z, heading (rotation y, facing +Z)].
+  function pathAt(path, d) {
+    const seg = path.map((p, i) => { const q = path[(i + 1) % path.length]; return Math.hypot(q[0] - p[0], q[1] - p[1]); });
+    const total = seg.reduce((a, b) => a + b, 0);
+    let t = ((d % total) + total) % total, i = 0;
+    while (t > seg[i]) { t -= seg[i]; i++; }
+    const p = path[i], q = path[(i + 1) % path.length], f = t / seg[i];
+    return [p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f, Math.atan2(q[0] - p[0], q[1] - p[1])];
   }
 
   // ---------- Characters & weapons (face +X) ----------
@@ -341,6 +372,9 @@
       'wall_shelf', 'plant', 'tv', 'desk', 'armchair', 'chalkboard', 'crane']
       .map(n => [n, `models/${n}.glb`])),
     characters: { hoodie: 'characters/hoodie.glb', jacket: 'characters/jacket.glb', denim: 'characters/denim.glb' },
+    // townspeople and workers (Rocketbox; clips idle, walk, talk, work)
+    npcs: Object.fromEntries(['builder', 'builder2', 'builder3', 'chef', 'courier', 'exec', 'banker', 'pilot', 'guard', 'woman1', 'woman2', 'woman3', 'woman4', 'man1', 'man2', 'man3']
+      .map(n => [n, `characters/${n}.glb`])),
     // realistic guns (OpenGameArt, CC0), already turned barrel-forward (-Z) and centred by tools/guns.py
     guns: { pistol: 'guns/pistol.glb', smg: 'guns/smg.glb', shotgun: 'guns/shotgun.glb', sniper: 'guns/sniper.glb', rocket: 'guns/rocket.glb' },
     textures: ['concrete_floor', 'corrugated', 'metal_plate', 'marble', 'asphalt', 'brick', 'grass', 'pavers', 'slate', 'plaster', 'concrete_wall', 'roof', 'shutter'],
@@ -403,6 +437,22 @@
   // ---------- City (tycoon view) ----------
   // 3x3 lots, `lot` metres apart, with roads between them. Lot i sits at x = (1 - floor(i/3)) * lot, z = (i % 3 - 1) * lot.
   const CITY = {
+    // out in the plaza: the quest giver near where you start, and people walking round the sidewalks
+    town: {
+      giver: { p: [14.6, 15.8], ry: -1.9 },
+      walk: [
+        { path: [[-16.8, -16.8], [16.8, -16.8], [16.8, 16.8], [-16.8, 16.8]], speed: 1.25, phase: 0.05, who: 'woman1' },
+        { path: [[-16.8, -16.8], [16.8, -16.8], [16.8, 16.8], [-16.8, 16.8]], speed: 1.1, phase: 0.4, who: 'man2' },
+        { path: [[-16.8, 16.8], [16.8, 16.8], [16.8, -16.8], [-16.8, -16.8]], speed: 1.35, phase: 0.7, who: 'courier' },
+        { path: [[5, -16.8], [5, 16.8]], speed: 1.2, phase: 0.2, who: 'woman3' },
+        { path: [[-5, 16.8], [-5, -16.8]], speed: 1.05, phase: 0.6, who: 'man1' },
+        { path: [[-16.8, 5], [16.8, 5]], speed: 1.3, phase: 0.35, who: 'exec' },
+        { path: [[16.8, -5], [-16.8, -5]], speed: 1.15, phase: 0.85, who: 'woman4' },
+      ],
+      crew: ['man3', 'woman2', 'guard', 'woman1', 'man1', 'courier', 'woman4', 'man2'], // the giver is one of these
+      // who walks each route changes with every reboot: walker k is folk[(k * 5 + reboots * 7) % folk.length]
+      folk: ['woman1', 'man2', 'courier', 'woman3', 'man1', 'exec', 'woman4', 'man3', 'woman2', 'banker', 'chef', 'guard'],
+    },
     lot: 10, pad: 7.6, road: 2.4,
     // each owned lot's production line: a conveyor (metres; speed in m/s) along its front edge, fed by
     // machines (one more per milestone, up to 3) and ending in a till
@@ -598,5 +648,5 @@
     return [cx + Math.cos(a) * R, cz + Math.sin(a) * R, Math.atan2(-Math.sin(a), Math.cos(a))];
   }
 
-  return { BUILDINGS, LOT, SHOPS, SOLDIER, GUNS, ARENA, CITY, ASSETS, URBAN, tex, cityLayout, trafficAt, lotBuilding, interior };
+  return { BUILDINGS, LOT, SHOPS, SOLDIER, GUNS, ARENA, CITY, ASSETS, URBAN, tex, cityLayout, trafficAt, lotBuilding, interior, pathAt };
 });

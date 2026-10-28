@@ -9,6 +9,7 @@ extends Control
 signal lot_clicked(i: int)
 signal upgrade_clicked(i: int)
 signal crate_clicked
+signal quest_action(area: String, op: String) # take, hand in or drop the job of the person in `area`
 
 const EYE := 1.62
 const SENS := 0.0022
@@ -45,6 +46,16 @@ var want := -1
 var pv: SubViewport # the portal: a second camera in the same world, drawn into a texture the door shows
 var portal_cam: Camera3D
 var portal_mat: ShaderMaterial
+# people: plaza walkers, the plaza's quest giver (a new one each reboot); rooms keep their own
+var plaza_walkers := []
+var plaza_giver = null
+var plaza_key := ""
+var talking = null # the area whose person you're talking to
+var talk_said := ""
+var talk_panel: PanelContainer
+var talk_who: Label
+var talk_body: Label
+var talk_opts: Label
 var aim = -1
 var own_mouse := false
 var sun_light: DirectionalLight3D
@@ -94,6 +105,143 @@ func _init() -> void:
 	portal_mat.shader.code = PORTAL_SHADER
 	portal_mat.set_shader_parameter("portal", pv.get_texture())
 
+# ---------- People ----------
+# A Rocketbox townsperson (clips idle, walk, talk, work). It's turned to face +Z on its first frame.
+func _townsperson(who: String, sc := 1.0) -> Dictionary:
+	var root = Node3D.new()
+	root.scale = Vector3.ONE * sc
+	var p = {"root": root, "model": null, "anim": null, "clips": {}, "current": "", "setup": true, "want": "idle"}
+	var ps = R3D.scene(R3D.M.ASSETS.npcs.get(who, ""))
+	if ps == null:
+		return p
+	var model: Node3D = ps.instantiate()
+	root.add_child(model)
+	for mi in model.find_children("*", "MeshInstance3D", true, false):
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	p.model = model
+	var aps = model.find_children("*", "AnimationPlayer", true, false)
+	if aps.size():
+		p.anim = aps[0]
+		for key in ["idle", "walk", "talk", "work"]:
+			for nm in p.anim.get_animation_list():
+				if nm == key or nm.ends_with("|" + key) or nm.ends_with("/" + key):
+					p.clips[key] = nm
+					p.anim.get_animation(nm).loop_mode = Animation.LOOP_LINEAR
+	return p
+
+func _person_setup(p: Dictionary) -> void:
+	p.setup = false
+	if p.model == null:
+		return
+	var sks = p.model.find_children("*", "Skeleton3D", true, false)
+	if sks.size():
+		var sk: Skeleton3D = sks[0]
+		var rb = sk.find_bone("Bip01 R UpperArm")
+		var lb = sk.find_bone("Bip01 L UpperArm")
+		if rb >= 0 and lb >= 0: # turn it to face +Z: its right is from the left shoulder to the right one
+			var inv = p.root.global_transform.affine_inverse()
+			var r = inv * (sk.global_transform * sk.get_bone_global_pose(rb).origin)
+			var l = inv * (sk.global_transform * sk.get_bone_global_pose(lb).origin)
+			var fwd = Vector3.UP.cross(Vector3(r.x - l.x, 0, r.z - l.z).normalized())
+			p.model.rotation.y = -atan2(fwd.x, fwd.z)
+	_clip(p, p.want, 0.0)
+	if p.anim and p.clips.has(p.want):
+		p.anim.seek(randf() * 3.0, true) # not all in step
+
+func _clip(p: Dictionary, key: String, blend := 0.2) -> void:
+	p.want = key
+	if p.anim == null or not p.clips.has(key) or p.current == key:
+		return
+	p.anim.play(p.clips[key], blend)
+	p.current = key
+
+func _face_to(p: Dictionary, x: float, z: float, dt: float) -> void: # turn smoothly towards a point (world)
+	var w = p.root.global_position
+	var want_y = atan2(x - w.x, z - w.z) - p.root.get_parent().global_rotation.y
+	p.root.rotation.y += wrapf(want_y - p.root.rotation.y, -PI, PI) * min(1.0, dt * 6)
+
+# people walking a closed path
+func _walkers(list: Array, holder: Node3D, scale_seed: int) -> Array:
+	var out = []
+	for k in list.size():
+		var w = list[k]
+		var p = _townsperson(w.who, 0.95 + ((k + scale_seed) % 5) * 0.025)
+		holder.add_child(p.root)
+		var length = 0.0
+		for i in w.path.size():
+			var a = w.path[i]
+			var b = w.path[(i + 1) % w.path.size()]
+			length += Vector2(b[0] - a[0], b[1] - a[1]).length()
+		out.append({"p": p, "path": w.path, "speed": float(w.speed), "d": float(w.phase) * length})
+	return out
+
+# Where someone walking a closed path is after d metres: (x, z, heading). Mirrors pathAt() in ../models.js.
+func _path_at(path: Array, d: float) -> Vector3:
+	var seg = []
+	var total = 0.0
+	for i in path.size():
+		var a = path[i]
+		var b = path[(i + 1) % path.size()]
+		seg.append(Vector2(b[0] - a[0], b[1] - a[1]).length())
+		total += seg[i]
+	var t = fposmod(d, total)
+	var i = 0
+	while t > seg[i]:
+		t -= seg[i]
+		i += 1
+	var a = path[i]
+	var b = path[(i + 1) % path.size()]
+	var f = t / seg[i]
+	return Vector3(a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, atan2(b[0] - a[0], b[1] - a[1]))
+
+# the quest giver: who they look like changes each reboot
+func _giver_for(area: String, crew: Array, holder: Node3D, at: Dictionary) -> Dictionary:
+	var look = int(CC.quest_giver(tycoon, area).look) if tycoon else 0
+	var p = _townsperson(crew[look % crew.size()], 0.97 + (look % 7) * 0.012)
+	p.root.position = Vector3(at.p[0], 0, at.p[1])
+	p.root.rotation.y = float(at.ry)
+	p.area = area
+	p.home = float(at.ry)
+	holder.add_child(p.root)
+	return p
+
+func _step_walkers(list: Array, dt: float) -> void:
+	for w in list:
+		var p = w.p
+		if p.setup and p.root.is_inside_tree():
+			_person_setup(p)
+		var pos = p.root.global_position
+		if Vector2(pos.x - me.x, pos.z - me.z).length() < 1.1: # you're in the way: wait
+			_clip(p, "idle")
+			_face_to(p, me.x, me.z, dt)
+		else:
+			w.d += w.speed * dt
+			var q = _path_at(w.path, w.d)
+			p.root.position = Vector3(q.x, 0, q.y)
+			p.root.rotation.y = q.z
+			_clip(p, "walk")
+			if p.anim:
+				p.anim.speed_scale = w.speed / 1.3 if p.current == "walk" else 1.0
+
+# the quest giver you're facing and close to (their area), if any
+func _talkable():
+	var g = null
+	if me.room >= 0:
+		if rooms.has(me.room):
+			g = rooms[me.room].giver
+	else:
+		g = plaza_giver
+	if g == null:
+		return null
+	var w = g.root.global_position
+	var dx = w.x - me.x
+	var dz = w.z - me.z
+	var d = Vector2(dx, dz).length()
+	if d > 2.6:
+		return null
+	var ang = wrapf(atan2(-dx, -dz) - me.yaw, -PI, PI) # the camera looks down -Z
+	return g.area if abs(ang) < 0.5 or d < 1.1 else null
+
 func _room_at(i: int) -> Vector3:
 	return Vector3(2000 + i * 60, 0.2, 0)
 
@@ -141,12 +289,41 @@ func _overlay() -> void:
 	prompt.visible = false
 	add_child(prompt)
 	hint = Label.new()
-	hint.text = "Click to walk around your business · WASD to move, Shift to run · walk through a front door to go inside · look at a lot: E buys, R upgrades · Esc frees the mouse"
+	hint.text = "Click to walk around your business · WASD to move, Shift to run · walk through a front door to go inside · look at a lot: E buys, R upgrades · E talks to people with a job for you · Esc frees the mouse"
 	hint.add_theme_font_size_override("font_size", 13)
 	hint.add_theme_color_override("font_color", Color(0.95, 0.94, 0.91, 0.8))
 	hint.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.7))
 	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(hint)
+	# talking to someone: their name and job, what they say, and what you can answer
+	talk_panel = PanelContainer.new()
+	var tb = StyleBoxFlat.new()
+	tb.bg_color = Color(0.043, 0.051, 0.063, 0.9)
+	tb.border_color = Color("#3a3d44")
+	tb.set_border_width_all(1)
+	tb.set_corner_radius_all(4)
+	tb.content_margin_left = 16; tb.content_margin_right = 16; tb.content_margin_top = 12; tb.content_margin_bottom = 12
+	talk_panel.add_theme_stylebox_override("panel", tb)
+	talk_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var vb = VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 6)
+	talk_panel.add_child(vb)
+	talk_who = Label.new()
+	talk_who.add_theme_font_override("font", R3D.font("barlow-condensed-800"))
+	talk_who.add_theme_font_size_override("font_size", 20)
+	talk_body = Label.new()
+	talk_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	talk_body.custom_minimum_size.x = 520
+	talk_body.add_theme_font_size_override("font_size", 15)
+	talk_opts = Label.new()
+	talk_opts.add_theme_font_override("font", R3D.font("barlow-condensed-600"))
+	talk_opts.add_theme_font_size_override("font_size", 15)
+	talk_opts.add_theme_color_override("font_color", Color("#f5c542"))
+	for l in [talk_who, talk_body, talk_opts]:
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vb.add_child(l)
+	talk_panel.visible = false
+	add_child(talk_panel)
 
 func _layout_overlay() -> void:
 	dot.position = size / 2 - dot.size / 2
@@ -154,7 +331,9 @@ func _layout_overlay() -> void:
 	prompt.position = Vector2((size.x - prompt.size.x) / 2, size.y / 2 + 22)
 	hint.reset_size()
 	hint.position = Vector2(12, size.y - hint.size.y - 8)
-	hint.visible = not own_mouse
+	hint.visible = not own_mouse and talking == null
+	talk_panel.reset_size()
+	talk_panel.position = Vector2((size.x - talk_panel.size.x) / 2, size.y - talk_panel.size.y - 18)
 
 func _set_level(lv: int) -> void:
 	level = lv
@@ -315,7 +494,24 @@ func _build_room(i: int, ms: int) -> Dictionary:
 	exit.position = Vector3(0, float(R.door.h) / 2, -0.01)
 	exit.layers = PORTAL_LAYER
 	g.add_child(exit)
-	return {"i": i, "ms": ms, "group": g, "R": R, "lines": lines, "exit": exit}
+	# the people who work there (on the room's layer: lit by its lights)
+	var crew = []
+	for k in R.people.stand.size():
+		var st = R.people.stand[k]
+		var p = _townsperson(st.who, 0.95 + (k % 5) * 0.025)
+		p.root.position = Vector3(st.p[0], 0, st.p[1])
+		p.root.rotation.y = float(st.ry)
+		p.want = st.clip
+		g.add_child(p.root)
+		crew.append(p)
+	var walking = _walkers(R.people.walk, g, i)
+	var giver = _giver_for(CC.BUILDINGS[i].id, R.people.crew, g, R.people.giver)
+	for p in crew:
+		_layers(p.root, ROOM_LAYER)
+	for w in walking:
+		_layers(w.p.root, ROOM_LAYER)
+	_layers(giver.root, ROOM_LAYER)
+	return {"i": i, "ms": ms, "group": g, "R": R, "lines": lines, "exit": exit, "crew": crew, "walking": walking, "giver": giver}
 
 func _refresh_lot(i: int, tyc: Dictionary) -> void:
 	var b = CC.BUILDINGS[i]
@@ -378,6 +574,23 @@ func update_city(tyc: Dictionary) -> void:
 	tycoon = tyc
 	if int(tyc.level) != level:
 		_set_level(int(tyc.level))
+	var pk = "%d|%s" % [CC.reboots(tyc), CC.quest_giver(tyc, "plaza").name] # a new person each reboot
+	if pk != plaza_key:
+		plaza_key = pk
+		if plaza_giver != null:
+			plaza_giver.root.queue_free()
+		plaza_giver = _giver_for("plaza", R3D.M.CITY.town.crew, v.world, R3D.M.CITY.town.giver)
+		# different people walk the routes after each reboot
+		var folk = R3D.M.CITY.town.folk
+		var rb = CC.reboots(tyc)
+		for w in plaza_walkers:
+			w.p.root.queue_free()
+		var routes = []
+		for k in R3D.M.CITY.town.walk.size():
+			var w = R3D.M.CITY.town.walk[k].duplicate()
+			w.who = folk[(k * 5 + rb * 7) % folk.size()]
+			routes.append(w)
+		plaza_walkers = _walkers(routes, v.world, rb)
 	for i in 9:
 		_refresh_lot(i, tyc)
 	var on = CC.event_on(tyc, "crate")
@@ -398,6 +611,55 @@ func place(x: float, z: float, yaw: float, pitch: float, room := -1) -> void:
 		me.floor = 0.2
 	me.x = x; me.z = z; me.yaw = yaw; me.pitch = pitch; me.room = room
 
+func _amount(kind: String, x: float) -> String:
+	if kind == "income":
+		return CC.fmt(x) + "/s"
+	if kind == "cash":
+		return CC.fmt(x)
+	return str(int(x))
+
+func _area_name(area: String) -> String:
+	return "the plaza" if area == "plaza" else CC.building(area).name
+
+func _talk_view() -> void:
+	if talking == null or tycoon == null:
+		talk_panel.visible = false
+		return
+	var k = CC.quest_talk(tycoon, talking)
+	var a = CC.quest_area(tycoon, talking).active
+	var pay = "Reward: %s%s" % [CC.fmt(k.reward), " + 1 Boost Point" if k.points else ""]
+	talk_who.text = "%s   %s · %s" % [k.name, k.role, _area_name(talking)]
+	if a == null:
+		talk_body.text = "%s %s\n%s\n%s" % [talk_said if talk_said != "" else k.hi, k.why, k.ask, pay]
+		talk_opts.text = "[E] Take the job     [Q] Got anything else?     [Esc] Not now"
+	elif CC.quest_done(tycoon, talking):
+		talk_body.text = "%s\n%s" % [talk_said if talk_said != "" else k.done, pay]
+		talk_opts.text = "[E] Hand it in     [Esc] Leave"
+	else:
+		var p = CC.quest_progress(tycoon, talking)
+		talk_body.text = "%s\n%s (%s / %s)\n%s" % [talk_said if talk_said != "" else k.wait, k.ask, _amount(a.kind, p[0]), _amount(a.kind, p[1]), pay]
+		talk_opts.text = "[Q] Drop this job     [Esc] Leave"
+	talk_panel.visible = true
+
+func _talk_do(op: String) -> void:
+	if talking == null:
+		return
+	var area = talking
+	var before = CC.quest_talk(tycoon, area)
+	if op == "leave":
+		talking = null
+		talk_said = ""
+		_talk_view()
+		_prompt()
+		return
+	if op == "accept" and CC.quest_area(tycoon, area).active != null:
+		return
+	if op == "claim" and not CC.quest_done(tycoon, area):
+		return
+	quest_action.emit(area, op)
+	talk_said = before.take if op == "accept" else (before.done if op == "claim" else "")
+	_talk_view()
+
 func release() -> void:
 	if own_mouse and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -406,6 +668,7 @@ func release() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_VISIBILITY_CHANGED and not is_visible_in_tree():
 		release()
+		talking = null
 
 func _typing() -> bool:
 	return get_viewport().gui_get_focus_owner() is LineEdit
@@ -427,7 +690,7 @@ func _push(x0: float, z0: float, x1: float, z1: float, rad: float) -> void:
 # walking: round the plaza (not through the buildings and fences) or round a room; through a front door
 # into its room and back out. Mirrors move() in ../render3d.js.
 func _move(dt: float) -> float:
-	if _typing():
+	if _typing() or talking != null:
 		return 0.0
 	var f = int(Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP)) - int(Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN))
 	var s = int(Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT)) - int(Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT))
@@ -461,6 +724,9 @@ func _move(dt: float) -> float:
 	var lim = float(R3D.M.URBAN.city.clear[0]) - 0.6
 	me.x = clamp(me.x, -lim, lim)
 	me.z = clamp(me.z, -lim, lim)
+	if plaza_giver != null:
+		var gp = plaza_giver.root.position
+		_push(gp.x - 0.25, gp.z - 0.25, gp.x + 0.25, gp.z + 0.25, 0.3)
 	for i in lots.size():
 		var l = lots[i]
 		if l.door != null and rooms.has(i): # through the front door?
@@ -480,6 +746,9 @@ func _move(dt: float) -> float:
 
 # what's under the crosshair (a lot index, "crate", or -1), within reach
 func _aimed():
+	var tk = _talkable()
+	if tk != null:
+		return "talk:" + tk
 	if me.room >= 0:
 		return me.room # inside a business: E and R act on it
 	var from = v.camera.global_position
@@ -502,7 +771,15 @@ func _aimed():
 	return hit
 
 func _prompt() -> void:
-	if typeof(aim) == TYPE_STRING:
+	if talking != null:
+		prompt.visible = false
+		return
+	if typeof(aim) == TYPE_STRING and aim.begins_with("talk:") and tycoon:
+		var area = aim.substr(5)
+		var k = CC.quest_talk(tycoon, area)
+		var news = " · has your reward" if CC.quest_done(tycoon, area) else (" · your job" if CC.quest_area(tycoon, area).active != null else "")
+		prompt_lbl.text = "[E] Talk to %s, %s%s" % [k.name, k.role, news]
+	elif typeof(aim) == TYPE_STRING:
 		prompt_lbl.text = "Golden crate · walk into it to claim"
 	elif aim < 0 or tycoon == null:
 		prompt.visible = false
@@ -627,6 +904,27 @@ func _process(dt: float) -> void:
 					if it.position.x > half + 0.1:
 						it.visible = false
 						_coin(line.till, boom)
+	# people
+	_step_walkers(plaza_walkers, dt)
+	var givers = []
+	if plaza_giver != null:
+		givers.append(plaza_giver)
+	for r in rooms.values():
+		givers.append(r.giver)
+		_step_walkers(r.walking, dt)
+		for p in r.crew:
+			if p.setup and p.root.is_inside_tree():
+				_person_setup(p)
+	for g in givers:
+		if g.setup and g.root.is_inside_tree():
+			_person_setup(g)
+		if talking == g.area or (typeof(aim) == TYPE_STRING and aim == "talk:" + g.area):
+			_face_to(g, me.x, me.z, dt)
+		else:
+			g.root.rotation.y += wrapf(g.home - g.root.rotation.y, -PI, PI) * min(1.0, dt * 2)
+		_clip(g, "talk" if talking == g.area else "idle")
+	if talking != null:
+		_talk_view()
 	for c in coins:
 		if c.visible:
 			var ct = c.get_meta("t") + dt
@@ -657,6 +955,19 @@ func _coin(pos: Vector3, boom: bool) -> void:
 	c.material_override.albedo_color = Color("#4ade80") if boom else Color("#f5c542")
 	c.position = pos
 
+func _start_talk(area: String) -> void:
+	talking = area
+	talk_said = ""
+	_talk_view()
+	_prompt()
+
+# For tests and screenshots: talk to the person in `area`.
+func talk(area) -> void:
+	if area == null:
+		_talk_do("leave")
+	else:
+		_start_talk(area)
+
 func _gui_input(e: InputEvent) -> void:
 	if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT and e.pressed:
 		if not own_mouse:
@@ -675,11 +986,27 @@ func _input(e: InputEvent) -> void:
 		me.pitch = clamp(me.pitch - e.relative.y * SENS, -1.3, 1.3)
 	elif e is InputEventMouseButton and own_mouse and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
 		# the captured mouse sits wherever it was clicked; send clicks here even if it is over the cards
-		if typeof(aim) == TYPE_INT and aim >= 0:
+		if talking != null:
+			pass
+		elif typeof(aim) == TYPE_STRING and aim.begins_with("talk:"):
+			_start_talk(aim.substr(5))
+		elif typeof(aim) == TYPE_INT and aim >= 0:
 			lot_clicked.emit(aim)
 		get_viewport().set_input_as_handled()
+	elif e is InputEventKey and e.pressed and not e.echo and not _typing() and talking != null:
+		# the conversation takes the keys
+		if e.keycode == KEY_ESCAPE:
+			_talk_do("leave")
+		elif e.keycode == KEY_E:
+			var a = CC.quest_area(tycoon, talking).active
+			_talk_do("accept" if a == null else ("claim" if CC.quest_done(tycoon, talking) else "leave"))
+		elif e.keycode == KEY_Q:
+			_talk_do("drop")
+		get_viewport().set_input_as_handled()
 	elif e is InputEventKey and e.pressed and not e.echo and not _typing():
-		if e.keycode == KEY_ESCAPE and own_mouse:
+		if e.keycode == KEY_E and typeof(aim) == TYPE_STRING and aim.begins_with("talk:"):
+			_start_talk(aim.substr(5))
+		elif e.keycode == KEY_ESCAPE and own_mouse:
 			release()
 			get_viewport().set_input_as_handled()
 		elif e.keycode == KEY_E and typeof(aim) == TYPE_INT and aim >= 0:

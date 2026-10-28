@@ -85,6 +85,181 @@
     return type;
   }
 
+  // ---------- Quests ----------
+  // Every area, the plaza and the inside of each business, has someone with a job for you. Who they are,
+  // how they talk and what they ask all come from a seed made of the area, how many reboots you've done
+  // and how many of their jobs you've finished (or turned down): each reboot brings new people and new
+  // jobs, and the same kind of job never comes twice in a row. Targets are set from your business when
+  // you take the job; the reward (cash, scaled to your income, and now and then a Boost Point at the top
+  // level) when you hand it in. rules.gd has a port; tests/parity checks they agree.
+  const QUEST_AREAS = ['plaza', ...BUILDINGS.map(b => b.id)];
+  // the kinds of job each area hands out (in the order they're tried)
+  const QUEST_KINDS = {
+    plaza: ['wins', 'crate', 'cash', 'variety', 'weapon', 'income', 'winwith'],
+    lemon: ['buy', 'upgrade', 'milestone', 'cash', 'income', 'crate'], cafe: ['buy', 'milestone', 'upgrade', 'income', 'crate', 'cash'],
+    arcade: ['buy', 'upgrade', 'wins', 'milestone', 'income', 'winwith'], bank: ['cash', 'income', 'buy', 'upgrade', 'variety', 'milestone'],
+    fact: ['buy', 'upgrade', 'milestone', 'income', 'weapon', 'wins'], oil: ['buy', 'income', 'upgrade', 'wins', 'milestone', 'cash'],
+    space: ['buy', 'milestone', 'income', 'weapon', 'upgrade', 'winwith'], ailab: ['upgrade', 'buy', 'income', 'variety', 'milestone', 'weapon'],
+    dyson: ['buy', 'income', 'milestone', 'upgrade', 'cash', 'wins'],
+  };
+  // reward: seconds of income, per kind
+  const QUEST_PAY = { buy: 90, milestone: 240, upgrade: 160, income: 300, cash: 120, wins: 200, winwith: 260, crate: 120, variety: 220, weapon: 150 };
+  const QUEST_TEXT = {
+    first: ['Ada', 'Bruno', 'Carmen', 'Dmitri', 'Esi', 'Farid', 'Greta', 'Hiro', 'Ines', 'Jamal', 'Kasia', 'Lorenzo', 'Mei', 'Nikolai', 'Oona', 'Pablo', 'Quinn', 'Rosa', 'Sven', 'Tamsin',
+      'Ugo', 'Vera', 'Wendell', 'Ximena', 'Yusuf', 'Zora', 'Abebe', 'Bianca', 'Cyrus', 'Dagny', 'Emeka', 'Fiona', 'Gus', 'Hana', 'Ivo', 'Jules', 'Kofi', 'Lena', 'Marcus', 'Noor'],
+    last: ['Abara', 'Bellini', 'Castellanos', 'Dubois', 'Eriksen', 'Fontaine', 'Gallagher', 'Hosseini', 'Ivanova', 'Jablonski', 'Kowalczyk', 'Lindqvist', 'Mbeki', 'Nakamura', 'Okafor',
+      'Petrov', 'Quintero', 'Rasmussen', 'Silva', 'Tanaka', 'Uribe', 'Varga', 'Whitlock', 'Xu', 'Yilmaz', 'Zielinski', 'Achterberg', 'Brannigan', 'Cho', 'Delacroix', 'Esposito', 'Farouk'],
+    roles: {
+      plaza: ['newspaper vendor', 'street musician', 'retired detective', 'hot-dog cart owner', 'city inspector', 'pigeon whisperer', 'shoeshine', 'parking warden'],
+      lemon: ['stand manager', 'lemon supplier', 'sign painter', 'sugar broker'], cafe: ['head barista', 'pastry chef', 'regular customer', 'bean roaster'],
+      arcade: ['floor manager', 'high-score champion', 'repair tech', 'prize-counter clerk'], fact: ['foreman', 'safety officer', 'shift supervisor', 'union rep'],
+      bank: ['branch manager', 'senior teller', 'auditor', 'vault keeper'], oil: ['rig boss', 'geologist', 'pipeline engineer', 'roughneck'],
+      space: ['mission controller', 'asteroid prospector', 'flight surgeon', 'cargo pilot'], ailab: ['lead researcher', 'robot wrangler', 'ethics officer', 'data janitor'],
+      dyson: ['chief architect', 'solar engineer', 'orbital welder', 'mirror polisher'],
+    },
+    // how people talk: hello, taking the job, still working on it, handing it in
+    moods: {
+      gruff: { hi: ['You. Yeah, you. Got a minute?', 'Don\'t just stand there.', 'Finally, someone who looks useful.', 'Make it quick, I\'m busy.'],
+        take: ['Good. Don\'t mess it up.', 'Fine. Get moving.', 'Right. Off you go.'], wait: ['Still waiting.', 'That\'s not done yet.', 'Clock\'s ticking.'],
+        done: ['Huh. Not bad.', 'About time. Here.', 'Fine work. Don\'t let it go to your head.'] },
+      cheerful: { hi: ['Oh hey! Perfect timing!', 'Hiiii! You\'re the boss, right?', 'What a day, right? I\'ve got an idea!', 'Hello hello!'],
+        take: ['Yay! You\'re the best!', 'Amazing, thank you!', 'I knew you\'d say yes!'], wait: ['No rush! Well, a little rush.', 'You\'ve got this!', 'Almost there, I can feel it!'],
+        done: ['You did it! Here, take this!', 'Wooo! That\'s my boss!', 'Incredible. Treat yourself!'] },
+      nervous: { hi: ['Um, sorry, do you have a second?', 'I hate to bother you, but...', 'Oh! You startled me. Hi.', 'Is now a bad time? It\'s a bad time.'],
+        take: ['Oh thank goodness.', 'Really? Okay. Okay! Thank you.', 'You\'re saving my life here.'], wait: ['Is it... going okay?', 'No pressure. Some pressure.', 'I keep checking the numbers.'],
+        done: ['Oh, phew. Here, this is for you.', 'I can breathe again. Thank you!', 'I was so worried. You\'re amazing.'] },
+      smooth: { hi: ['Well, well. Just the person I wanted.', 'Walk with me a moment.', 'I\'ve been hearing good things about you.', 'Let\'s talk opportunity.'],
+        take: ['A pleasure doing business.', 'I knew we\'d understand each other.', 'Splendid.'], wait: ['Patience is profitable.', 'Take your time. Not too much.', 'The offer stands.'],
+        done: ['Exquisite. Your cut, as promised.', 'Exactly as planned. Enjoy.', 'You never disappoint.'] },
+      dreamy: { hi: ['Do you ever look at the clouds and see profits?', 'I had a dream about you last night.', 'The city is humming today. Hear it?', 'Oh. It\'s you. I was just thinking.'],
+        take: ['The universe approves.', 'Wonderful. Go, go.', 'I\'ll be here. Probably.'], wait: ['It will happen when it happens.', 'Mm. Soon.', 'The stars say not yet.'],
+        done: ['As foretold. Here.', 'It\'s beautiful. Thank you.', 'Everything is in balance now.'] },
+      grizzled: { hi: ['Been in this business forty years, kid.', 'Pull up a crate.', 'Back in my day we did this by hand.', 'Got a job, if you\'ve got the stomach.'],
+        take: ['Atta kid.', 'That\'s the spirit.', 'Remind me of me, you do.'], wait: ['Rome wasn\'t built in a day.', 'Steady hands, kid.', 'Not done yet.'],
+        done: ['Knew you had it in you.', 'Here. You earned every cent.', 'Proud of you, kid.'] },
+    },
+    // why they want it (by kind) and what they ask; {n} count, {c} count with its noun (count, below),
+    // {b} business, {bs} businesses, {amt} money, {w} weapon
+    why: {
+      buy: ['The queue round the block is getting silly.', 'Demand is through the roof.', 'A rival is sniffing around this street.', 'We\'re turning customers away.'],
+      upgrade: ['The old kit is falling apart.', 'I saw a rival\'s place. It was shinier.', 'Customers notice when things are run-down.', 'Better gear, better margins.'],
+      milestone: ['Get big enough and suppliers give you a deal.', 'There\'s a magic number where it all clicks.', 'I want this place in the papers.'],
+      income: ['The investors are watching the numbers.', 'I promised my family a holiday.', 'The bigger the flow, the safer we all are.', 'Money makes money.'],
+      cash: ['I need to see a healthy cushion in the account.', 'There\'s a deal coming and it needs cash up front.', 'The bank wants proof we\'re solid.'],
+      wins: ['Some punk has been bad-mouthing you.', 'Rivals think you\'re soft.', 'Nothing scares competitors like a winning streak.', 'People bet on the fights. I bet on you.'],
+      winwith: ['I want to see that thing in action.', 'A demonstration would really impress the buyers.', 'Style matters, boss.'],
+      crate: ['Golden crates have been dropping around here.', 'Word is there\'s treasure falling off trucks.', 'Keep your eyes open for gold.'],
+      variety: ['Never keep all your eggs in one basket.', 'A real empire has range.', 'Diversify. Trust me.'],
+      weapon: ['It\'s dangerous out there.', 'Your gear is a joke, no offence.', 'A tool is only as good as its upkeep.'],
+    },
+    ask: {
+      buy: ['Open {n} more {bs}.', 'Get {n} more {bs} going.', 'I need {n} extra {bs}, fast.'],
+      upgrade: ['Give the {b} {c}.', 'Put {c} into the {b}.', 'The {b} needs {c}.'],
+      milestone: ['Own {n} {bs}.', 'Get us up to {n} {bs}.', 'Reach {n} {bs} total.'],
+      income: ['Get the business earning {amt} a second.', 'Push income up to {amt}/s.', 'I want to see {amt} per second.'],
+      cash: ['Have {amt} in the bank at once.', 'Save up {amt}.', 'Hold {amt} in cash.'],
+      wins: ['Win {c}.', 'Go win {c} in the arena.', 'Come back with {c} won.'],
+      winwith: ['Win a battle with the {w}.', 'Take the {w} into a fight and win.', 'Win one with the {w} in your hands.'],
+      crate: ['Grab {c}.', 'Claim {c} when they show up.', 'Find me {c}.'],
+      variety: ['Own {n} different kinds of business.', 'Run {n} different businesses.', 'Spread out to {n} different businesses.'],
+      weapon: ['Put {c} into your guns.', 'Get {c} done at the armory.', 'I want to see {c}.'],
+    },
+    count: { upgrade: ['an upgrade', '{n} upgrades'], wins: ['a battle', '{n} battles'], crate: ['a golden crate', '{n} golden crates'], weapon: ['a weapon upgrade', '{n} weapon upgrades'] },
+    plural: { lemon: 'Lemonade Stands', cafe: 'Coffee Shops', arcade: 'Arcades', fact: 'Factories', bank: 'Banks', oil: 'Oil Rigs', space: 'Space Mines', ailab: 'AI Labs', dyson: 'Dyson Spheres' },
+  };
+  const QUEST_MOODS = Object.keys(QUEST_TEXT.moods);
+  // seeded random numbers (the same sequence in rules.gd): a 32-bit FNV-style hash of the keys picks the
+  // seed, so neighbouring areas, reboots and jobs get unrelated sequences
+  const qhash = keys => {
+    let h = 2166136261;
+    for (const v of keys) { h = Math.imul(h ^ (v & 0xffff), 16777619); h = Math.imul(h ^ ((v >>> 16) & 0xffff), 16777619); }
+    h ^= h >>> 15; h = Math.imul(h, 2246822507); h ^= h >>> 13;
+    return (h >>> 0) % 2147483646 + 1;
+  };
+  const qrng = seed => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const qpick = (r, list) => list[Math.floor(r() * list.length)];
+  const reboots = t => (t.level - 1) + t.prestige;
+  const qseed = (area, rb, n, salt = 0) => qhash([QUEST_AREAS.indexOf(area) + 1, rb, n + 1, salt]);
+  const questState = t => (t.quest = t.quest || { stats: { wins: 0, crates: 0, with: {} }, areas: {} });
+  const questArea = (t, area) => { const q = questState(t); return q.areas[area] || (q.areas[area] = { n: 0, active: null }); };
+  // The person in an area for this reboot.
+  function questGiver(t, area) {
+    const r = qrng(qseed(area, reboots(t), -1));
+    return { name: qpick(r, QUEST_TEXT.first) + ' ' + qpick(r, QUEST_TEXT.last), role: qpick(r, QUEST_TEXT.roles[area]), mood: qpick(r, QUEST_MOODS), look: Math.floor(r() * 1000) };
+  }
+  const weaponUps = t => Object.values(t.weapons).reduce((s, w) => s + w.dmg + w.rate + w.mag + w.armor, 0);
+  const kinds = t => BUILDINGS.filter(b => owned(t, b.id) > 0).length;
+  // rounds up to 3 significant figures (the exponent found exactly, so rules.gd gets the same)
+  const round3 = v => {
+    if (v <= 0) return 0;
+    let e = Math.floor(Math.log10(v)); if (Math.pow(10, e + 1) <= v) e++; if (Math.pow(10, e) > v) e--;
+    const p = Math.pow(10, e - 2); return Math.ceil(v / p) * p;
+  };
+  // The job an area's person offers now (kind, business, weapon, size, lines). n: jobs done there this reboot.
+  function questKind(t, area, n) {
+    const r = qrng(qseed(area, reboots(t), n)), list = QUEST_KINDS[area];
+    const prev = n > 0 ? qrng(qseed(area, reboots(t), n - 1))() : -1, prevKind = prev < 0 ? '' : list[Math.floor(prev * list.length)];
+    let k = Math.floor(r() * list.length);
+    for (let tries = 0; tries < list.length; tries++, k = (k + 1) % list.length) {
+      const kind = list[k], b = area === 'plaza' ? null : BUILDINGS.find(x => x.id === area);
+      if (kind === prevKind) continue;
+      if (kind === 'variety' && kinds(t) >= BUILDINGS.filter(x => unlocked(t, x)).length) continue;
+      if (kind === 'milestone' && b && owned(t, b.id) >= MILESTONES[MILESTONES.length - 1]) continue;
+      if (kind === 'weapon' && Object.values(t.weapons).every(w => w.dmg + w.rate + w.mag + w.armor >= 4 * MAX_LVL)) continue;
+      return kind;
+    }
+    return list[0];
+  }
+  function questOffer(t, area) {
+    const st = questArea(t, area), n = st.n, r = qrng(qseed(area, reboots(t), n, 1));
+    const kind = questKind(t, area, n), b = BUILDINGS.find(x => x.id === area) || null;
+    const owns = Object.keys(t.weapons);
+    const o = { area, kind, id: b ? b.id : null, w: kind === 'winwith' ? owns[Math.floor(r() * owns.length)] : null, size: r(), why: Math.floor(r() * 1000), ask: Math.floor(r() * 1000) };
+    return o;
+  }
+  // What the job needs, from the business as it is now (taken when you accept): { base, target }
+  function questTarget(t, o) {
+    const q = questState(t), s = o.size, b = o.id && BUILDINGS.find(x => x.id === o.id);
+    switch (o.kind) {
+      case 'buy': return { base: owned(t, b.id), target: owned(t, b.id) + [3, 5, 8, 10, 12, 15][Math.floor(s * 6)] };
+      case 'upgrade': return { base: bLevel(t, b.id), target: bLevel(t, b.id) + (s > 0.75 ? 2 : 1) };
+      case 'milestone': return { base: owned(t, b.id), target: nextMilestone(owned(t, b.id)) || owned(t, b.id) + 25 };
+      case 'income': return { base: income(t), target: round3(Math.max(5, income(t) * (1.5 + s * 1.5))) };
+      case 'cash': return { base: t.money, target: round3(Math.max(200, t.money * 1.3, income(t) * (60 + s * 180))) };
+      case 'wins': return { base: q.stats.wins, target: q.stats.wins + 1 + Math.floor(s * 3) };
+      case 'winwith': return { base: q.stats.with[o.w] || 0, target: (q.stats.with[o.w] || 0) + 1 };
+      case 'crate': return { base: q.stats.crates, target: q.stats.crates + (s > 0.7 ? 2 : 1) };
+      case 'variety': { const k = kinds(t), max = BUILDINGS.filter(x => unlocked(t, x)).length; return { base: k, target: Math.min(max, k + (s > 0.6 ? 2 : 1)) }; }
+      case 'weapon': return { base: weaponUps(t), target: weaponUps(t) + 2 + Math.floor(s * 3) };
+    }
+    return { base: 0, target: 1 };
+  }
+  // How far along the active job in an area is: [now, target] (null if none).
+  function questProgress(t, area) {
+    const a = questArea(t, area).active; if (!a) return null;
+    const q = questState(t), b = a.id && BUILDINGS.find(x => x.id === a.id);
+    const now = { buy: () => owned(t, a.id), milestone: () => owned(t, a.id), upgrade: () => bLevel(t, a.id), income: () => income(t), cash: () => t.money,
+      wins: () => q.stats.wins, winwith: () => q.stats.with[a.w] || 0, crate: () => q.stats.crates, variety: () => kinds(t), weapon: () => weaponUps(t) }[a.kind];
+    return [now ? now() : 0, a.target, !!b];
+  }
+  const questDone = (t, area) => { const p = questProgress(t, area); return !!p && p[0] >= p[1]; };
+  const questReward = (t, area) => { const a = questArea(t, area), k = (a.active || questOffer(t, area)).kind; return Math.max(250 * Math.pow(2, t.level - 1), income(t) * QUEST_PAY[k] * (1 + 0.15 * Math.min(10, a.n))); };
+  // The words: who's talking and what they say about the current (or offered) job.
+  function questTalk(t, area) {
+    const g = questGiver(t, area), m = QUEST_TEXT.moods[g.mood], st = questArea(t, area), a = st.active;
+    const o = a || questOffer(t, area), r = qrng(qseed(area, reboots(t), st.n, 2)), tg = a || questTarget(t, o);
+    // {n}: how many more for the counting jobs, the total for the rest
+    const n = ['buy', 'upgrade', 'wins', 'crate', 'weapon'].includes(o.kind) ? tg.target - tg.base : tg.target;
+    const cw = QUEST_TEXT.count[o.kind], c = cw ? cw[n === 1 ? 0 : 1].replace('{n}', String(n)) : '';
+    const fill = s => s.replace('{c}', c).replace('{n}', String(n)).replace('{b}', o.id ? BUILDINGS.find(x => x.id === o.id).name : '').replace('{bs}', o.id ? QUEST_TEXT.plural[o.id] : '')
+      .replace('{amt}', fmt(tg.target)).replace('{w}', o.w ? WEAPONS.find(x => x.id === o.w).name : '');
+    const why = QUEST_TEXT.why[o.kind], ask = QUEST_TEXT.ask[o.kind];
+    return { name: g.name, role: g.role, mood: g.mood, look: g.look, hi: qpick(r, m.hi), take: qpick(r, m.take), wait: qpick(r, m.wait), done: qpick(r, m.done),
+      why: why[o.why % why.length], ask: fill(ask[o.ask % ask.length]), reward: questReward(t, area), points: t.level >= MAX_BIZ && (st.n + 1) % 3 === 0 ? 1 : 0 };
+  }
+  // A battle won: counts towards win jobs.
+  function recordWin(t) { const s = questState(t).stats; s.wins++; s.with[t.equipped] = (s.with[t.equipped] || 0) + 1; }
+
   // Applies a player action to a tycoon. Returns an error message, or null on success.
   function applyAction(t, a) {
     if (!a || typeof a !== 'object') return 'Bad action';
@@ -112,12 +287,26 @@
       t.equipped = a.id;
     } else if (a.type === 'claim') {
       if (!eventOn(t, 'crate')) return 'The crate is gone';
-      t.event = null; t.money += Math.max(100, income(t) * 90);
+      t.event = null; t.money += Math.max(100, income(t) * 90); questState(t).stats.crates++;
+    } else if (a.type === 'quest') {
+      if (!QUEST_AREAS.includes(a.area)) return 'Nobody there';
+      if (a.area !== 'plaza' && !owned(t, a.area)) return 'Buy one first';
+      const st = questArea(t, a.area);
+      if (a.op === 'accept') {
+        if (st.active) return 'You already have that job';
+        const o = questOffer(t, a.area); st.active = { kind: o.kind, id: o.id, w: o.w, why: o.why, ask: o.ask, ...questTarget(t, o) };
+      } else if (a.op === 'claim') {
+        if (!questDone(t, a.area)) return 'Not done yet';
+        const talk = questTalk(t, a.area);
+        t.money += talk.reward; t.points += talk.points; st.n++; st.active = null;
+      } else if (a.op === 'drop') { st.n++; st.active = null; } // a new job next time
+      else return 'Bad action';
     } else if (a.type === 'reboot') {
       if (t.money < rebootCost(t)) return `Need ${fmt(rebootCost(t))} to reboot`;
       if (t.level < MAX_BIZ) t.level++;
       else { t.points += prestigePoints(t); t.prestige++; }
       Object.assign(t, { money: startCash(t), buildings: {}, weapons: freshWeapons(), equipped: 'pistol', event: null });
+      questState(t).areas = {}; // new people, new jobs
     } else if (a.type === 'perk') {
       const p = PERKS[a.id]; if (!p) return 'Unknown perk';
       if (perk(t, a.id) >= p.max) return 'Already maxed';
@@ -147,6 +336,19 @@
       if (rw) t.weapons[w.id] = Object.fromEntries(Object.keys(STATS).map(s => [s, int(rw[s], 0, MAX_LVL)]));
     }
     if (raw.equipped && t.weapons[raw.equipped]) t.equipped = raw.equipped;
+    const rq = raw.quest;
+    if (rq && typeof rq === 'object') {
+      const q = questState(t), rs = rq.stats || {};
+      q.stats.wins = int(rs.wins, 0, 1e7); q.stats.crates = int(rs.crates, 0, 1e7);
+      for (const w of WEAPONS) { const v = int(rs.with?.[w.id], 0, 1e7); if (v) q.stats.with[w.id] = v; }
+      for (const area of QUEST_AREAS) {
+        const ra = rq.areas?.[area]; if (!ra) continue;
+        const st = questArea(t, area); st.n = int(ra.n, 0, 1e5);
+        const a = ra.active;
+        if (a && QUEST_PAY[a.kind] !== undefined) st.active = { kind: a.kind, id: area === 'plaza' ? null : area, w: WEAPONS.some(w => w.id === a.w) ? a.w : null,
+          why: int(a.why, 0, 999), ask: int(a.ask, 0, 999), base: num(a.base, 0, 1e21), target: num(a.target, 0, 1e21) };
+      }
+    }
     return t;
   }
   // Fills in fields added in later versions so old saves keep working.
@@ -328,6 +530,7 @@
 
   return { BUILDINGS, WEAPONS, STATS, MAX_LVL, STEAL, LEVELS, MAX_BIZ, PERKS, EVENTS, MAPS, TICK, fmt,
     newTycoon, upgradeSave, owned, bLevel, unlocked, bCost, bUpCost, bIncome, income, globalMult, milestoneMult, nextMilestone, upCost, offlineEarnings,
-    perk, perkCost, rebootCost, prestigePoints, eventOn, rollEvent, applyAction, sanitizeTycoon, wealthDistance, matchDistance, searchWindow, newRivals, tickRival, rivalLoadout,
+    perk, perkCost, rebootCost, prestigePoints, eventOn, rollEvent, applyAction, sanitizeTycoon,
+    QUEST_AREAS, QUEST_KINDS, QUEST_PAY, QUEST_TEXT, questGiver, questOffer, questProgress, questDone, questTalk, questArea, recordWin, reboots, wealthDistance, matchDistance, searchWindow, newRivals, tickRival, rivalLoadout,
     W, H, hitsWall, moveUnit, nextWaypoint, newArena, stepArena, botInput, snapshot };
 });

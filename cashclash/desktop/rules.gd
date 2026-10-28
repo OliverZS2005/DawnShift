@@ -186,6 +186,223 @@ func roll_event(t) -> String:
 	t.event = {"type": type, "until": now_ms() + EVENTS[type].dur * 1000.0}
 	return type
 
+# ---------- Quests (port of the quest section of ../shared.js; the words come from models.json) ----------
+const QUEST_KINDS = {
+	"plaza": ["wins", "crate", "cash", "variety", "weapon", "income", "winwith"],
+	"lemon": ["buy", "upgrade", "milestone", "cash", "income", "crate"], "cafe": ["buy", "milestone", "upgrade", "income", "crate", "cash"],
+	"arcade": ["buy", "upgrade", "wins", "milestone", "income", "winwith"], "bank": ["cash", "income", "buy", "upgrade", "variety", "milestone"],
+	"fact": ["buy", "upgrade", "milestone", "income", "weapon", "wins"], "oil": ["buy", "income", "upgrade", "wins", "milestone", "cash"],
+	"space": ["buy", "milestone", "income", "weapon", "upgrade", "winwith"], "ailab": ["upgrade", "buy", "income", "variety", "milestone", "weapon"],
+	"dyson": ["buy", "income", "milestone", "upgrade", "cash", "wins"],
+}
+const QUEST_PAY = {"buy": 90, "milestone": 240, "upgrade": 160, "income": 300, "cash": 120, "wins": 200, "winwith": 260, "crate": 120, "variety": 220, "weapon": 150}
+var _qtext = null
+
+func quest_areas() -> Array:
+	var out = ["plaza"]
+	for b in BUILDINGS:
+		out.append(b.id)
+	return out
+
+func quest_text() -> Dictionary:
+	if _qtext == null:
+		var f = FileAccess.open("res://models.json", FileAccess.READ)
+		_qtext = JSON.parse_string(f.get_as_text()).QUEST_TEXT
+	return _qtext
+
+func _imul(a: int, b: int) -> int:
+	return (a * b) & 0xFFFFFFFF
+
+func qhash(keys: Array) -> int:
+	var h = 2166136261
+	for v in keys:
+		v = int(v)
+		h = _imul(h ^ (v & 0xffff), 16777619)
+		h = _imul(h ^ ((v >> 16) & 0xffff), 16777619)
+	h ^= h >> 15
+	h = _imul(h, 2246822507)
+	h ^= h >> 13
+	return h % 2147483646 + 1
+
+# seeded random numbers: call .call() for the next one in [0, 1)
+func qrng(seed: int) -> Callable:
+	var st = [seed]
+	return func() -> float:
+		st[0] = (st[0] * 16807) % 2147483647
+		return st[0] / 2147483647.0
+
+func qpick(r: Callable, list: Array):
+	return list[int(floor(r.call() * list.size()))]
+
+func reboots(t) -> int:
+	return (int(t.level) - 1) + int(t.prestige)
+
+func qseed(area: String, rb: int, n: int, salt := 0) -> int:
+	return qhash([quest_areas().find(area) + 1, rb, n + 1, salt])
+
+func quest_state(t) -> Dictionary:
+	if typeof(t.get("quest")) != TYPE_DICTIONARY:
+		t.quest = {"stats": {"wins": 0, "crates": 0, "with": {}}, "areas": {}}
+	return t.quest
+
+func quest_area(t, area: String) -> Dictionary:
+	var q = quest_state(t)
+	if not q.areas.has(area):
+		q.areas[area] = {"n": 0, "active": null}
+	return q.areas[area]
+
+# The person in an area for this reboot.
+func quest_giver(t, area: String) -> Dictionary:
+	var T = quest_text()
+	var r = qrng(qseed(area, reboots(t), -1))
+	var name = qpick(r, T.first) + " " + qpick(r, T.last)
+	return {"name": name, "role": qpick(r, T.roles[area]), "mood": qpick(r, T.moods.keys()), "look": int(floor(r.call() * 1000))}
+
+func weapon_ups(t) -> int:
+	var s = 0
+	for w in t.weapons.values():
+		s += int(w.dmg) + int(w.rate) + int(w.mag) + int(w.armor)
+	return s
+
+func kinds_owned(t) -> int:
+	var k = 0
+	for b in BUILDINGS:
+		if owned(t, b.id) > 0:
+			k += 1
+	return k
+
+func unlocked_count(t) -> int:
+	var k = 0
+	for b in BUILDINGS:
+		if unlocked(t, b):
+			k += 1
+	return k
+
+# rounds up to 3 significant figures (the exponent found exactly, like shared.js)
+func round3(v: float) -> float:
+	if v <= 0:
+		return 0.0
+	var e = floor(log(v) / log(10.0))
+	if pow(10.0, e + 1) <= v: e += 1
+	if pow(10.0, e) > v: e -= 1
+	var p = pow(10.0, e - 2)
+	return ceil(v / p) * p
+
+func quest_kind(t, area: String, n: int) -> String:
+	var r = qrng(qseed(area, reboots(t), n))
+	var list = QUEST_KINDS[area]
+	var prev_kind = ""
+	if n > 0:
+		prev_kind = list[int(floor(qrng(qseed(area, reboots(t), n - 1)).call() * list.size()))]
+	var k = int(floor(r.call() * list.size()))
+	var b = building(area)
+	for tries in list.size():
+		var kind = list[k]
+		k = (k + 1) % list.size()
+		if kind == prev_kind: continue
+		if kind == "variety" and kinds_owned(t) >= unlocked_count(t): continue
+		if kind == "milestone" and b != null and owned(t, b.id) >= MILESTONES[MILESTONES.size() - 1]: continue
+		if kind == "weapon":
+			var maxed = true
+			for w in t.weapons.values():
+				if int(w.dmg) + int(w.rate) + int(w.mag) + int(w.armor) < 4 * MAX_LVL:
+					maxed = false
+			if maxed: continue
+		return kind
+	return list[0]
+
+func quest_offer(t, area: String) -> Dictionary:
+	var st = quest_area(t, area)
+	var n = int(st.n)
+	var r = qrng(qseed(area, reboots(t), n, 1))
+	var kind = quest_kind(t, area, n)
+	var b = building(area)
+	var owns = t.weapons.keys()
+	var w = null
+	if kind == "winwith":
+		w = owns[int(floor(r.call() * owns.size()))]
+	return {"area": area, "kind": kind, "id": b.id if b != null else null, "w": w, "size": r.call(), "why": int(floor(r.call() * 1000)), "ask": int(floor(r.call() * 1000))}
+
+# What the job needs, from the business as it is now (taken when you accept): {base, target}
+func quest_target(t, o: Dictionary) -> Dictionary:
+	var q = quest_state(t)
+	var s = float(o.size)
+	var id = o.id
+	match o.kind:
+		"buy": return {"base": owned(t, id), "target": owned(t, id) + [3, 5, 8, 10, 12, 15][int(floor(s * 6))]}
+		"upgrade": return {"base": b_level(t, id), "target": b_level(t, id) + (2 if s > 0.75 else 1)}
+		"milestone":
+			var nm = next_milestone(owned(t, id))
+			return {"base": owned(t, id), "target": nm if nm != null else owned(t, id) + 25}
+		"income": return {"base": income(t), "target": round3(max(5.0, income(t) * (1.5 + s * 1.5)))}
+		"cash": return {"base": t.money, "target": round3(max(200.0, max(t.money * 1.3, income(t) * (60 + s * 180))))}
+		"wins": return {"base": int(q.stats.wins), "target": int(q.stats.wins) + 1 + int(floor(s * 3))}
+		"winwith": return {"base": int(q.stats.with.get(o.w, 0)), "target": int(q.stats.with.get(o.w, 0)) + 1}
+		"crate": return {"base": int(q.stats.crates), "target": int(q.stats.crates) + (2 if s > 0.7 else 1)}
+		"variety":
+			var k = kinds_owned(t)
+			return {"base": k, "target": min(unlocked_count(t), k + (2 if s > 0.6 else 1))}
+		"weapon": return {"base": weapon_ups(t), "target": weapon_ups(t) + 2 + int(floor(s * 3))}
+	return {"base": 0, "target": 1}
+
+# How far along the active job in an area is: [now, target] (null if none).
+func quest_progress(t, area: String):
+	var a = quest_area(t, area).active
+	if a == null:
+		return null
+	var q = quest_state(t)
+	var now = 0.0
+	match a.kind:
+		"buy", "milestone": now = owned(t, a.id)
+		"upgrade": now = b_level(t, a.id)
+		"income": now = income(t)
+		"cash": now = t.money
+		"wins": now = int(q.stats.wins)
+		"winwith": now = int(q.stats.with.get(a.w, 0))
+		"crate": now = int(q.stats.crates)
+		"variety": now = kinds_owned(t)
+		"weapon": now = weapon_ups(t)
+	return [now, a.target]
+
+func quest_done(t, area: String) -> bool:
+	var p = quest_progress(t, area)
+	return p != null and p[0] >= p[1]
+
+func quest_reward(t, area: String) -> float:
+	var st = quest_area(t, area)
+	var kind = st.active.kind if st.active != null else quest_offer(t, area).kind
+	return max(250.0 * pow(2.0, int(t.level) - 1), income(t) * QUEST_PAY[kind] * (1 + 0.15 * min(10, int(st.n))))
+
+# The words: who's talking and what they say about the current (or offered) job.
+func quest_talk(t, area: String) -> Dictionary:
+	var T = quest_text()
+	var g = quest_giver(t, area)
+	var m = T.moods[g.mood]
+	var st = quest_area(t, area)
+	var a = st.active
+	var o = a if a != null else quest_offer(t, area)
+	var r = qrng(qseed(area, reboots(t), int(st.n), 2))
+	var tg = a if a != null else quest_target(t, o)
+	# {n}: how many more for the counting jobs, the total for the rest
+	var n = tg.target - tg.base if o.kind in ["buy", "upgrade", "wins", "crate", "weapon"] else tg.target
+	var c = ""
+	if T.count.has(o.kind):
+		c = T.count[o.kind][0 if int(n) == 1 else 1].replace("{n}", str(int(n)))
+	var why = T.why[o.kind]
+	var ask = T.ask[o.kind]
+	var text = ask[int(o.ask) % ask.size()]
+	text = text.replace("{c}", c).replace("{n}", str(int(n)))
+	text = text.replace("{b}", building(o.id).name if o.id != null else "").replace("{bs}", T.plural[o.id] if o.id != null else "")
+	text = text.replace("{amt}", fmt(tg.target)).replace("{w}", weapon(o.w).name if o.w != null else "")
+	return {"name": g.name, "role": g.role, "mood": g.mood, "look": g.look, "hi": qpick(r, m.hi), "take": qpick(r, m.take), "wait": qpick(r, m.wait), "done": qpick(r, m.done),
+		"why": why[int(o.why) % why.size()], "ask": text, "reward": quest_reward(t, area), "points": 1 if int(t.level) >= MAX_BIZ and (int(st.n) + 1) % 3 == 0 else 0}
+
+# A battle won: counts towards win jobs.
+func record_win(t) -> void:
+	var s = quest_state(t).stats
+	s.wins = int(s.wins) + 1
+	s.with[t.equipped] = int(s.with.get(t.equipped, 0)) + 1
+
 # Applies a player action. Returns an error message, or "" on success.
 func apply_action(t, a: Dictionary) -> String:
 	match a.get("type", ""):
@@ -226,6 +443,31 @@ func apply_action(t, a: Dictionary) -> String:
 			if not event_on(t, "crate"): return "The crate is gone"
 			t.event = null
 			t.money += max(100.0, income(t) * 90.0)
+			var qs = quest_state(t).stats
+			qs.crates = int(qs.crates) + 1
+		"quest":
+			var area = str(a.get("area", ""))
+			if not quest_areas().has(area): return "Nobody there"
+			if area != "plaza" and owned(t, area) == 0: return "Buy one first"
+			var st = quest_area(t, area)
+			match a.get("op", ""):
+				"accept":
+					if st.active != null: return "You already have that job"
+					var o = quest_offer(t, area)
+					var tg = quest_target(t, o)
+					st.active = {"kind": o.kind, "id": o.id, "w": o.w, "why": o.why, "ask": o.ask, "base": tg.base, "target": tg.target}
+				"claim":
+					if not quest_done(t, area): return "Not done yet"
+					var talk = quest_talk(t, area)
+					t.money += talk.reward
+					t.points = int(t.points) + talk.points
+					st.n = int(st.n) + 1
+					st.active = null
+				"drop": # a new job next time
+					st.n = int(st.n) + 1
+					st.active = null
+				_:
+					return "Bad action"
 		"reboot":
 			if t.money < reboot_cost(t): return "Need %s to reboot" % fmt(reboot_cost(t))
 			if int(t.level) < MAX_BIZ:
@@ -238,6 +480,7 @@ func apply_action(t, a: Dictionary) -> String:
 			t.weapons = fresh_weapons()
 			t.equipped = "pistol"
 			t.event = null
+			quest_state(t).areas = {} # new people, new jobs
 		"perk":
 			if not PERKS.has(a.id): return "Unknown perk"
 			if perk(t, a.id) >= PERKS[a.id].max: return "Already maxed"

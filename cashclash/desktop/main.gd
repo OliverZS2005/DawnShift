@@ -75,6 +75,12 @@ func _ready() -> void:
 	city.visible = false
 	city.lot_clicked.connect(func(i): Game.act({"type": "buy", "id": CC.BUILDINGS[i].id}); render())
 	city.upgrade_clicked.connect(func(i): Game.act({"type": "bup", "id": CC.BUILDINGS[i].id}); render())
+	city.quest_action.connect(func(area, op):
+		var before = CC.quest_talk(Game.tycoon(), area)
+		Game.act({"type": "quest", "area": area, "op": op})
+		if op == "claim":
+			show_toast("%s: +%s%s" % [before.name, CC.fmt(before.reward), " and a Boost Point" if before.points else ""])
+		render())
 	city.crate_clicked.connect(func():
 		if CC.event_on(Game.tycoon(), "crate"):
 			Game.act({"type": "claim"})
@@ -351,6 +357,7 @@ func _render_tycoon() -> void:
 		_spacer(r)
 		if t.event.type == "crate":
 			r.add_child(_button("Claim " + CC.fmt(max(100.0, CC.income(t) * 90.0)), func(): Game.act({"type": "claim"}), false, true))
+	_jobs(t)
 	content.add_child(_label("%s · income x%.2f · Owning 25/50/100/200 of a building doubles its output each time." % [CC.LEVELS[t.level - 1], CC.global_mult(t)], 13, C_MUTED, true))
 	var g = _grid(content)
 	for b in CC.BUILDINGS:
@@ -367,6 +374,31 @@ func _render_tycoon() -> void:
 		var id = b.id
 		r.add_child(_button("Buy · " + CC.fmt(CC.b_cost(t, b)), func(): Game.act({"type": "buy", "id": id}), t.money < CC.b_cost(t, b)))
 		r.add_child(_button("Upgrade x2 · " + CC.fmt(CC.b_up_cost(t, b)), func(): Game.act({"type": "bup", "id": id}), n == 0 or t.money < CC.b_up_cost(t, b)))
+
+# The jobs you've taken from people round your business, with how far along each one is.
+func _jobs(t) -> void:
+	var rows = []
+	for area in CC.quest_areas():
+		var a = CC.quest_area(t, area).active
+		if a != null:
+			rows.append(area)
+	if rows.is_empty():
+		content.add_child(_label("📋 People round your business have jobs for you: walk up to them in the tycoon view and press E. New people and new jobs come with every reboot.", 13, C_MUTED, true))
+		return
+	var c = _card(content, "📋 Jobs")
+	for area in rows:
+		var a = CC.quest_area(t, area).active
+		var k = CC.quest_talk(t, area)
+		var p = CC.quest_progress(t, area)
+		var done = p[0] >= p[1]
+		var amt = func(x): return CC.fmt(x) + "/s" if a.kind == "income" else (CC.fmt(x) if a.kind == "cash" else str(int(x)))
+		c.add_child(_label("%s  for %s (%s) · %s / %s%s" % [k.ask, k.name, "the plaza" if area == "plaza" else CC.building(area).name, amt.call(p[0]), amt.call(p[1]), " · done: go and tell them" if done else ""], 13, C_GREEN if done else C_TEXT, true))
+		var bar = ProgressBar.new()
+		bar.max_value = 1.0
+		bar.value = min(1.0, p[0] / p[1] if p[1] else 1.0)
+		bar.show_percentage = false
+		bar.custom_minimum_size.y = 6
+		c.add_child(bar)
 
 func _render_armory() -> void:
 	var t = Game.tycoon()

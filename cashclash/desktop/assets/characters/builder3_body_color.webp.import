@@ -1,0 +1,37 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://dxogoet0qt432"
+path="res://.godot/imported/builder3_body_color.webp-0f58456d4a237ff3c3f61657243cb70c.ctex"
+metadata={
+"vram_texture": false
+}
+generator_parameters={
+"md5": "3b82a67668140bf09d62ced510952bc7"
+}
+
+[deps]
+
+source_file="res://assets/characters/builder3_body_color.webp"
+dest_files=["res://.godot/imported/builder3_body_color.webp-0f58456d4a237ff3c3f61657243cb70c.ctex"]
+
+[params]
+
+compress/mode=0
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=1

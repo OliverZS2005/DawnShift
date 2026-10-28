@@ -16,4 +16,26 @@ func _init():
 		row.append_array([t.level, t.money, t.points])
 		out.append(row)
 	print("PARITY " + JSON.stringify(out))
+	# quests: who's in each area, what they say and ask, and a job taken, done and handed in
+	var words = []
+	for setup in [[1, 0], [4, 0], [7, 3]]:
+		var t = CCs.new_tycoon()
+		t.level = setup[0]
+		t.prestige = setup[1]
+		t.money = 1234.5 * pow(10, setup[0])
+		for b in CCs.BUILDINGS:
+			if CCs.unlocked(t, b):
+				t.buildings[b.id] = {"count": 7 + b.unlock, "level": 1}
+		for area in CCs.quest_areas():
+			if area != "plaza" and not t.buildings.has(area):
+				continue
+			for step in 4:
+				var k = CCs.quest_talk(t, area)
+				words.append([area, k.name, k.role, k.mood, k.hi, k.why, k.ask, k.take, k.done, k.reward, k.points])
+				CCs.apply_action(t, {"type": "quest", "area": area, "op": "accept"})
+				var p = CCs.quest_progress(t, area)
+				words.append([area, p[0], p[1]])
+				CCs.apply_action(t, {"type": "quest", "area": area, "op": "drop" if step % 2 else "claim"})
+				CCs.record_win(t)
+	print("QUESTS " + JSON.stringify(words))
 	quit()

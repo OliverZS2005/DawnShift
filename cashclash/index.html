@@ -114,6 +114,17 @@
   #cityPrompt:empty { display: none; }
   #cityPrompt kbd { font: 700 12px 'JetBrains Mono', ui-monospace, monospace; background: #F2EFE8; color: #0b0d10; border-radius: 2px; padding: 0 5px; margin-right: 6px; }
   #cityPrompt .no { color: #B9B4AA; }
+  /* talking to someone: their name and job, what they say, and what you can answer */
+  #talk { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); width: min(560px, calc(100% - 32px)); background: rgba(11,13,16,.9); border: 1px solid #3a3d44; border-radius: 4px; padding: 14px 16px 12px; color: #F2EFE8; display: none; }
+  #talk.on { display: block; }
+  #talk .who { font: 800 20px/1.1 'Barlow Condensed', 'Arial Narrow', sans-serif; letter-spacing: .02em; }
+  #talk .who span { font-weight: 600; font-size: 15px; color: #B9B4AA; margin-left: 6px; }
+  #talk p { margin: 8px 0 0; font-size: 15px; line-height: 1.45; }
+  #talk .ask { font-weight: 700; }
+  #talk .pay { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; color: var(--gold); margin-top: 6px; }
+  #talk .opts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  #talk .opts button { font: 600 14px 'Barlow Condensed', 'Arial Narrow', sans-serif; }
+  #talk kbd { font: 700 12px 'JetBrains Mono', ui-monospace, monospace; background: #F2EFE8; color: #0b0d10; border-radius: 2px; padding: 0 5px; margin-right: 6px; }
   #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--panel2); border: 1px solid var(--gold); padding: 10px 16px; border-radius: 10px; display: none; z-index: 20; }
   .log { max-height: 180px; overflow: auto; font-size: 13px; }
   .log div { padding: 3px 0; border-bottom: 1px dashed var(--line); }
@@ -125,6 +136,7 @@
   .bar > i { display: block; height: 100%; background: var(--gold); }
   .lvl { font-size: 12px; color: var(--blue); }
   .choice b { display: block; font-size: 15px; margin-bottom: 4px; }
+  .job { padding: 6px 0; border-bottom: 1px dashed var(--line); } .job:last-child { border-bottom: 0; }
 </style>
 </head>
 <body>
@@ -140,7 +152,7 @@
     <button data-tab="reboot">🔄 Reboot</button>
   </nav>
 </header>
-<div id="cityWrap"><canvas id="city"></canvas><div id="cityDot"></div><div id="cityPrompt"></div><div id="cityHint" class="muted">Click to walk around your business · WASD to move, Shift to run · walk through a front door to go inside · look at a lot: E buys, R upgrades · Esc frees the mouse</div></div>
+<div id="cityWrap"><canvas id="city"></canvas><div id="cityDot"></div><div id="cityPrompt"></div><div id="talk"></div><div id="cityHint" class="muted">Click to walk around your business · WASD to move, Shift to run · walk through a front door to go inside · look at a lot: E buys, R upgrades · E talks to people with a job for you · Esc frees the mouse</div></div>
 <main id="view"></main>
 <div id="arenaWrap">
   <canvas id="cv"></canvas>
@@ -288,12 +300,21 @@ let renderQueued = false;
 const renderSoon = () => { if (!renderQueued) { renderQueued = true; requestAnimationFrame(() => { renderQueued = false; render(); }); } };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
+// The jobs you've taken from people round your business, with how far along each one is.
+function jobsCard(t) {
+  const rows = CC.QUEST_AREAS.map(area => {
+    const a = CC.questArea(t, area).active; if (!a) return '';
+    const k = CC.questTalk(t, area), p = CC.questProgress(t, area), f = Math.min(1, p[1] ? p[0] / p[1] : 1), done = p[0] >= p[1];
+    return `<div class="job"><b>${esc(k.ask)}</b> <span class="muted">for ${esc(k.name)} (${esc(areaName(area))}) · ${amount(a.kind, p[0])} / ${amount(a.kind, p[1])}${done ? ' · <b class="win">done: go and tell them</b>' : ''}</span><div class="bar"><i style="width:${(f * 100).toFixed(0)}%"></i></div></div>`;
+  }).join('');
+  return rows ? `<div class="card"><h3>📋 Jobs</h3>${rows}</div>` : `<p class="muted">📋 People round your business have jobs for you: walk up to them in the tycoon view and press E. New people and new jobs come with every reboot.</p>`;
+}
 function render() {
   document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active', x.dataset.tab === tab));
   const pill = $('#modePill'); pill.className = 'mode' + (mode === 'mp' ? ' mp' : ''); pill.textContent = mode === 'mp' ? `🌐 ${NET?.server || 'Multiplayer'}` : '💻 Singleplayer';
   const v = $('#view'), t = T();
   if (tab === 'play') setView(v, renderPlay());
-  else if (tab === 'tycoon') setView(v, eventBanner(t) + `<p class="muted"><b class="lvl">${CC.LEVELS[t.level - 1]}</b> · income x${CC.globalMult(t).toFixed(2)} · Owning 25/50/100/200 of a building doubles its output each time.</p>
+  else if (tab === 'tycoon') setView(v, eventBanner(t) + jobsCard(t) + `<p class="muted"><b class="lvl">${CC.LEVELS[t.level - 1]}</b> · income x${CC.globalMult(t).toFixed(2)} · Owning 25/50/100/200 of a building doubles its output each time.</p>
     <div class="grid">${BUILDINGS.map(b => !CC.unlocked(t, b) ? `
       <div class="card locked"><h3>🔒 ${b.icon} ${b.name}</h3><div class="muted">Unlocks at business level ${b.unlock}: <b>${CC.LEVELS[b.unlock - 1]}</b>. Reboot to get there.</div></div>` : `
       <div class="card">
@@ -582,7 +603,7 @@ function openArena(opts) {
 function endSP(won) {
   const r = G.rival; let t;
   SP.rivals.forEach(x => x.recent = Math.max(0, x.recent - 1)); r.recent = 3;
-  if (won) { const gain = r.money * CC.STEAL; r.money -= gain; SP.tycoon.money += gain; SP.wins++; t = `Beat ${r.name} → +${fmt(gain)}`; }
+  if (won) { const gain = r.money * CC.STEAL; r.money -= gain; SP.tycoon.money += gain; SP.wins++; CC.recordWin(SP.tycoon); t = `Beat ${r.name} → +${fmt(gain)}`; }
   else { const loss = SP.tycoon.money * CC.STEAL; SP.tycoon.money -= loss; r.money += loss; SP.losses++; t = `Lost to ${r.name} → -${fmt(loss)}`; }
   SP.log.push({ t, w: won }); SP.log = SP.log.slice(-50); saveSP();
   showResult(won, t);
@@ -666,6 +687,11 @@ let cityAim = -1;
 // What the lot under the crosshair would cost (shown under the centre dot).
 function cityPrompt() {
   const el = $('#cityPrompt'); if (!el) return;
+  if (talkArea) { el.innerHTML = ''; return; }
+  if (typeof cityAim === 'string' && cityAim.startsWith('talk:')) {
+    const area = cityAim.slice(5), k = CC.questTalk(T(), area), news = CC.questDone(T(), area) ? ' <span class="no">· has your reward</span>' : CC.questArea(T(), area).active ? ' <span class="no">· your job</span>' : '';
+    el.innerHTML = `<kbd>E</kbd>Talk to <b>${esc(k.name)}</b>, ${esc(k.role)}${news}`; return;
+  }
   if (cityAim === 'crate') { el.innerHTML = 'Golden crate · walk into it to claim'; return; }
   if (cityAim < 0) { el.innerHTML = ''; return; }
   const t = T(), b = BUILDINGS[cityAim];
@@ -674,7 +700,54 @@ function cityPrompt() {
   el.innerHTML = `<b>${esc(b.name)}</b> ×${n}<br><kbd>E</kbd>Buy ${fmt(buy)}${t.money < buy ? ' <span class="no">(not enough)</span>' : ''}` +
     (n ? `&nbsp;&nbsp;<kbd>R</kbd>Upgrade ${fmt(up)}${t.money < up ? ' <span class="no">(not enough)</span>' : ''}` : '');
 }
+// ---------- Talking to people (quests) ----------
+// Everyone with a job for you: what they say comes from CC.questTalk (new people and jobs each reboot).
+let talkArea = null, talkSaid = '';
+const areaName = area => area === 'plaza' ? 'the plaza' : BUILDINGS.find(b => b.id === area).name;
+const amount = (kind, v) => kind === 'income' ? fmt(v) + '/s' : kind === 'cash' ? fmt(v) : String(Math.floor(v));
+function talkView() {
+  const el = $('#talk'); if (!el) return;
+  if (!talkArea) { el.classList.remove('on'); return; }
+  const t = T(), k = CC.questTalk(t, talkArea), a = CC.questArea(t, talkArea).active, done = CC.questDone(t, talkArea);
+  const pay = `Reward: ${fmt(k.reward)}${k.points ? ' + 1 Boost Point' : ''}`;
+  let body, opts;
+  if (!a) {
+    body = `<p>${esc(talkSaid || k.hi)} ${esc(k.why)}</p><p class="ask">${esc(k.ask)}</p><div class="pay">${pay}</div>`;
+    opts = `<button class="primary" data-talk="accept"><kbd>E</kbd>Take the job</button><button data-talk="drop"><kbd>Q</kbd>Got anything else?</button><button data-talk="leave"><kbd>Esc</kbd>Not now</button>`;
+  } else {
+    const p = CC.questProgress(t, talkArea), f = Math.min(1, p[1] ? p[0] / p[1] : 1);
+    body = done ? `<p>${esc(talkSaid || k.done)}</p><div class="pay">${pay}</div>`
+      : `<p>${esc(talkSaid || k.wait)}</p><p class="ask">${esc(k.ask)} <span class="muted">(${amount(a.kind, p[0])} / ${amount(a.kind, p[1])})</span></p><div class="bar"><i style="width:${(f * 100).toFixed(0)}%"></i></div><div class="pay">${pay}</div>`;
+    opts = done ? `<button class="primary" data-talk="claim"><kbd>E</kbd>Hand it in</button><button data-talk="leave"><kbd>Esc</kbd>Leave</button>`
+      : `<button data-talk="drop"><kbd>Q</kbd>Drop this job</button><button data-talk="leave"><kbd>Esc</kbd>Leave</button>`;
+  }
+  el.innerHTML = `<div class="who">${esc(k.name)}<span>${esc(k.role)} · ${esc(areaName(talkArea))}</span></div>${body}<div class="opts">${opts}</div>`;
+  el.classList.add('on');
+}
+function talkDo(op) {
+  if (!talkArea) return;
+  const area = talkArea, before = CC.questTalk(T(), area);
+  if (op === 'leave') { talkArea = null; talkSaid = ''; city.talk(null); talkView(); cityPrompt(); return; }
+  if (op === 'accept' && CC.questArea(T(), area).active) return;
+  if (op === 'claim' && !CC.questDone(T(), area)) return;
+  act({ type: 'quest', area, op });
+  talkSaid = op === 'accept' ? before.take : op === 'claim' ? before.done : '';
+  if (op === 'claim') toast(`${before.name}: +${fmt(before.reward)}${before.points ? ' and a Boost Point' : ''}`);
+  if (mode === 'sp') render();
+  setTimeout(talkView, mode === 'mp' ? 250 : 0); // (multiplayer: once the server has it)
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-talk]'); if (b) talkDo(b.dataset.talk); });
+addEventListener('keydown', e => {
+  if (!talkArea) return;
+  const k = e.key.toLowerCase();
+  if (k === 'escape') talkDo('leave');
+  else if (k === 'e') { const a = CC.questArea(T(), talkArea).active; talkDo(!a ? 'accept' : CC.questDone(T(), talkArea) ? 'claim' : 'leave'); }
+  else if (k === 'q') talkDo('drop');
+  else return;
+  e.preventDefault();
+});
 const city = R3D.createCity($('#city'), {
+  onTalk: area => { talkArea = area; talkSaid = ''; city.talk(area); talkView(); cityPrompt(); },
   onLot: i => { act({ type: 'buy', id: BUILDINGS[i].id }); if (mode === 'sp') render(); cityPrompt(); },
   onUpgrade: i => { act({ type: 'bup', id: BUILDINGS[i].id }); if (mode === 'sp') render(); cityPrompt(); },
   onCrate: () => { if (CC.eventOn(T(), 'crate')) { act({ type: 'claim' }); if (mode === 'sp') render(); } },
@@ -682,6 +755,7 @@ const city = R3D.createCity($('#city'), {
 });
 function showCity() {
   const on = tab === 'tycoon' && !G;
+  if (!on && talkArea) { talkArea = null; city.talk(null); talkView(); }
   $('#cityWrap').style.display = on ? 'block' : 'none';
   if (on) { city.update(T()); city.start(); } else city.stop();
 }
@@ -698,7 +772,7 @@ setInterval(() => {
   for (const r of SP.rivals) { const news = CC.tickRival(r, dt); if (news && mode === 'sp' && tab === 'battle') toast('📰 ' + news); }
   if ((eventT += dt) >= 1) { eventT = 0; const ev = CC.rollEvent(SP.tycoon); if (ev && mode === 'sp') eventToast(ev); }
   updateMoney();
-  if (tab === 'tycoon' && !G) { city.update(T()); if (cityAim !== -1) cityPrompt(); }
+  if (tab === 'tycoon' && !G) { city.update(T()); if (cityAim !== -1) cityPrompt(); if (talkArea && CC.questArea(T(), talkArea).active) talkView(); }
   if ((saveT += dt) > 5) { saveT = 0; saveSP(); }
   if ((renderT += dt) > 1 && (tab === 'tycoon' || tab === 'armory' || tab === 'reboot') && !G) { renderT = 0; render(); }
 }, 100);

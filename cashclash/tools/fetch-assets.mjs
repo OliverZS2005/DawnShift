@@ -10,7 +10,7 @@
 //   * Microsoft Rocketbox (https://github.com/microsoft/Microsoft-Rocketbox, MIT licence): realistic people
 //     and their animations. Converting those from FBX needs Blender on the PATH (tools/people.py).
 // The downloaded files are committed, so you only need this to change or refresh the art.
-// Pass a section name to redo just that part: models, textures, skies, facades, kits, cars, guns, people, fonts
+// Pass a section name to redo just that part: models, textures, skies, facades, kits, cars, guns, people, npcs, fonts
 // (models and kits also take names: `node tools/fetch-assets.mjs models shelves,rack`, `... kits fence`).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,7 +18,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { center, dedup, prune, weld, simplify, textureCompress } from '@gltf-transform/functions';
+import { center, dedup, prune, resample, weld, simplify, textureCompress } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptSimplifier } from 'meshoptimizer';
 import sharp from 'sharp';
 
@@ -124,6 +124,17 @@ const PEOPLE = { hoodie: 'Male_Adult_04', jacket: 'Male_Adult_10', denim: 'Male_
 const PEOPLE_CLIPS = { idle: 'static/m_idle_neutral_01', run: 'xy/m_run_neutral', walk: 'xy/m_walk_neutral_01' };
 const ROCKETBOX = 'https://raw.githubusercontent.com/microsoft/Microsoft-Rocketbox/master/Assets/';
 const PEOPLE_TEX = 1024;
+// The people round town and at work (workers, passers-by, the quest givers): Rocketbox folder -> sex
+// (which animation set they use). Seen from further away than the opponent, so smaller textures.
+const NPCS = {
+  builder: 'Professions/Construction_Male_01', builder2: 'Professions/Construction_Male_04', builder3: 'Professions/Construction_Female_01',
+  chef: 'Professions/Chef_Female_01', courier: 'Professions/Delivery_Male_01', exec: 'Professions/Business_Female_02', banker: 'Professions/Business_Male_03',
+  pilot: 'Professions/Pilot_Female_01', guard: 'Professions/Security_Male_01',
+  woman1: 'Adults/Female_Adult_01', woman2: 'Adults/Female_Adult_05', woman3: 'Adults/Female_Adult_08', woman4: 'Adults/Female_Adult_12',
+  man1: 'Adults/Male_Adult_02', man2: 'Adults/Male_Adult_06', man3: 'Adults/Male_Adult_15',
+};
+const NPC_CLIPS = { idle: 'static/{s}_idle_neutral_01', walk: 'xy/{s}_walk_neutral_01', talk: 'static/{s}_gestic_talk_neutral_01', work: 'static/{s}_work_table' };
+const NPC_TEX = 512;
 const only = process.argv[2];
 const want = section => !only || only === section;
 
@@ -260,29 +271,41 @@ if (want('guns')) {
   }
 }
 
+// Converts one Rocketbox avatar (folder under Assets/Avatars) with the given clips to characters/<name>.glb.
+const rbFile = async rel => { const f = path.join(TMP, 'rb', rel); if (!fs.existsSync(f)) { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, await get(ROCKETBOX + rel)); } return f; };
+async function person(name, folder, clipFiles, texSize) {
+  const clips = [];
+  for (const [clip, file] of Object.entries(clipFiles)) {
+    const [set, anim] = file.split('/');
+    clips.push(`${clip}=${await rbFile(`Animations/all_animations_max_motextr_${set}/${anim}.max.fbx`)}`);
+  }
+  const id = folder.split('/').pop(), fbx = await rbFile(`Avatars/${folder}/Export/${id}.fbx`);
+  // the FBX names its textures (Rocketbox numbers them per avatar, e.g. m024_body_color.tga)
+  for (const tga of new Set(fs.readFileSync(fbx, 'latin1').match(/[a-z]+\d+_[a-z_]+\.tga/gi))) await rbFile(`Avatars/${folder}/Textures/${tga}`);
+  const raw = path.join(TMP, `${name}.glb`);
+  execFileSync('blender', ['-b', '--python', path.join(path.dirname(fileURLToPath(import.meta.url)), 'people.py'), '--', fbx, raw, ...clips], { stdio: 'ignore' });
+  const doc = await io.read(raw);
+  for (const m of doc.getRoot().listMaterials()) {
+    if (/opacity/.test(m.getName())) m.setAlphaMode('MASK').setAlphaCutoff(0.5); // hair, lashes
+    // readable texture names (Godot writes them out as files, prefixed with the model: jacket_body_color)
+    const part = m.getName().split('_').pop();
+    if (m.getBaseColorTexture()) m.getBaseColorTexture().setName(`${part}_color`);
+    if (m.getNormalTexture()) m.getNormalTexture().setName(`${part}_normal`);
+  }
+  await doc.transform(resample({ tolerance: 1e-3 })); // drops keyframes the curves don't need (most of the file)
+  await writeGlb(doc, `characters/${name}.glb`, 0, texSize);
+}
 if (want('people')) {
   console.log('People (Microsoft Rocketbox, converted with Blender)');
-  const dl = async rel => { const f = path.join(TMP, 'rb', rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, await get(ROCKETBOX + rel)); return f; };
-  const clips = [];
-  for (const [clip, file] of Object.entries(PEOPLE_CLIPS)) {
-    const [set, name] = file.split('/');
-    clips.push(`${clip}=${await dl(`Animations/all_animations_max_motextr_${set}/${name}.max.fbx`)}`);
-  }
-  for (const [name, folder] of Object.entries(PEOPLE)) {
-    const fbx = await dl(`Avatars/Adults/${folder}/Export/${folder}.fbx`);
-    // the FBX names its textures (Rocketbox numbers them per avatar, e.g. m024_body_color.tga)
-    for (const tga of new Set(fs.readFileSync(fbx, 'latin1').match(/m\d+_[a-z]+_[a-z]+\.tga/g))) await dl(`Avatars/Adults/${folder}/Textures/${tga}`);
-    const raw = path.join(TMP, `${name}.glb`);
-    execFileSync('blender', ['-b', '--python', path.join(path.dirname(fileURLToPath(import.meta.url)), 'people.py'), '--', fbx, raw, ...clips], { stdio: 'ignore' });
-    const doc = await io.read(raw);
-    for (const m of doc.getRoot().listMaterials()) {
-      if (/opacity/.test(m.getName())) m.setAlphaMode('MASK').setAlphaCutoff(0.5); // hair, lashes
-      // readable texture names (Godot writes them out as files, prefixed with the model: jacket_body_color)
-      const part = m.getName().split('_').pop();
-      if (m.getBaseColorTexture()) m.getBaseColorTexture().setName(`${part}_color`);
-      if (m.getNormalTexture()) m.getNormalTexture().setName(`${part}_normal`);
-    }
-    await writeGlb(doc, `characters/${name}.glb`, 0, PEOPLE_TEX);
+  for (const [name, folder] of Object.entries(PEOPLE)) await person(name, `Adults/${folder}`, PEOPLE_CLIPS, PEOPLE_TEX);
+}
+if (want('npcs')) {
+  console.log('Townspeople (Microsoft Rocketbox, converted with Blender)');
+  const pick = only === 'npcs' && process.argv[3] ? process.argv[3].split(',') : null;
+  for (const [name, folder] of Object.entries(NPCS)) {
+    if (pick && !pick.includes(name)) continue;
+    const sex = /Female/.test(folder) ? 'f' : 'm';
+    await person(name, folder, Object.fromEntries(Object.entries(NPC_CLIPS).map(([k, v]) => [k, v.replace('{s}', sex)])), NPC_TEX);
   }
 }
 
@@ -303,7 +326,7 @@ Everything here is CC0 (public domain) unless noted. Credit isn't required for C
 - **Grab3D** (https://grab3d.com), CC0 cars (repainted): ${Object.values(CARS).map(c => c.slug).join(', ')}.
 - **OpenGameArt** (https://opengameart.org), CC0 guns: ${Object.values(GUNS).map(g => g.page).join(', ')} (https://opengameart.org/content/<name>).
 
-People (MIT licence, notice below): **Microsoft Rocketbox** avatars ${Object.values(PEOPLE).join(', ')} and animations ${Object.values(PEOPLE_CLIPS).map(c => c.split('/')[1]).join(', ')} (https://github.com/microsoft/Microsoft-Rocketbox), converted to glTF.
+People (MIT licence, notice below): **Microsoft Rocketbox** avatars ${[...Object.values(PEOPLE), ...Object.values(NPCS).map(f => f.split('/').pop())].join(', ')} and animations ${[...Object.values(PEOPLE_CLIPS), ...Object.values(NPC_CLIPS).flatMap(c => ['m', 'f'].map(x => c.replace('{s}', x)))].map(c => c.split('/')[1]).join(', ')} (https://github.com/microsoft/Microsoft-Rocketbox), converted to glTF.
 
 > Copyright (c) Microsoft Corporation. Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 

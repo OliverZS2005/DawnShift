@@ -180,6 +180,7 @@ func end_sp(won: bool, r: Dictionary) -> String:
 		r.money -= gain
 		sp.tycoon.money += gain
 		sp.wins += 1
+		CC.record_win(sp.tycoon)
 		t = "Beat %s → +%s" % [r.name, CC.fmt(gain)]
 	else:
 		var loss = sp.tycoon.money * CC.STEAL

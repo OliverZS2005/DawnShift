@@ -8,9 +8,31 @@ for (const lvl of [1, 3, 7]) {
   const row = [CC.income(t), CC.rebootCost(t), CC.prestigePoints(t), CC.bCost(t, CC.BUILDINGS[0]), CC.bUpCost(t, CC.BUILDINGS[4]), CC.upCost(t, CC.WEAPONS[1], 'dmg'), CC.offlineEarnings(t, 99999), CC.matchDistance(t, { money: 1234, level: 2, prestige: 0 })];
   CC.applyAction(t, { type: 'reboot' }); row.push(t.level, t.money, t.points); out.push(row);
 }
-if (!process.argv[2]) { console.log(JSON.stringify(out)); process.exit(0); }
-const gd = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8').replace(/^[\s\S]*PARITY /, '').split('\n')[0]);
+// quests: who's in each area, what they say and ask, and a job taken, done and handed in
+const words = [];
+for (const [level, prestige] of [[1, 0], [4, 0], [7, 3]]) {
+  const t = CC.newTycoon(); t.level = level; t.prestige = prestige; t.money = 1234.5 * Math.pow(10, level);
+  for (const b of CC.BUILDINGS) if (CC.unlocked(t, b)) t.buildings[b.id] = { count: 7 + b.unlock, level: 1 };
+  for (const area of CC.QUEST_AREAS) {
+    if (area !== 'plaza' && !t.buildings[area]) continue;
+    for (let step = 0; step < 4; step++) {
+      const k = CC.questTalk(t, area);
+      words.push([area, k.name, k.role, k.mood, k.hi, k.why, k.ask, k.take, k.done, k.reward, k.points]);
+      CC.applyAction(t, { type: 'quest', area, op: 'accept' });
+      const p = CC.questProgress(t, area); words.push([area, p[0], p[1]]);
+      CC.applyAction(t, { type: 'quest', area, op: step % 2 ? 'drop' : 'claim' });
+      CC.recordWin(t);
+    }
+  }
+}
+if (!process.argv[2]) { console.log(JSON.stringify(out)); console.log(JSON.stringify(words.slice(0, 6))); process.exit(0); }
+const text = require('fs').readFileSync(process.argv[2], 'utf8');
+const line = tag => JSON.parse(text.split('\n').find(l => l.startsWith(tag + ' ')).slice(tag.length + 1));
+const gd = line('PARITY'), gq = line('QUESTS');
 let bad = 0;
-out.forEach((row, i) => row.forEach((v, j) => { if (Math.abs(v - gd[i][j]) > 1e-9 * Math.max(1, Math.abs(v))) { bad++; console.log('MISMATCH', i, j, 'js', v, 'gd', gd[i][j]); } }));
-console.log(bad ? 'Rules differ between shared.js and rules.gd' : 'Rules match between shared.js and rules.gd');
+const same = (v, g) => typeof v === 'number' ? Math.abs(v - g) <= 1e-9 * Math.max(1, Math.abs(v)) : v === g;
+out.forEach((row, i) => row.forEach((v, j) => { if (!same(v, gd[i][j])) { bad++; console.log('MISMATCH', i, j, 'js', v, 'gd', gd[i][j]); } }));
+if (gq.length !== words.length) { bad++; console.log('MISMATCH quest count', words.length, gq.length); }
+words.forEach((row, i) => row.forEach((v, j) => { if (gq[i] && !same(v, gq[i][j])) { bad++; if (bad < 20) console.log('MISMATCH quest', i, j, 'js', v, 'gd', gq[i][j]); } }));
+console.log(bad ? 'Rules differ between shared.js and rules.gd' : `Rules match between shared.js and rules.gd (${words.length} quest checks)`);
 process.exit(bad ? 1 : 0);

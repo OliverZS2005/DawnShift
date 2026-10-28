@@ -11,7 +11,9 @@ const out = path.join(__dirname, '..', 'desktop', 'models.json');
 const LAYOUT = { arena: MODELS.cityLayout('arena'), city: MODELS.cityLayout('city') };
 const SHOP_BUILDINGS = Object.fromEntries(Object.keys(MODELS.SHOPS).map(id => [id, [0, 1, 2, 3, 4].map(ms => MODELS.lotBuilding(id, ms))]));
 const INTERIORS = Object.fromEntries(Object.keys(MODELS.SHOPS).map(id => [id, [0, 1, 2, 3, 4].map(ms => MODELS.interior(id, ms))]));
-const json = JSON.stringify({ ...MODELS, LAYOUT, SHOP_BUILDINGS, INTERIORS }, null, 1) + '\n';
+// the quest givers' words, so rules.gd needn't keep its own copy of them
+const QUEST_TEXT = require('../shared.js').QUEST_TEXT;
+const json = JSON.stringify({ ...MODELS, LAYOUT, SHOP_BUILDINGS, INTERIORS, QUEST_TEXT }, null, 1) + '\n';
 if (process.argv.includes('--check')) {
   const cur = fs.existsSync(out) ? fs.readFileSync(out, 'utf8') : '';
   if (cur !== json) { console.error('desktop/models.json is out of date: run `node tools/build-models.js`'); process.exit(1); }

@@ -185,7 +185,7 @@ function endMatch(M, winner, reason) {
   if (M.over) return; M.over = true; matches.delete(M);
   const w = M.sessions[winner].p, l = M.sessions[1 - winner].p;
   const amount = Math.min(M.pot[1 - winner], l.tycoon.money);
-  l.tycoon.money -= amount; w.tycoon.money += amount; w.wins++; l.losses++; dirty = true;
+  l.tycoon.money -= amount; w.tycoon.money += amount; w.wins++; l.losses++; CC.recordWin(w.tycoon); dirty = true;
   M.sessions.forEach((s, i) => { s.match = null; send(s.ws, { type: 'result', won: i === winner, amount, opp: M.sessions[1 - i].p.name, reason }); send(s.ws, { type: 'state', state: publicState(s.p) }); });
 }
 setInterval(() => {
