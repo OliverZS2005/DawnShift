@@ -11,7 +11,7 @@
 //     and their animations. Converting those from FBX needs Blender on the PATH (tools/people.py).
 // The downloaded files are committed, so you only need this to change or refresh the art.
 // Pass a section name to redo just that part: models, textures, skies, facades, kits, cars, guns, people, fonts
-// (kits also takes one kit: `node tools/fetch-assets.mjs kits fence`).
+// (models and kits also take names: `node tools/fetch-assets.mjs models shelves,rack`, `... kits fence`).
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -29,7 +29,10 @@ const UA = { 'User-Agent': 'CashClash-asset-fetch/1.0 (+https://github.com/Olive
 // Poly Haven scans are film-quality; these budgets keep them small enough for a web game.
 const TEX_SIZE = 512;                                    // max texture size inside models
 const SIMPLIFY = { shrub: 0.12, bench: 0.5, street_lamp: 0.15, barrier: 0.1, plastic_crate: 0.2, hydrant: 0.3, covered_car: 0.35,
-  drill_press: 0.25, generator: 0.25, compressor: 0.25, cash_register: 0.4, box: 0.2 }; // keep this fraction of triangles
+  drill_press: 0.25, generator: 0.25, compressor: 0.25, cash_register: 0.4, box: 0.2,
+  rack: 0.6, tool_cart: 0.15, tool_chest: 0.2, hand_truck: 0.2, welding_cart: 0.15, storage_cart: 0.2, fluorescent: 0.15,
+  hanging_lamp: 0.3, extinguisher: 0.25, power_box: 0.15, crate2: 0.6, propane: 0.5, coffee_cart: 0.15, bar_chair: 0.2,
+  round_table: 0.3, plant: 0.04, desk: 0.5, armchair: 0.4, crane: 0.08 }; // keep this fraction of triangles
 // Some scans ship two versions side by side (clean and weathered): keep one, centred on the origin.
 const ONE_VARIANT = { hydrant: /_aged/, trash_can: /_rust/, military_crate: /_b$/ };
 const RECENTRE = ['compressor']; // modelled away from the origin
@@ -42,6 +45,14 @@ const MODELS = {
   // the tycoon's production lines: machines, the boxes they turn out, and the till at the end
   drill_press: 'drill_press_01', generator: 'portable_generator', compressor: 'old_military_compressor',
   cash_register: 'CashRegister_01', box: 'cardboard_box_01',
+  // inside the businesses: workshop and warehouse kit, and shop and office furniture
+  shelves: 'steel_frame_shelves_01', shelves_narrow: 'steel_frame_shelves_02', rack: 'worn_metal_rack', tool_cart: 'tool_cart',
+  tool_chest: 'metal_tool_chest', hand_truck: 'hand_truck', welding_cart: 'portable_welding_cart', storage_cart: 'industrial_storage_cart',
+  fluorescent: 'mounted_fluorescent_lights', hanging_lamp: 'hanging_industrial_lamp', extinguisher: 'korean_fire_extinguisher_01',
+  wet_floor: 'WetFloorSign_01', power_box: 'power_box_01', crate2: 'wooden_crate_02', propane: 'propane_tank', cement_bag: 'cement_bag',
+  coffee_cart: 'CoffeeCart_01', bar_chair: 'bar_chair_round_01', round_table: 'round_wooden_table_01', display_shelves: 'wooden_display_shelves_01',
+  wall_shelf: 'Shelf_01', plant: 'potted_plant_01', tv: 'Television_01', desk: 'metal_office_desk', armchair: 'modern_arm_chair_01',
+  chalkboard: 'standing_chalkboard_01', crane: 'overhead_crane',
 };
 const TEXTURES = {
   concrete_floor: 'concrete_floor_worn_001', corrugated: 'corrugated_iron', metal_plate: 'metal_plate', marble: 'marble_01',
@@ -136,7 +147,8 @@ async function writeGlb(doc, rel, ratio, texSize = TEX_SIZE, drop) {
 
 fs.rmSync(TMP, { recursive: true, force: true }); fs.mkdirSync(TMP, { recursive: true });
 if (want('models')) console.log('Models (Poly Haven)');
-for (const [name, id] of want('models') ? Object.entries(MODELS) : []) {
+const pickModels = only === 'models' && process.argv[3] ? process.argv[3].split(',') : null; // `models a,b` redoes just those
+for (const [name, id] of want('models') ? Object.entries(MODELS).filter(([n]) => !pickModels || pickModels.includes(n)) : []) {
   const g = (await api(id)).gltf['1k'].gltf, dir = path.join(TMP, id);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'model.gltf'), await get(g.url));

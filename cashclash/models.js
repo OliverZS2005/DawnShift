@@ -190,10 +190,114 @@
     ailab: { kit: 'factory', floors: 4, g: 'sd', u: 'offset', sign: ['#ffffff', '#3b1f6e'] },
     dyson: { kit: 'apartments', floors: 5, g: 'ds', u: 'double', sign: ['#ffcf4a', '#3a1d05'] },
   };
+  // The doorway of each kit's door bay ("door" piece): its opening, measured from the kit (metres; the bay
+  // runs from x = -3 to 0, so its centre is 1.5 in from the bay's right end).
+  const DOORWAY = { apartments: { w: 1.79, h: 2.6 }, factory: { w: 1.49, h: 2.15 } };
   function lotBuilding(id, milestones) {
     const s = SHOPS[id], seed = [...id].reduce((a, c) => a * 31 + c.charCodeAt(0), 7) % 100000;
-    return { x: 0, z: -1.3, w: 6, d: 5, floors: s.floors + milestones, h: (s.floors + milestones) * URBAN.kit.floor, seed, kit: s.kit,
+    const b = { x: 0, z: -1.3, w: 6, d: 5, floors: s.floors + milestones, h: (s.floors + milestones) * URBAN.kit.floor, seed, kit: s.kit,
       facade: 'brick', tint: '#ffffff', faces: [{ s: 2, n: 2, g: s.g, u: s.u, d: 0 }, { s: 0, n: 2, g: 'pp', u: s.u, d: 0 }, { s: 1, n: 2, g: 'pp', u: s.u, d: 0 }] };
+    // the front door (lot coordinates, on the pad): walking through it takes you inside (interior())
+    const k = s.g.indexOf('d');
+    b.door = { x: b.w / 2 - k * URBAN.kit.bay - 1.5, z: b.z + b.d / 2, ...DOORWAY[s.kit] };
+    return b;
+  }
+
+  // ---------- Inside the businesses ----------
+  // Each business's front door leads into a room far bigger than the building (it shows through the door
+  // like a portal). interior() lays one out, in the room's own coordinates: the doorway is at the origin
+  // in the front wall (z = 0), facing +Z like the building's door, and the room runs back to z = -d.
+  // A factory hall for the industries, a shop with a counter and customers' side for the rest; the
+  // production lines (one more per milestone) run across the back. parts: plain boxes [size, centre,
+  // texture, tint]; props: models; lights: [x, y, z]; blocks: footprints you can't walk through.
+  const INSIDE = {
+    lemon: { kind: 'shop', floor: 'slate', walls: 'brick', front: 'stall' },
+    cafe: { kind: 'shop', floor: 'slate', walls: 'brick', front: 'cafe' },
+    arcade: { kind: 'shop', floor: 'concrete_floor', walls: 'plaster', front: 'arcade' },
+    bank: { kind: 'shop', floor: 'marble', walls: 'plaster', front: 'bank' },
+    fact: { kind: 'factory' }, oil: { kind: 'factory' }, space: { kind: 'factory' }, ailab: { kind: 'factory' }, dyson: { kind: 'factory' },
+  };
+  function interior(id, milestones) {
+    const I = INSIDE[id], door = DOORWAY[SHOPS[id].kit], fac = I.kind === 'factory';
+    const w = fac ? 20 : 14, d = fac ? 26 : 20, h = fac ? 7 : 4.5, r = rng(([...id].reduce((a, c) => a + c.charCodeAt(0), 0) % 1000) + 1);
+    const parts = [], props = [], lights = [], blocks = [], lines = [];
+    const box = (sx, sy, sz, x, y, z, tex, tint) => parts.push([[sx, sy, sz].map(round2), [x, y, z].map(round2), tex, tint]);
+    const prop = (model, x, y, z, ry = 0, block) => { props.push({ model, p: [x, y, z].map(round2), ry: round2(ry) }); if (block) blocks.push([x - block[0], z - block[1], x + block[0], z + block[1]].map(round2)); };
+    // the shell: floor, ceiling, walls (the front one round the doorway), skirting
+    const wallTex = I.walls || 'brick', wallTint = fac ? '#a89e94' : '#e2d9ce';
+    box(w, 0.1, d, 0, -0.05, -d / 2, I.floor || 'concrete_floor', fac ? '#9c978f' : '#d6cfc4');
+    box(w, 0.2, d, 0, h + 0.1, -d / 2, fac ? 'corrugated' : 'plaster', fac ? '#7b7f84' : '#d8d2c8');
+    box(0.3, h, d, -w / 2 - 0.15, h / 2, -d / 2, wallTex, wallTint); box(0.3, h, d, w / 2 + 0.15, h / 2, -d / 2, wallTex, wallTint);
+    box(w, h, 0.3, 0, h / 2, -d - 0.15, wallTex, wallTint);
+    const side = (w - door.w) / 2;
+    box(side, h, 0.3, -door.w / 2 - side / 2, h / 2, 0.15, wallTex, wallTint); box(side, h, 0.3, door.w / 2 + side / 2, h / 2, 0.15, wallTex, wallTint);
+    box(door.w, h - door.h, 0.3, 0, door.h + (h - door.h) / 2, 0.15, wallTex, wallTint);
+    for (const x of [-1, 1]) box(0.12, door.h + 0.1, 0.36, x * (door.w / 2 + 0.06), (door.h + 0.1) / 2, 0.15, 'metal_plate', '#3b3e42'); // door frame
+    box(door.w + 0.24, 0.12, 0.36, 0, door.h + 0.06, 0.15, 'metal_plate', '#3b3e42');
+    // production lines across the back, one more for each milestone (4 in a factory hall, 3 in a shop)
+    const n = Math.min(fac ? 4 : 3, 1 + milestones), lz = fac ? [-8, -12.5, -17, -21.5] : [-11.5, -15, -18.5];
+    const half = CITY.line.length / 2;
+    for (let k = 0; k < n; k++) {
+      lines.push({ x: fac ? -1 : 0, z: lz[k], machines: 3 });
+      blocks.push([(fac ? -1 : 0) - half - 0.15, lz[k] - 1.4, (fac ? -1 : 0) + half + 0.9, lz[k] + 0.45].map(round2));
+    }
+    if (fac) {
+      // steel columns and roof beams, the overhead crane, safety lines on the floor
+      for (const z of [-6, -12, -18, -24]) {
+        for (const x of [-6.5, 6.5]) { box(0.3, h, 0.3, x, h / 2, z, 'metal_plate', '#4a5058'); blocks.push([x - 0.15, z - 0.15, x + 0.15, z + 0.15]); }
+        box(w, 0.35, 0.25, 0, h - 0.18, z, 'metal_plate', '#4a5058');
+      }
+      prop('crane', -1, h - 1.25, -15);
+      for (const x of [-5.4, 3.4]) box(0.1, 0.01, d - 3, x, 0.006, -d / 2 - 1, null, '#d9a72a');
+      // storage along the walls
+      for (let z = -3; z > -d + 1.5; z -= 1.25) prop(z > -12 ? 'shelves_narrow' : 'shelves', -w / 2 + 0.4, 0, z, PI / 2);
+      blocks.push([-w / 2, -d, -w / 2 + 1.3, -1.5]);
+      const right = ['rack', 'rack', 'storage_cart', 'tool_cart', 'welding_cart', 'tool_chest', 'rack', 'rack', 'hand_truck', 'crate2', 'crate2', 'propane', 'propane'];
+      right.forEach((m, k) => prop(m, w / 2 - 0.6, 0, -3 - k * 1.7, -PI / 2));
+      blocks.push([w / 2 - 1.5, -d, w / 2, -1.5]);
+      for (let k = 0; k < 6; k++) prop('cement_bag', 4.6 + (k % 2) * 0.5, 0.18 * Math.floor(k / 2), -d + 1.2, PI / 2);
+      blocks.push([4.2, -d, 5.6, -d + 1.8]);
+      prop('extinguisher', -w / 2 + 0.25, 0, -1.2, PI / 2); prop('wet_floor', 2.2, 0, -3.2, r() * PI);
+      prop('power_box', w / 2 - 0.05, 1.4, -2, -PI / 2);
+      for (const z of [-8, -12.5, -17, -21.5]) for (const x of [-4.5, 2.5]) prop('hanging_lamp', x, h, z + 1.2);
+      lights.push([-1, h - 1.6, -6], [-1, h - 1.6, -12.5], [-1, h - 1.6, -19], [-7, h - 1.6, -10], [7, h - 1.6, -16]);
+    } else {
+      // the counter with the till, menu board, customers' side by the door, a partition wall to the back
+      box(6.4, 1.0, 0.7, -1.2, 0.5, -7.2, 'plaster', '#6b4a35'); box(6.6, 0.06, 0.82, -1.2, 1.03, -7.2, 'marble', '#e8e2d8');
+      blocks.push([-4.6, -7.8, 2.2, -6.6]);
+      prop('cash_register', 0.8, 1.06, -7.2, 0);
+      prop('chalkboard', 2.6, 0, -1.3, PI * 0.85); blocks.push([2.1, -1.8, 3.1, -0.8]);
+      prop('plant', -w / 2 + 0.7, 0, -1.0); prop('plant', w / 2 - 0.7, 0, -1.0);
+      box(w / 2 - 3.2, 2.4, 0.15, -w / 2 + (w / 2 - 3.2) / 2, 1.2, -9.4, 'plaster', '#b8afa4'); box(w / 2 - 3.2, 2.4, 0.15, w / 2 - (w / 2 - 3.2) / 2, 1.2, -9.4, 'plaster', '#b8afa4');
+      blocks.push([-w / 2, -9.6, -3.2, -9.2], [3.2, -9.6, w / 2, -9.2]);
+      for (let k = 0; k < 4; k++) prop('wall_shelf', -w / 2 + 1.2 + k * 1.1, 0, -9.3, 0);
+      if (I.front === 'cafe') {
+        prop('coffee_cart', w / 2 - 1.4, 0, -4.2, -PI / 2, [0.7, 1.2]);
+        for (const [x, z] of [[-4.2, -2.6], [-1.2, -4.4], [-4.4, -5.6]]) {
+          prop('round_table', x, 0, z, r(), [0.8, 0.8]);
+          for (let c = 0; c < 3; c++) { const a = c * 2.1 + r(); prop('bar_chair', x + Math.cos(a) * 0.95, 0, z + Math.sin(a) * 0.95, -a + PI / 2); }
+        }
+      } else if (I.front === 'stall') {
+        for (let k = 0; k < 4; k++) { prop('display_shelves', -w / 2 + 0.3, 0, -2 - k * 1.15, 0); prop('display_shelves', w / 2 - 0.3, 0, -2 - k * 1.15, PI); } // (the model is long along z)
+        blocks.push([-w / 2, -6.5, -w / 2 + 0.8, -1.4], [w / 2 - 0.8, -6.5, w / 2, -1.4]);
+        for (const [x, z] of [[-2.5, -3.8], [-1.4, -3.8], [-2.0, -4.4]]) prop('crate2', x, 0, z, PI / 2 + r() * 0.2);
+        blocks.push([-3.1, -4.9, -0.9, -3.3]);
+      } else if (I.front === 'arcade') {
+        for (let k = 0; k < 4; k++) {
+          for (const sgn of [-1, 1]) {
+            const x = sgn * (w / 2 - 0.55), z = -1.8 - k * 1.3;
+            box(0.8, 1.0, 1.0, x, 0.5, z, 'metal_plate', '#1d1f24'); prop('tv', x, 1.0, z, -sgn * PI / 2); prop('bar_chair', x - sgn * 1.0, 0, z, 0);
+          }
+        }
+        blocks.push([-w / 2, -6.6, -w / 2 + 1.0, -1.2], [w / 2 - 1.0, -6.6, w / 2, -1.2]);
+      } else if (I.front === 'bank') {
+        for (const x of [-4.2, 0.8]) { prop('desk', x, 0, -4.4, 0, [1.05, 0.55]); prop('armchair', x, 0, -3.1, PI); prop('armchair', x, 0, -5.4, 0); }
+        prop('plant', -1.7, 0, -4.4); prop('tv', 2.9, 1.2, -9.1, 0);
+      }
+      for (const z of [-3, -8, -13, -17.5]) for (const x of [-3.5, 3.5]) prop('fluorescent', x, h, z);
+      lights.push([-3, h - 1.1, -3.5], [3, h - 1.1, -3.5], [0, h - 1.1, -9.5], [-2.5, h - 1.1, -15], [2.5, h - 1.1, -15]);
+    }
+    return { kind: I.kind, w, d, h, door, parts, props, lights, lines, blocks };
   }
 
   // ---------- Characters & weapons (face +X) ----------
@@ -230,7 +334,11 @@
   const ASSETS = {
     skies: { day: 'sky/day.hdr', sunset: 'sky/sunset.hdr', dusk: 'sky/dusk.hdr', night: 'sky/night.hdr' },
     models: Object.fromEntries(['crate', 'military_crate', 'barrel', 'barrier', 'street_lamp', 'trash_can', 'hydrant', 'utility_box',
-      'plastic_crate', 'covered_car', 'shrub', 'bench', 'drill_press', 'generator', 'compressor', 'cash_register', 'box', ...CARS]
+      'plastic_crate', 'covered_car', 'shrub', 'bench', 'drill_press', 'generator', 'compressor', 'cash_register', 'box', ...CARS,
+      // inside the businesses
+      'shelves', 'shelves_narrow', 'rack', 'tool_cart', 'tool_chest', 'hand_truck', 'welding_cart', 'storage_cart', 'fluorescent', 'hanging_lamp',
+      'extinguisher', 'wet_floor', 'power_box', 'crate2', 'propane', 'cement_bag', 'coffee_cart', 'bar_chair', 'round_table', 'display_shelves',
+      'wall_shelf', 'plant', 'tv', 'desk', 'armchair', 'chalkboard', 'crane']
       .map(n => [n, `models/${n}.glb`])),
     characters: { hoodie: 'characters/hoodie.glb', jacket: 'characters/jacket.glb', denim: 'characters/denim.glb' },
     // realistic guns (OpenGameArt, CC0), already turned barrel-forward (-Z) and centred by tools/guns.py
@@ -239,7 +347,7 @@
     facades: ['brick', 'brick2', 'concrete', 'tower'], // textures/facade_<name>_{diff,nor,rough,metal,night,emit}.jpg
     // modelled building fronts (Poly Haven kits): one object per piece, see URBAN.kit and tools/kit.py
     kits: { apartments: 'models/kit_apartments.glb', factory: 'models/kit_factory.glb', fence: 'models/kit_fence.glb' },
-    heights: {}, // everything is already real size
+    heights: { shelves: 2.14 }, // everything else is already real size (that shelf's file is 10x)
     // The fighters: photoreal people (Microsoft Rocketbox), one per opponent. Their legs play the run,
     // walk and idle clips in the direction they move; the upper body turns to where they aim and both
     // hands hold the gun out in front (posed in code each frame, the way GTA does it).
@@ -490,5 +598,5 @@
     return [cx + Math.cos(a) * R, cz + Math.sin(a) * R, Math.atan2(-Math.sin(a), Math.cos(a))];
   }
 
-  return { BUILDINGS, LOT, SHOPS, SOLDIER, GUNS, ARENA, CITY, ASSETS, URBAN, tex, cityLayout, trafficAt, lotBuilding };
+  return { BUILDINGS, LOT, SHOPS, SOLDIER, GUNS, ARENA, CITY, ASSETS, URBAN, tex, cityLayout, trafficAt, lotBuilding, interior };
 });

@@ -7,10 +7,11 @@ const MODELS = require('../models.js');
 
 const out = path.join(__dirname, '..', 'desktop', 'models.json');
 // Functions (like tex()) are left out, so what they generate is written out as data: the city layouts,
-// and each business's building at 0-4 milestones (SHOP_BUILDINGS.<id>[milestones]).
+// and each business's building and inside at 0-4 milestones (SHOP_BUILDINGS / INTERIORS.<id>[milestones]).
 const LAYOUT = { arena: MODELS.cityLayout('arena'), city: MODELS.cityLayout('city') };
 const SHOP_BUILDINGS = Object.fromEntries(Object.keys(MODELS.SHOPS).map(id => [id, [0, 1, 2, 3, 4].map(ms => MODELS.lotBuilding(id, ms))]));
-const json = JSON.stringify({ ...MODELS, LAYOUT, SHOP_BUILDINGS }, null, 1) + '\n';
+const INTERIORS = Object.fromEntries(Object.keys(MODELS.SHOPS).map(id => [id, [0, 1, 2, 3, 4].map(ms => MODELS.interior(id, ms))]));
+const json = JSON.stringify({ ...MODELS, LAYOUT, SHOP_BUILDINGS, INTERIORS }, null, 1) + '\n';
 if (process.argv.includes('--check')) {
   const cur = fs.existsSync(out) ? fs.readFileSync(out, 'utf8') : '';
   if (cur !== json) { console.error('desktop/models.json is out of date: run `node tools/build-models.js`'); process.exit(1); }

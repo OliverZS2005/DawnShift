@@ -889,7 +889,8 @@
     const L = M.CITY.lot, P = M.CITY.pad, ray = new THREE.Raycaster(), [cx, cz] = U.city.clear;
     const lots = [], coins = [], world = new THREE.Group();
     let level = 0, sunLight, crate = null, aim = -1, t = 0, running = false, last = 0, token = 0, tycoon = null, streets = null;
-    const me = { x: L, z: 1.5 * L + 2.2, yaw: 0, pitch: -0.08, walk: 0 }, keys = {}; // in front of the arcade, the lemonade stand and coffee shop behind
+    // room: the business you're inside (-1: out in the plaza); floor: the ground under you (lots and rooms are 0.2 up)
+    const me = { x: L, z: 1.5 * L + 2.2, yaw: 0, pitch: -0.08, walk: 0, room: -1, floor: 0 }, keys = {}; // in front of the arcade
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
     scene.add(world);
     const lotPos = i => [(1 - Math.floor(i / 3)) * L, ((i % 3) - 1) * L];
@@ -898,8 +899,28 @@
       const pad = new THREE.Mesh(tiledBox(P, 0.2, P, 2), pbr('pavers', { fallback: '#b9b5ac' }).clone());
       pad.position.set(x, 0.1, z); pad.receiveShadow = true; pad.userData.lot = i; scene.add(pad);
       const holder = new THREE.Group(); holder.position.set(x, 0.2, z); scene.add(holder);
-      lots.push({ pad, holder, key: '', anims: [], x, z, line: null });
+      lots.push({ pad, holder, key: '', anims: [], x, z, door: null, portal: null, kind: 'empty', ms: 0 });
     }
+    // Inside the businesses: each owned business's front door leads into a room (M.interior) far out of
+    // town, much bigger than the building. The door shows it like a portal: a second camera, moved by the
+    // same offset as the room, draws the room into a texture that the doorway shows at screen position;
+    // walking through the doorway moves you by that offset. Only the room you're in or nearest to is built
+    // (rooms[i]); a fixed pool of lights is moved into it (changing the number of lights would recompile
+    // every shader). The sun and sky light are off while a room is drawn: the room has a roof.
+    const ROOM_AT = i => new THREE.Vector3(2000 + i * 60, 0.2, 0), rooms = [];
+    const roomLights = Array.from({ length: 5 }, () => { const l = new THREE.PointLight('#ffe6c4', 0, 20, 2); scene.add(l); return l; });
+    const roomFill = new THREE.HemisphereLight('#fff4e6', '#6b5f55', 0); scene.add(roomFill);
+    const portalRT = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType }), portalCam = new THREE.PerspectiveCamera(), drawSize = new THREE.Vector2();
+    const portalMat = new THREE.ShaderMaterial({ side: THREE.DoubleSide, uniforms: { map: { value: portalRT.texture }, res: { value: drawSize } },
+      vertexShader: 'void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'uniform sampler2D map; uniform vec2 res; void main() { gl_FragColor = texture2D(map, gl_FragCoord.xy / res); }' });
+    let sunI = 1;
+    function indoor(on) { // lighting for inside a room (on) or out in the city
+      if (sunLight) sunLight.intensity = on ? 0 : sunI;
+      scene.environmentIntensity = on ? 0.25 : 1; roomFill.intensity = on ? 0.8 : 0;
+    }
+    // the offset from lot i's door to its room's doorway
+    const roomOffset = i => { const l = lots[i]; return ROOM_AT(i).sub(new THREE.Vector3(l.x + l.door.x, 0.2, l.z + l.door.z)); };
     const coinGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.03, 20);
     const coinMat = new THREE.MeshStandardMaterial({ color: '#f5c542', metalness: 1, roughness: 0.2, transparent: true });
     const steel = new THREE.MeshStandardMaterial({ color: '#3d4045', metalness: 0.75, roughness: 0.4 });
@@ -911,7 +932,8 @@
       applySky(view, th.sky, th.exposure, () => my === token);
       scene.fog = new THREE.FogExp2(U.haze[th.sky], U.fog); // city smog: distant blocks fade out
       if (sunLight) scene.remove(sunLight, sunLight.target);
-      sunLight = sun(scene, th.sun, th.sunI, 26);
+      sunLight = sun(scene, th.sun, th.sunI, 26); sunI = th.sunI;
+      for (const r of rooms) if (r) { scene.remove(r.group); } rooms.length = 0; // rebuilt for the new level
       world.clear();
       // the business takes up a paved plaza in the middle of the city
       const plaza = new THREE.Mesh(tiledPlane(2 * cx, 2 * cz, 2.5), pbr('pavers', { tint: '#a9a399', fallback: '#77746f' })); plaza.receiveShadow = true; world.add(plaza);
@@ -935,10 +957,10 @@
       });
       for (const l of lots) l.key = ''; // rebuild buildings for the new look
     }
-    // A production line along the lot's front edge: `machines` machines on stands feeding a conveyor that
-    // runs into a till. Boxes on the belt are pooled; spawn() and tick() in frame() move them.
-    function productionLine(i, machines) {
-      const g = new THREE.Group(), half = LINE.length / 2, y = LINE.height, z = P / 2 - 0.55;
+    // A production line: `machines` machines on stands feeding a conveyor (along x, at z) that runs into a
+    // till. Boxes on the belt are pooled; frame() spawns and moves them.
+    function productionLine(i, machines, z = 0) {
+      const g = new THREE.Group(), half = LINE.length / 2, y = LINE.height;
       const part = (w, h, d, x, py, pz, mat) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, py, pz); shadows(m); g.add(m); return m; };
       const table = (w, d, x, pz) => { // steel top on four legs
         part(w, 0.05, d, x, y - 0.075, pz, steel);
@@ -999,13 +1021,34 @@
       instanceKits(kits, g);
       return g;
     }
+    // The inside of business i (lot i) at `ms` milestones, at ROOM_AT(i).
+    function buildRoom(i, ms) {
+      const R = M.interior(CC.BUILDINGS[i].id, ms), g = new THREE.Group(), batches = new Map();
+      g.position.copy(ROOM_AT(i)); scene.add(g);
+      for (const [[sx, sy, sz], [x, y, z], tex, tint] of R.parts) {
+        const key = tex + tint;
+        if (!batches.has(key)) batches.set(key, { mat: tex ? pbr(tex, { tint, fallback: tint }) : new THREE.MeshStandardMaterial({ color: tint, roughness: 0.6 }), geos: [] });
+        batches.get(key).geos.push(boxGeo(sx, sy, sz, 2.5, 2.5, x, y, z));
+      }
+      for (const { mat, geos } of batches.values()) { const m = new THREE.Mesh(mergeGeos(geos), mat); m.receiveShadow = true; g.add(m); }
+      for (const d of R.props) prop(d.model).then(o => { if (o && rooms[i] && rooms[i].group === g) { o.position.set(...d.p); o.rotation.y = d.ry; g.add(o); } });
+      const lines = R.lines.map(ln => {
+        const line = productionLine(i, ln.machines); line.group.position.set(ln.x, 0, ln.z); g.add(line.group);
+        line.till = new THREE.Vector3(ln.x + LINE.length / 2 + 0.45, LINE.height + 1, ln.z).add(g.position);
+        return line;
+      });
+      // the doorway from inside shows the plaza
+      const exit = new THREE.Mesh(new THREE.PlaneGeometry(R.door.w, R.door.h), portalMat); exit.position.set(0, R.door.h / 2, -0.01); g.add(exit);
+      return { i, ms, group: g, R, lines, exit };
+    }
     function refreshLot(i, tyc) {
       const b = CC.BUILDINGS[i], lot = lots[i];
       const n = CC.owned(tyc, b.id), lv = CC.bLevel(tyc, b.id), unl = CC.unlocked(tyc, b);
       const ms = [25, 50, 100, 200].filter(m => n >= m).length;
       const key = [unl, n > 0, ms, Math.min(lv, 6), level].join('|');
       if (lot.key === key) return;
-      lot.key = key; lot.holder.clear(); lot.anims = []; lot.line = null;
+      lot.key = key; lot.holder.clear(); lot.anims = []; lot.door = null; lot.portal = null; lot.ms = ms; lot.kind = !unl ? 'locked' : n ? 'shop' : 'empty';
+      if (rooms[i]) { scene.remove(rooms[i].group); rooms[i] = null; }
       const add = (model, x, z, s) => { const m = build(model); m.root.position.set(x, 0, z); m.root.scale.setScalar(s); lot.holder.add(m.root); lot.anims.push(...m.anims); };
       const night = M.CITY.levels[level - 1].lampsOn;
       const board = kind => { const d = M.LOT.boards[kind]; add(M.LOT[kind], 0, 0, 1); lot.holder.add(signBoard(d.text, d.colors, 1.6, 0.85, d.at, 0)); };
@@ -1013,8 +1056,12 @@
       else if (!n) board('forSale');
       else {
         // a real building from the facade kits, a floor taller for each milestone (25/50/100/200 owned)
+        const spec = M.lotBuilding(b.id, ms);
         lot.holder.add(shopBuilding(b, ms, night));
-        lot.line = productionLine(i, Math.min(3, 1 + ms)); lot.holder.add(lot.line.group);
+        // its front door: a portal into the inside (drawn by frame())
+        lot.door = spec.door;
+        lot.portal = new THREE.Mesh(new THREE.PlaneGeometry(spec.door.w, spec.door.h), portalMat);
+        lot.portal.position.set(spec.door.x, spec.door.h / 2, spec.door.z + 0.012); lot.holder.add(lot.portal);
       }
       // upgrade levels warm the paving towards sandstone
       const k = Math.min(1, lv / 6);
@@ -1033,21 +1080,44 @@
       if (!c) { c = new THREE.Mesh(coinGeo, coinMat.clone()); c.rotation.x = PI / 2; coins.push(c); scene.add(c); }
       c.visible = true; c.userData.t = 0; c.material.color.set(boom ? '#4ade80' : '#f5c542'); c.position.set(x, y, z);
     }
-    // walking: inside the plaza, not through the lots
+    // walking: round the plaza (not through the buildings and fences) or round a room; through a front door
+    // into its room and back out
+    const push = (x0, z0, x1, z1, rad) => { // out of a box, along the shallower side
+      const a = me.x - (x0 - rad), b = x1 + rad - me.x, c = me.z - (z0 - rad), d = z1 + rad - me.z;
+      if (a <= 0 || b <= 0 || c <= 0 || d <= 0) return;
+      const m = Math.min(a, b, c, d);
+      if (m === a) me.x = x0 - rad; else if (m === b) me.x = x1 + rad; else if (m === c) me.z = z0 - rad; else me.z = z1 + rad;
+    };
     function move(dt) {
       const f = (keys.w || keys.arrowup ? 1 : 0) - (keys.s || keys.arrowdown ? 1 : 0), s = (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0);
       if (!f && !s) return 0;
       const speed = keys.shift ? 7 : 4.2, len = Math.hypot(f, s), sin = Math.sin(me.yaw), cos = Math.cos(me.yaw);
+      const px = me.x, pz = me.z;
       me.x += (-sin * f + cos * s) / len * speed * dt; me.z += (-cos * f - sin * s) / len * speed * dt;
+      if (me.room >= 0) { // inside: walls, the counter and the lines; out through the doorway
+        const r = rooms[me.room], R = r.R, o = r.group.position, lx = me.x - o.x, lz = me.z - o.z, plz = pz - o.z;
+        if (plz < 0 && lz >= 0 && Math.abs(lx) < R.door.w / 2 - 0.15) { const off = roomOffset(me.room); me.x -= off.x; me.z -= off.z; me.room = -1; return speed; }
+        const inDoor = Math.abs(lx) < R.door.w / 2 - 0.15;
+        me.x = o.x + Math.max(-R.w / 2 + 0.35, Math.min(R.w / 2 - 0.35, lx)); me.z = o.z + Math.max(-R.d + 0.35, Math.min(inDoor ? 0.2 : -0.35, lz));
+        for (const [x0, z0, x1, z1] of R.blocks) push(o.x + x0, o.z + z0, o.x + x1, o.z + z1, 0.3);
+        return speed;
+      }
       const lim = cx - 0.6; me.x = Math.max(-lim, Math.min(lim, me.x)); me.z = Math.max(-lim, Math.min(lim, me.z));
-      for (const l of lots) { // push out of a lot along the shallower side
-        const h = P / 2 + 0.35, dx = me.x - l.x, dz = me.z - l.z;
-        if (Math.abs(dx) < h && Math.abs(dz) < h) { if (h - Math.abs(dx) < h - Math.abs(dz)) me.x = l.x + Math.sign(dx || 1) * h; else me.z = l.z + Math.sign(dz || 1) * h; }
+      for (let i = 0; i < lots.length; i++) {
+        const l = lots[i];
+        if (l.door && rooms[i]) { // through the front door?
+          const dz = l.z + l.door.z, dx = l.x + l.door.x;
+          if (pz > dz && me.z <= dz && Math.abs(me.x - dx) < l.door.w / 2 - 0.15) { const off = roomOffset(i); me.x += off.x; me.z += off.z; me.room = i; return speed; }
+        }
+        if (l.kind === 'locked') push(l.x - P / 2, l.z - P / 2, l.x + P / 2, l.z + P / 2, 0.35); // fenced off
+        else if (l.kind === 'shop' && !(l.door && Math.abs(me.x - l.x - l.door.x) < l.door.w / 2 - 0.15 && me.z > l.z + l.door.z)) // the building (but you can step into its doorway)
+          push(l.x - 3.05, l.z - 3.85, l.x + 3.05, l.z + 1.25, 0.3);
       }
       return speed;
     }
     // what's under the crosshair (a lot index, 'crate', or -1), within reach
     function aimed() {
+      if (me.room >= 0) return me.room; // inside a business: E and R act on it
       ray.setFromCamera({ x: 0, y: 0 }, camera); ray.far = 9;
       const targets = lots.map(l => l.pad).concat(lots.map(l => l.holder)).concat(crate ? [crate.root] : []);
       for (const h of ray.intersectObjects(targets, true)) {
@@ -1062,9 +1132,21 @@
     function frame(now) {
       if (!running) return;
       const dt = Math.min(0.05, (now - last) / 1000 || 0); last = now; t += dt;
+      // the room to have ready: the one you're in, else the nearest business whose door is within 25 m
+      let want = me.room;
+      if (want < 0) {
+        let best = 25;
+        lots.forEach((l, i) => { if (!l.door) return; const dd = Math.hypot(me.x - l.x - l.door.x, me.z - l.z - l.door.z); if (dd < best) { best = dd; want = i; } });
+      }
+      rooms.forEach((r, i) => { if (r && i !== want) { scene.remove(r.group); rooms[i] = null; } });
+      if (want >= 0 && !rooms[want]) rooms[want] = buildRoom(want, lots[want].ms);
+      const room = want >= 0 ? rooms[want] : null;
+      roomLights.forEach((l, k) => { const p = room && room.R.lights[k]; l.intensity = p ? (room.R.kind === 'factory' ? 60 : 30) : 0; if (p) l.position.set(...p).add(room.group.position); });
       const speed = move(dt); me.walk += speed * dt * 1.9;
       const bob = reduceMotion || !speed ? 0 : Math.abs(Math.cos(me.walk)) * 0.04;
-      camera.position.set(me.x, EYE_T + bob, me.z); camera.rotation.set(me.pitch, me.yaw, 0); camera.updateMatrixWorld(true);
+      const onPad = me.room >= 0 || lots.some(l => Math.abs(me.x - l.x) < P / 2 && Math.abs(me.z - l.z) < P / 2);
+      me.floor += ((onPad ? 0.2 : 0) - me.floor) * Math.min(1, dt * 12); // step up onto the paving
+      camera.position.set(me.x, me.floor + EYE_T + bob, me.z); camera.rotation.set(me.pitch, me.yaw, 0); camera.updateMatrixWorld(true);
       if (crate && Math.hypot(me.x - crate.root.position.x, me.z - crate.root.position.z) < 1.6) handlers.onCrate(); // walk into it to claim
       const a = aimed(); if (a !== aim) { aim = a; handlers.onAim(a); }
       if (streets) streets.userData.tick(t);
@@ -1073,9 +1155,8 @@
       // production lines: boxes come off the machines and ride the belt to the till (more income, more boxes)
       beltMat.map.offset.x -= dt * LINE.speed / 0.6; // 0.6 m between ribs
       const boom = tycoon && CC.eventOn(tycoon, 'boom');
-      lots.forEach((l, i) => {
-        const line = l.line; if (!line) return;
-        const inc = tycoon ? CC.bIncome(tycoon, CC.BUILDINGS[i]) : 0, half = LINE.length / 2;
+      for (const r of rooms) if (r) for (const line of r.lines) {
+        const inc = tycoon ? CC.bIncome(tycoon, CC.BUILDINGS[r.i]) : 0, half = LINE.length / 2;
         line.until -= dt * Math.min(3, 0.35 + Math.log10(inc + 1) * 0.3) * (boom ? 2 : 1);
         if (line.until <= 0 && boxModel) {
           line.until = 1;
@@ -1085,13 +1166,30 @@
         }
         for (const it of line.items) if (it.visible) {
           it.position.x += LINE.speed * dt;
-          if (it.position.x > half + 0.1) { it.visible = false; coin(l.x + half + 0.45, LINE.height + 1, l.z + line.z, boom); }
+          if (it.position.x > half + 0.1) { it.visible = false; coin(line.till.x, line.till.y, line.till.z, boom); }
         }
-      });
+      }
       for (const c of coins) if (c.visible) {
         c.userData.t += dt; c.position.y += dt * 1.2; c.rotation.z += dt * 6; c.material.opacity = 1 - c.userData.t / 1.2;
         if (c.userData.t > 1.2) c.visible = false;
       }
+      // the portal: from outside, the room seen through its door; from inside, the plaza through the doorway
+      if (room && (me.room >= 0 || lots[want].portal)) {
+        view.renderer.getDrawingBufferSize(drawSize);
+        const pw = Math.max(1, drawSize.x >> 1), ph = Math.max(1, drawSize.y >> 1);
+        if (portalRT.width !== pw || portalRT.height !== ph) portalRT.setSize(pw, ph);
+        const off = roomOffset(want), inside = me.room >= 0, hide = inside ? lots[want].holder : null;
+        portalCam.copy(camera); portalCam.position.addScaledVector(off, inside ? -1 : 1); portalCam.updateMatrixWorld(true);
+        const quads = [...rooms.map(r => r && r.exit), ...lots.map(l => l.portal)].filter(Boolean);
+        quads.forEach(q => { q.visible = false; }); if (hide) hide.visible = false;
+        indoor(!inside);
+        const prev = view.renderer.getRenderTarget(); view.renderer.setRenderTarget(portalRT); view.renderer.render(scene, portalCam); view.renderer.setRenderTarget(prev);
+        if (hide) hide.visible = true;
+      }
+      // only the nearest door stands open (the portal texture shows its room); the others show their doors
+      lots.forEach((l, i) => { if (l.portal) l.portal.visible = me.room < 0 && i === want; });
+      rooms.forEach(r => { if (r) r.exit.visible = me.room === r.i; });
+      indoor(me.room >= 0);
       view.render(dt);
       requestAnimationFrame(frame);
     }
@@ -1115,8 +1213,14 @@
     return {
       update,
       start() { if (!running) { running = true; last = performance.now(); requestAnimationFrame(frame); } },
+      get room() { return me.room; }, // which business you're inside (-1: none), and where you are: for tests
+      get spot() { return [me.x, me.z]; },
       stop() { running = false; for (const k in keys) keys[k] = false; if (locked()) document.exitPointerLock(); },
-      place(x, z, yaw = me.yaw, pitch = me.pitch) { Object.assign(me, { x, z, yaw, pitch }); }, // for tests and screenshots
+      // for tests and screenshots: x, z in the plaza, or in room `room`'s own coordinates
+      place(x, z, yaw = me.yaw, pitch = me.pitch, room = -1) {
+        if (room >= 0) { const o = ROOM_AT(room); x += o.x; z += o.z; }
+        Object.assign(me, { x, z, yaw, pitch, room, floor: room >= 0 ? 0.2 : me.floor });
+      },
     };
   }
 
