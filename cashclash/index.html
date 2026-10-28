@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DawnShift</title>
+<title>Hustlefront</title>
 <style>
   :root {
     --bg: #12141a; --panel: #1b1f29; --panel2: #232836; --line: #2e3446;
@@ -141,7 +141,7 @@
 </head>
 <body>
 <header>
-  <h1>🌅 DawnShift</h1>
+  <h1>💼 Hustlefront</h1>
   <div><div class="money" id="money">$0</div><div class="rate" id="rate">+$0/s</div></div>
   <span class="mode" id="modePill">Singleplayer</span>
   <nav>
@@ -239,7 +239,7 @@ function onNet(n, m) {
 }
 
 // ---------- Cloud sync (web <-> desktop) ----------
-// Your singleplayer game and multiplayer logins are stored under a sync code on a DawnShift server.
+// Your singleplayer game and multiplayer logins are stored under a sync code on a Hustlefront server.
 // Every device pushes its save with the version it last saw; if another device saved since, the
 // server hands back the newer save and we load it instead (play on one device at a time).
 const httpBase = u => normUrl(u).replace(/^ws/, 'http');
@@ -403,10 +403,10 @@ function renderPlay() {
   </div>${choice}
   <div class="card" style="margin-top:12px"><h3>☁️ Sync with desktop</h3>
     ${SYNC ? `<p>Sync code <b style="font-size:18px;letter-spacing:2px">${SYNC.code}</b> on <span class="muted">${esc(SYNC.server)}</span></p>
-      <p class="muted">Enter this code in the DawnShift desktop app (or another browser) to share your singleplayer game and multiplayer logins.
+      <p class="muted">Enter this code in the Hustlefront desktop app (or another browser) to share your singleplayer game and multiplayer logins.
       ${SYNC.err ? `<span class="loss">Last sync failed: ${esc(SYNC.err)}</span>` : SYNC.at ? `Last synced ${new Date(SYNC.at).toLocaleTimeString()}.` : ''} Play on one device at a time.</p>
       <div class="row"><button data-sync-now>Sync now</button><button class="danger" data-sync-off>Stop syncing</button></div>`
-    : `<p class="muted">Keep this game and the desktop app in sync through a DawnShift server. Create a code here, or enter the code shown in your desktop app.</p>
+    : `<p class="muted">Keep this game and the desktop app in sync through a Hustlefront server. Create a code here, or enter the code shown in your desktop app.</p>
       <label>Sync server</label><input id="syncSrv" value="${esc(store.get('cc_server') || defaultServer)}">
       <label>Sync code (to link an existing one)</label><input id="syncCode" maxlength="10" placeholder="e.g. K7Q2M9XPLR" style="text-transform:uppercase">
       <div class="row"><button class="primary" data-sync-create>Create new sync code</button><button data-sync-link>Link with code</button></div>`}

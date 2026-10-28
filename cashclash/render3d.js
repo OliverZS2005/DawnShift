@@ -12,7 +12,7 @@
 
   // ---------- Asset loading (cached) ----------
   const cache = new Map();
-  const once = (key, fn) => { if (!cache.has(key)) cache.set(key, ASSETS_OK ? fn().catch(e => { console.warn('DawnShift: could not load', key, e); return null; }) : Promise.resolve(null)); return cache.get(key); };
+  const once = (key, fn) => { if (!cache.has(key)) cache.set(key, ASSETS_OK ? fn().catch(e => { console.warn('Hustlefront: could not load', key, e); return null; }) : Promise.resolve(null)); return cache.get(key); };
   let gltfLoader, rgbeLoader, texLoader;
   function loaders() { if (!gltfLoader) { gltfLoader = new THREE.GLTFLoader(); rgbeLoader = new THREE.RGBELoader(); texLoader = new THREE.TextureLoader(); } }
   const loadGLB = rel => (loaders(), once('glb:' + rel, () => gltfLoader.loadAsync(BASE + rel)));

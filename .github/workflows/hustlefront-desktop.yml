@@ -1,19 +1,19 @@
-# Builds the DawnShift desktop app (Godot) for Windows, Mac and Linux on every change to DawnShift,
-# and publishes them as the "dawnshift-latest" release (Releases page). A release, unlike workflow
+# Builds the Hustlefront desktop app (Godot) for Windows, Mac and Linux on every change to the game,
+# and publishes them as the "hustlefront-latest" release (Releases page). A release, unlike workflow
 # artifacts, doesn't count against the account's Actions storage quota.
-name: DawnShift desktop
+name: Hustlefront desktop
 
 on:
   push:
     branches: [claude/optimistic-dirac-563sig]
-    paths: ['cashclash/**', '.github/workflows/dawnshift-desktop.yml']
+    paths: ['cashclash/**', '.github/workflows/hustlefront-desktop.yml']
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: dawnshift-desktop
+  group: hustlefront-desktop
   cancel-in-progress: true
 
 env:
@@ -55,9 +55,9 @@ jobs:
       - name: Export
         run: |
           mkdir -p build/windows build/linux build/mac
-          godot --headless --path . --export-release "Windows Desktop" build/windows/DawnShift.exe
-          godot --headless --path . --export-release "Linux" build/linux/DawnShift.x86_64
-          godot --headless --path . --export-release "macOS" build/mac/DawnShift.zip
+          godot --headless --path . --export-release "Windows Desktop" build/windows/Hustlefront.exe
+          godot --headless --path . --export-release "Linux" build/linux/Hustlefront.x86_64
+          godot --headless --path . --export-release "macOS" build/mac/Hustlefront.zip
           ls -la build/*
 
       - name: Publish the release
@@ -66,29 +66,30 @@ jobs:
           RUN: ${{ github.run_number }}
         run: |
           mkdir -p out
-          cp build/windows/DawnShift.exe out/DawnShift-Windows.exe
-          cp build/linux/DawnShift.x86_64 out/DawnShift-Linux.x86_64
-          cp build/mac/DawnShift.zip out/DawnShift-Mac.zip
+          cp build/windows/Hustlefront.exe out/Hustlefront-Windows.exe
+          cp build/linux/Hustlefront.x86_64 out/Hustlefront-Linux.x86_64
+          cp build/mac/Hustlefront.zip out/Hustlefront-Mac.zip
           cat > notes.md <<'EOF'
-          DawnShift for your computer. Pick the file for your system:
+          Hustlefront for your computer. Pick the file for your system:
 
           | Computer | File |
           |---|---|
-          | Windows | `DawnShift-Windows.exe` |
-          | Mac (Apple chip or Intel) | `DawnShift-Mac.zip` |
-          | Linux | `DawnShift-Linux.x86_64` |
+          | Windows | `Hustlefront-Windows.exe` |
+          | Mac (Apple chip or Intel) | `Hustlefront-Mac.zip` |
+          | Linux | `Hustlefront-Linux.x86_64` |
 
           **Windows:** open the `.exe`. If Windows says it protected your PC, click **More info → Run anyway**.
 
-          **Mac:** unzip it, then right-click **DawnShift** and choose **Open**, then **Open** again (it isn't signed with a paid Apple certificate).
+          **Mac:** unzip it, then right-click **Hustlefront** and choose **Open**, then **Open** again (it isn't signed with a paid Apple certificate).
 
-          **Linux:** make it executable (`chmod +x DawnShift-Linux.x86_64`) and run it.
+          **Linux:** make it executable (`chmod +x Hustlefront-Linux.x86_64`) and run it.
 
-          Singleplayer works offline. For multiplayer and syncing with the web version, join a DawnShift server from the Play tab.
+          Singleplayer works offline. For multiplayer and syncing with the web version, join a Hustlefront server from the Play tab.
           EOF
+          gh release delete hustlefront-latest --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
+          gh release delete cashclash-latest --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true # the old names' releases
           gh release delete dawnshift-latest --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
-          gh release delete cashclash-latest --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true # the old name's release
-          gh release create dawnshift-latest out/* -R "$GITHUB_REPOSITORY" \
+          gh release create hustlefront-latest out/* -R "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" --prerelease \
-            --title "DawnShift desktop (build $RUN)" \
+            --title "Hustlefront desktop (build $RUN)" \
             --notes-file notes.md

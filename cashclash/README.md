@@ -1,8 +1,8 @@
-# 🌅 DawnShift
+# 💼 Hustlefront
 
 A money tycoon with a first-person arena shooter. Win a battle and you take 10% of your opponent's money; lose and they take 10% of yours.
 
-(It used to be called Cash Clash, a name another game already has. The code still lives in the `cashclash` folder, and saves keep their old file names so nobody loses progress.)
+(It used to be called Cash Clash, a name another game already has. The code still lives in the `cashclash` folder, and saves keep their old file names; the desktop app copies a save from its old folder the first time it starts, so nobody loses progress.)
 
 ## Fights (first person)
 | Key | Does |
@@ -36,13 +36,13 @@ Both the web and desktop versions are fully 3D and aim for a GTA IV look: photor
 
 ## Desktop app (Godot)
 The desktop version lives in [`desktop/`](desktop/). It's a Godot 4.3 project with the same game, the same save format and the same multiplayer protocol, so desktop and web players fight each other on the same servers.
-- **Download:** every change builds Windows, Mac and Linux versions with the *DawnShift desktop* GitHub workflow and publishes them as the [dawnshift-latest release](https://github.com/OliverZS2005/DawnShift/releases/tag/dawnshift-latest). The Mac build isn't signed with a paid certificate, so right-click it and choose **Open** the first time.
+- **Download:** every change builds Windows, Mac and Linux versions with the *Hustlefront desktop* GitHub workflow and publishes them as the [hustlefront-latest release](https://github.com/OliverZS2005/DawnShift/releases/tag/hustlefront-latest). The Mac build isn't signed with a paid certificate, so right-click it and choose **Open** the first time.
 - **Graphics:** the desktop app renders with Vulkan (Forward+; Macs run it through MoltenVK), which adds screen-space bounce light, reflections on smooth floors, volumetric haze and light shining through the grass. A computer with no Vulkan support at all falls back to OpenGL with simpler lighting instead of refusing to start.
 - **Run from source:** open `desktop/project.godot` in Godot 4.3+ and press Play.
 - `desktop/rules.gd` is a port of `shared.js`. CI fails if the two ever calculate different numbers (`tests/parity.gd` vs. `tests/parity.js`).
 
 ## Sync between web and desktop
-In the 🎮 Play tab, under **Sync**, create a sync code on one device and enter it on the other. Your singleplayer game and your multiplayer logins are then stored on a DawnShift server under that code and stay in sync. Each device pushes its save every 20 seconds and when you close it, and loads the other device's progress if that's newer. Play on one device at a time; if both play at once, the device that saves second loses its progress since the last sync.
+In the 🎮 Play tab, under **Sync**, create a sync code on one device and enter it on the other. Your singleplayer game and your multiplayer logins are then stored on a Hustlefront server under that code and stay in sync. Each device pushes its save every 20 seconds and when you close it, and loads the other device's progress if that's newer. Play on one device at a time; if both play at once, the device that saves second loses its progress since the last sync.
 
 ## Singleplayer
 Run `npm start` and open http://localhost:8080. Singleplayer runs entirely on your PC and you fight computer rivals.
@@ -67,7 +67,7 @@ Players can open `http://<your-ip>:8080` or type that address into the Play tab.
 | Env var | Default | Meaning |
 |---|---|---|
 | `PORT` | 8080 | Port to listen on |
-| `SERVER_NAME` | DawnShift Server | Name shown to players |
+| `SERVER_NAME` | Hustlefront Server | Name shown to players |
 | `DATA_FILE` | ./players.json | Where player profiles are saved |
 | `SYNC_FILE` | next to `DATA_FILE`, `syncs.json` | Where sync codes and their saves are kept |
 | `ALLOW_IMPORT` | 1 | Set to `0` to forbid importing singleplayer saves (they're edited locally, so players could cheat) |

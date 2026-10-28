@@ -60,7 +60,19 @@ func _read_json(path: String):
 	var f = FileAccess.open(path, FileAccess.READ)
 	return JSON.parse_string(f.get_as_text()) if f else null
 
+# Godot keeps user:// in a folder named after the game, so the old names' folders hold older saves:
+# copy them over once.
+func _move_old_saves() -> void:
+	var dir = OS.get_user_data_dir()
+	for old in ["DawnShift", "Cash Clash"]:
+		var from = dir.get_base_dir().path_join(old)
+		for p in [SAVE_PATH, SETTINGS_PATH]:
+			var file = p.get_file()
+			if not FileAccess.file_exists(p) and FileAccess.file_exists(from.path_join(file)):
+				DirAccess.copy_absolute(from.path_join(file), dir.path_join(file))
+
 func _load() -> void:
+	_move_old_saves()
 	var s = _read_json(SAVE_PATH)
 	sp = s if typeof(s) == TYPE_DICTIONARY and s.has("tycoon") else fresh_sp()
 	_normalize_sp()
