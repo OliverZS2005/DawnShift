@@ -1,4 +1,4 @@
-// Downloads the CC0 art Cash Clash uses into desktop/assets/ (shared by the web and desktop versions).
+// Downloads the CC0 art DawnShift uses into desktop/assets/ (shared by the web and desktop versions).
 //   cd cashclash && npm install && node tools/fetch-assets.mjs
 // Sources (all CC0 / public domain):
 //   * Poly Haven (https://polyhaven.com): photo-scanned props, PBR textures and HDRI skies
@@ -24,7 +24,7 @@ import sharp from 'sharp';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'desktop', 'assets');
 const TMP = path.join(ROOT, '..', '.asset-tmp');
-const UA = { 'User-Agent': 'CashClash-asset-fetch/1.0 (+https://github.com/OliverZS2005/ClaudeCodeIsTuff)' };
+const UA = { 'User-Agent': 'DawnShift-asset-fetch/1.0 (+https://github.com/OliverZS2005/DawnShift)' };
 
 // Poly Haven scans are film-quality; these budgets keep them small enough for a web game.
 const TEX_SIZE = 512;                                    // max texture size inside models

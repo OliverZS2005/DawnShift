@@ -1,19 +1,19 @@
-# Builds the Cash Clash desktop app (Godot) for Windows, Mac and Linux on every change to Cash Clash,
-# and publishes them as the "cashclash-latest" release (Releases page). A release, unlike workflow
+# Builds the DawnShift desktop app (Godot) for Windows, Mac and Linux on every change to DawnShift,
+# and publishes them as the "dawnshift-latest" release (Releases page). A release, unlike workflow
 # artifacts, doesn't count against the account's Actions storage quota.
-name: Cash Clash desktop
+name: DawnShift desktop
 
 on:
   push:
     branches: [claude/optimistic-dirac-563sig]
-    paths: ['cashclash/**', '.github/workflows/cashclash-desktop.yml']
+    paths: ['cashclash/**', '.github/workflows/dawnshift-desktop.yml']
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: cashclash-desktop
+  group: dawnshift-desktop
   cancel-in-progress: true
 
 env:
@@ -55,9 +55,9 @@ jobs:
       - name: Export
         run: |
           mkdir -p build/windows build/linux build/mac
-          godot --headless --path . --export-release "Windows Desktop" build/windows/CashClash.exe
-          godot --headless --path . --export-release "Linux" build/linux/CashClash.x86_64
-          godot --headless --path . --export-release "macOS" build/mac/CashClash.zip
+          godot --headless --path . --export-release "Windows Desktop" build/windows/DawnShift.exe
+          godot --headless --path . --export-release "Linux" build/linux/DawnShift.x86_64
+          godot --headless --path . --export-release "macOS" build/mac/DawnShift.zip
           ls -la build/*
 
       - name: Publish the release
@@ -66,28 +66,29 @@ jobs:
           RUN: ${{ github.run_number }}
         run: |
           mkdir -p out
-          cp build/windows/CashClash.exe out/CashClash-Windows.exe
-          cp build/linux/CashClash.x86_64 out/CashClash-Linux.x86_64
-          cp build/mac/CashClash.zip out/CashClash-Mac.zip
+          cp build/windows/DawnShift.exe out/DawnShift-Windows.exe
+          cp build/linux/DawnShift.x86_64 out/DawnShift-Linux.x86_64
+          cp build/mac/DawnShift.zip out/DawnShift-Mac.zip
           cat > notes.md <<'EOF'
-          Cash Clash for your computer. Pick the file for your system:
+          DawnShift for your computer. Pick the file for your system:
 
           | Computer | File |
           |---|---|
-          | Windows | `CashClash-Windows.exe` |
-          | Mac (Apple chip or Intel) | `CashClash-Mac.zip` |
-          | Linux | `CashClash-Linux.x86_64` |
+          | Windows | `DawnShift-Windows.exe` |
+          | Mac (Apple chip or Intel) | `DawnShift-Mac.zip` |
+          | Linux | `DawnShift-Linux.x86_64` |
 
           **Windows:** open the `.exe`. If Windows says it protected your PC, click **More info → Run anyway**.
 
-          **Mac:** unzip it, then right-click **Cash Clash** and choose **Open**, then **Open** again (it isn't signed with a paid Apple certificate).
+          **Mac:** unzip it, then right-click **DawnShift** and choose **Open**, then **Open** again (it isn't signed with a paid Apple certificate).
 
-          **Linux:** make it executable (`chmod +x CashClash-Linux.x86_64`) and run it.
+          **Linux:** make it executable (`chmod +x DawnShift-Linux.x86_64`) and run it.
 
-          Singleplayer works offline. For multiplayer and syncing with the web version, join a Cash Clash server from the Play tab.
+          Singleplayer works offline. For multiplayer and syncing with the web version, join a DawnShift server from the Play tab.
           EOF
-          gh release delete cashclash-latest --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
-          gh release create cashclash-latest out/* -R "$GITHUB_REPOSITORY" \
+          gh release delete dawnshift-latest --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
+          gh release delete cashclash-latest --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true # the old name's release
+          gh release create dawnshift-latest out/* -R "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" --prerelease \
-            --title "Cash Clash desktop (build $RUN)" \
+            --title "DawnShift desktop (build $RUN)" \
             --notes-file notes.md

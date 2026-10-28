@@ -49,7 +49,7 @@ func _ready() -> void:
 	var hb = HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 16)
 	header.add_child(hb)
-	hb.add_child(_label("💰 Cash Clash", 22, C_TEXT))
+	hb.add_child(_label("🌅 DawnShift", 22, C_TEXT))
 	var mv = VBoxContainer.new()
 	mv.add_theme_constant_override("separation", 0)
 	money_lbl = _label("$0", 22, C_GOLD)
@@ -293,7 +293,7 @@ func _render_play() -> void:
 		r.add_child(_button("Playing" if Game.mode == "mp" else "Resume multiplayer", func(): Game.mode = "mp"; render(), Game.mode == "mp"))
 		r.add_child(_button("Disconnect", Game.disconnect_server))
 	else:
-		c.add_child(_label("Battle real players. Join any Cash Clash server — anyone can host one.", 13, C_MUTED, true))
+		c.add_child(_label("Battle real players. Join any DawnShift server — anyone can host one.", 13, C_MUTED, true))
 		var srv = _input_field(c, "Server address", Game.settings.server)
 		var nm = _input_field(c, "Your name", Game.settings.name, "Player")
 		r = _row(c)
@@ -334,7 +334,7 @@ func _render_play() -> void:
 		r.add_child(_button("Sync now", func(): Game.sync_now()))
 		r.add_child(_button("Stop syncing", Game.sync_off, false, false, true))
 	else:
-		c.add_child(_label("Keep this app and the web version in sync through a Cash Clash server. Create a code here, or enter the code shown in the web version.", 13, C_MUTED, true))
+		c.add_child(_label("Keep this app and the web version in sync through a DawnShift server. Create a code here, or enter the code shown in the web version.", 13, C_MUTED, true))
 		var ss = _input_field(c, "Sync server", Game.settings.server)
 		var code = _input_field(c, "Sync code (to link an existing one)", "", "e.g. K7Q2M9XPLR")
 		r = _row(c)

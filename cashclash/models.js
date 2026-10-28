@@ -1,4 +1,4 @@
-// 3D models for Cash Clash, described as data so the web renderer (render3d.js, Three.js) and the
+// 3D models for DawnShift, described as data so the web renderer (render3d.js, Three.js) and the
 // desktop renderer (desktop/render3d.gd, Godot) build identical scenes from one source.
 // Run `node tools/build-models.js` after editing to refresh desktop/models.json.
 //

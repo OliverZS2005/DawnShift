@@ -1,4 +1,4 @@
-// Entry point for vendor/three.bundle.js: Three.js plus the add-ons Cash Clash uses, exposed as
+// Entry point for vendor/three.bundle.js: Three.js plus the add-ons DawnShift uses, exposed as
 // the global THREE so the page works as plain <script> tags. Rebuild with `npm run build:three`.
 import * as THREE_CORE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';

@@ -1,4 +1,4 @@
-// Cash Clash multiplayer server. Anyone can host one:
+// DawnShift multiplayer server. Anyone can host one:
 //   npm install && npm start            (PORT=8080 by default)
 // It serves the game page too, so players can just open http://<host>:<port>.
 // Env: PORT, DATA_FILE (default ./players.json), ALLOW_IMPORT=0 to forbid importing singleplayer saves.
@@ -12,7 +12,7 @@ const CC = require('./shared.js');
 const PORT = +process.env.PORT || 8080;
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'players.json');
 const ALLOW_IMPORT = process.env.ALLOW_IMPORT !== '0';
-const SERVER_NAME = process.env.SERVER_NAME || 'Cash Clash Server';
+const SERVER_NAME = process.env.SERVER_NAME || 'DawnShift Server';
 const TICK = CC.TICK;
 
 // ---------- Persistence ----------
