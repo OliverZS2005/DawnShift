@@ -1,5 +1,6 @@
-# Builds the Hustlefront app (Godot) for Windows, Mac, Linux and Android on every change to the game,
-# and publishes them as the "hustlefront-latest" release (Releases page). A release, unlike workflow
+# Builds the Hustlefront app (Godot) for Windows, Mac, Linux, Android and iPhone on every change to the
+# game, and publishes them as the "hustlefront-latest" release (Releases page). The iPhone app is compiled
+# by a second, short job on a Mac (only Xcode can), from the Xcode project the first job exports. A release, unlike workflow
 # artifacts, doesn't count against the account's Actions storage quota.
 name: Hustlefront desktop
 
@@ -101,6 +102,19 @@ jobs:
           godot --headless --path . --export-release "Android" build/android/Hustlefront.apk
           ls -la build/android
 
+      # The iPhone app: Godot writes an Xcode project here; the iphone job below compiles it on a Mac.
+      - name: Export for iPhone (Xcode project)
+        run: |
+          mkdir -p build/ios
+          godot --headless --path . --export-release "iOS" build/ios/Hustlefront.ipa
+          ls -la build/ios
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hustlefront-ios-project
+          path: cashclash/desktop/build/ios
+          retention-days: 1 # only for the iphone job; keeps the Actions storage quota free
+
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -120,6 +134,7 @@ jobs:
           | Mac (Apple chip or Intel) | `Hustlefront-Mac.zip` |
           | Linux | `Hustlefront-Linux.x86_64` |
           | Android phone or tablet (64-bit, Android 7+) | `Hustlefront-Android.apk` |
+          | iPhone or iPad (iOS 14+) | `Hustlefront-iPhone.ipa` (added a few minutes after the others) |
 
           **Windows:** open the `.exe`. If Windows says it protected your PC, click **More info → Run anyway**.
 
@@ -128,6 +143,8 @@ jobs:
           **Linux:** make it executable (`chmod +x Hustlefront-Linux.x86_64`) and run it.
 
           **Android:** open this page on your phone, tap `Hustlefront-Android.apk`, then open the download. Android asks you to allow installs from your browser the first time (**Settings → Install unknown apps**). New builds install over the old one and keep your game.
+
+          **iPhone:** Apple only lets signed apps onto an iPhone, so the `.ipa` gets signed with your own Apple ID while you install it. On a computer, install [Sideloadly](https://sideloadly.io) (Windows or Mac), plug in your iPhone, drop `Hustlefront-iPhone.ipa` on it and sign in with your Apple ID. Then on the iPhone: **Settings → General → VPN & Device Management**, trust your Apple ID, and turn on **Settings → Privacy & Security → Developer Mode**. With a free Apple ID the app runs for 7 days, then install it again the same way (your game stays); a paid Apple Developer account makes it a year. [AltStore](https://altstore.io) works too and can refresh it for you.
 
           Singleplayer works offline. For multiplayer and syncing with the web version, join a Hustlefront server from the Play tab.
           EOF
@@ -138,3 +155,32 @@ jobs:
             --target "$GITHUB_SHA" --prerelease \
             --title "Hustlefront (build $RUN)" \
             --notes-file notes.md
+
+  # Compiles the Xcode project from the export job into an unsigned iPhone app (.ipa) and adds it to the
+  # release. Unsigned because signing needs an Apple account: you sign it with yours as you install it.
+  iphone:
+    needs: export
+    runs-on: macos-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: hustlefront-ios-project
+          path: ios
+
+      - name: Build the iPhone app
+        working-directory: ios
+        shell: bash
+        run: |
+          proj=$(ls -d *.xcodeproj | head -1)
+          name=$(basename "$proj" .xcodeproj)
+          xcodebuild -project "$proj" -scheme "$name" -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath dd -quiet CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" build
+          mkdir Payload
+          cp -R "dd/Build/Products/Release-iphoneos/$name.app" Payload/
+          zip -qry ../Hustlefront-iPhone.ipa Payload
+          ls -la ..
+
+      - name: Add it to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload hustlefront-latest Hustlefront-iPhone.ipa --clobber -R "$GITHUB_REPOSITORY"
