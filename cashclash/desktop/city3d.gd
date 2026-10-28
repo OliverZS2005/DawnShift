@@ -104,6 +104,9 @@ func _init() -> void:
 	portal_mat.shader = Shader.new()
 	portal_mat.shader.code = PORTAL_SHADER
 	portal_mat.set_shader_parameter("portal", pv.get_texture())
+	R3D.options_changed.connect(func():
+		if portal_cam.environment:
+			R3D.tune_env(portal_cam.environment))
 
 # ---------- People ----------
 # A Rocketbox townsperson (clips idle, walk, talk, work). It's turned to face +Z on its first frame.
@@ -160,10 +163,13 @@ func _face_to(p: Dictionary, x: float, z: float, dt: float) -> void: # turn smoo
 	var want_y = atan2(x - w.x, z - w.z) - p.root.get_parent().global_rotation.y
 	p.root.rotation.y += wrapf(want_y - p.root.rotation.y, -PI, PI) * min(1.0, dt * 6)
 
-# people walking a closed path
+# people walking a closed path (with fewer passers-by, every other one stays home)
 func _walkers(list: Array, holder: Node3D, scale_seed: int) -> Array:
 	var out = []
+	var fewer = R3D.opts().crowd != "all"
 	for k in list.size():
+		if fewer and k % 2 == 1:
+			continue
 		var w = list[k]
 		var p = _townsperson(w.who, 0.95 + ((k + scale_seed) % 5) * 0.025)
 		holder.add_child(p.root)
@@ -331,7 +337,8 @@ func _layout_overlay() -> void:
 	prompt.position = Vector2((size.x - prompt.size.x) / 2, size.y / 2 + 22)
 	hint.reset_size()
 	hint.position = Vector2(12, size.y - hint.size.y - 8)
-	hint.visible = not own_mouse and talking == null
+	hint.visible = not own_mouse and talking == null and R3D.opts().hints
+	dot.color = Color(R3D.M.SETTINGS.CROSSHAIR[R3D.opts().crosshair], 0.9)
 	talk_panel.reset_size()
 	talk_panel.position = Vector2((size.x - talk_panel.size.x) / 2, size.y - talk_panel.size.y - 18)
 
@@ -349,8 +356,10 @@ func _set_level(lv: int) -> void:
 	var pe: Environment = v.env.environment.duplicate()
 	pe.tonemap_mode = Environment.TONE_MAPPER_LINEAR
 	pe.tonemap_exposure = 1.0
-	pe.glow_enabled = false
-	pe.adjustment_enabled = false
+	pe.set_meta("exposure", 1.0)
+	pe.set_meta("no_glow", true)
+	pe.set_meta("no_grade", true)
+	R3D.tune_env(pe)
 	portal_cam.environment = pe
 	for r in rooms.values():
 		r.group.queue_free()
@@ -511,7 +520,7 @@ func _build_room(i: int, ms: int) -> Dictionary:
 	for w in walking:
 		_layers(w.p.root, ROOM_LAYER)
 	_layers(giver.root, ROOM_LAYER)
-	return {"i": i, "ms": ms, "group": g, "R": R, "lines": lines, "exit": exit, "crew": crew, "walking": walking, "giver": giver}
+	return {"i": i, "ms": ms, "group": g, "R": R, "lines": lines, "exit": exit, "crew": crew, "walking": walking, "giver": giver, "crowd": R3D.opts().crowd}
 
 func _refresh_lot(i: int, tyc: Dictionary) -> void:
 	var b = CC.BUILDINGS[i]
@@ -574,7 +583,7 @@ func update_city(tyc: Dictionary) -> void:
 	tycoon = tyc
 	if int(tyc.level) != level:
 		_set_level(int(tyc.level))
-	var pk = "%d|%s" % [CC.reboots(tyc), CC.quest_giver(tyc, "plaza").name] # a new person each reboot
+	var pk = "%d|%s|%s" % [CC.reboots(tyc), CC.quest_giver(tyc, "plaza").name, R3D.opts().crowd] # a new person each reboot
 	if pk != plaza_key:
 		plaza_key = pk
 		if plaza_giver != null:
@@ -816,7 +825,7 @@ func _process(dt: float) -> void:
 				best = dd
 				want = i
 	for i in rooms.keys():
-		if i != want:
+		if i != want or rooms[i].crowd != R3D.opts().crowd:
 			rooms[i].group.queue_free()
 			rooms.erase(i)
 	if want >= 0 and not rooms.has(want):
@@ -982,8 +991,10 @@ func _input(e: InputEvent) -> void:
 	if own_mouse and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		own_mouse = false
 	if e is InputEventMouseMotion and own_mouse:
-		me.yaw -= e.relative.x * SENS
-		me.pitch = clamp(me.pitch - e.relative.y * SENS, -1.3, 1.3)
+		var o = R3D.opts()
+		var k = SENS * o.sens / 100.0
+		me.yaw -= e.relative.x * k
+		me.pitch = clamp(me.pitch - e.relative.y * k * (-1 if o.invert else 1), -1.3, 1.3)
 	elif e is InputEventMouseButton and own_mouse and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
 		# the captured mouse sits wherever it was clicked; send clicks here even if it is over the cards
 		if talking != null:

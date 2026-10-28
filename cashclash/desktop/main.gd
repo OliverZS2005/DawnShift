@@ -1,4 +1,4 @@
-# Desktop UI. Built in code and laid out like the web version: Play, Tycoon, Armory, Battle, Reboot.
+# Desktop UI. Built in code and laid out like the web version: Play, Tycoon, Armory, Battle, Reboot, Settings.
 extends Control
 
 const C_BG = Color("#12141a")
@@ -12,7 +12,7 @@ const C_GREEN = Color("#4ade80")
 const C_RED = Color("#f87171")
 const C_BLUE = Color("#60a5fa")
 
-const TABS = [["play", "🎮 Play"], ["tycoon", "🏭 Tycoon"], ["armory", "🔫 Armory"], ["battle", "⚔️ Battle"], ["reboot", "🔄 Reboot"]]
+const TABS = [["play", "🎮 Play"], ["tycoon", "🏭 Tycoon"], ["armory", "🔫 Armory"], ["battle", "⚔️ Battle"], ["reboot", "🔄 Reboot"], ["settings", "⚙️ Settings"]]
 
 var tab := "play"
 var content: VBoxContainer
@@ -30,8 +30,10 @@ var city
 var rerender_acc := 0.0
 var dirty := true
 var queue_lbl: Label
+var fps_lbl: Label
 
 func _ready() -> void:
+	R3D.set_options(Game.settings.get("options", {}))
 	theme = _make_theme()
 	var bg = ColorRect.new()
 	bg.color = C_BG
@@ -118,6 +120,12 @@ func _ready() -> void:
 	toast_panel.visible = false
 	add_child(toast_panel)
 
+	fps_lbl = _label("", 12, C_GREEN)
+	fps_lbl.position = Vector2(6, 4)
+	fps_lbl.add_theme_color_override("font_shadow_color", Color.BLACK)
+	fps_lbl.z_index = 100
+	add_child(fps_lbl)
+
 	confirm_dlg = ConfirmationDialog.new()
 	confirm_dlg.confirmed.connect(func(): confirm_cb.call())
 	add_child(confirm_dlg)
@@ -139,7 +147,11 @@ func _process(dt: float) -> void:
 			toast_panel.visible = false
 	if queue_lbl and is_instance_valid(queue_lbl):
 		queue_lbl.text = Game.net.get("queue_text", "") if Game.mode == "mp" else Game.sp_queue_status()
-	city.visible = tab == "tycoon" and not arena.visible
+	city.visible = tab in ["tycoon", "settings"] and not arena.visible # on the Settings tab it's a live preview
+	fps_lbl.visible = R3D.opts().showFps
+	if fps_lbl.visible:
+		fps_lbl.text = "%d fps" % Engine.get_frames_per_second()
+		move_child(fps_lbl, -1)
 	if city.visible:
 		city.custom_minimum_size.y = max(340.0, size.y * 0.62)
 		city.update_city(t)
@@ -281,6 +293,7 @@ func render() -> void:
 		"armory": _render_armory()
 		"battle": _render_battle()
 		"reboot": _render_reboot()
+		"settings": _render_settings()
 
 func _render_play() -> void:
 	var t = Game.sp.tycoon
@@ -531,3 +544,154 @@ func _render_reboot() -> void:
 		_spacer(kr)
 		var id = k
 		kr.add_child(_button("MAX" if lv >= p.max else "%d pt" % CC.perk_cost(t, k), func(): Game.act({"type": "perk", "id": id}), lv >= p.max or int(t.points) < CC.perk_cost(t, k)))
+
+# ---------- Settings ----------
+# Every option comes from models.json SETTINGS (the web version shows the same list). Picking a quality preset
+# fills in its values; changing one of those by hand turns the preset into Custom, starting from what was on.
+func _set_opt(id: String, v) -> void:
+	var S = R3D.M.SETTINGS
+	var o: Dictionary = Game.settings.get("options", {}).duplicate()
+	var cur = R3D.opts()
+	if id == "preset" and S.PRESETS.has(v):
+		o.preset = v
+		o.merge(S.PRESETS[v], true)
+	elif id == "preset" or S.PRESETS.high.has(id):
+		o.preset = v if id == "preset" else "custom"
+		if o.preset == "custom":
+			for k in S.PRESETS.high:
+				o[k] = cur[k]
+	if id != "preset":
+		o[id] = v
+	Game.settings.options = o
+	Game.save_settings()
+	R3D.set_options(o)
+
+func _render_settings() -> void:
+	var S = R3D.M.SETTINGS
+	var o = R3D.opts()
+	content.add_child(_label("Changes take effect straight away; your business stays on screen above so you can see them. Settings are kept on this computer only.", 13, C_MUTED, true))
+	var cols = HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 12)
+	content.add_child(cols)
+	var two = size.x > 900
+	var left = VBoxContainer.new()
+	var right = VBoxContainer.new()
+	for col in [left, right]:
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		col.add_theme_constant_override("separation", 12)
+		cols.add_child(col)
+	if not two:
+		right.visible = false
+	for g in S.groups:
+		var card = _card(left if g.id == "graphics" or not two else right, g.name)
+		var first = true
+		for it in g.items:
+			if it.get("only", "") == "web":
+				continue
+			if not first:
+				var line = ColorRect.new()
+				line.color = C_LINE
+				line.custom_minimum_size.y = 1
+				card.add_child(line)
+			first = false
+			_setting_row(card, it, o)
+	var r = _row(content)
+	r.add_child(_label("Film grain is in the web version only.", 13, C_MUTED))
+	_spacer(r)
+	r.add_child(_button("Reset to defaults", func():
+		Game.settings.options = {}
+		Game.save_settings()
+		R3D.set_options({})
+		show_toast("Settings back to their defaults")
+		render()))
+
+func _setting_row(card: VBoxContainer, it: Dictionary, o: Dictionary) -> void:
+	var r = _row(card)
+	var name = _label(it.name, 14, C_TEXT)
+	name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	r.add_child(name)
+	var v = o[it.id]
+	match it.type:
+		"toggle":
+			var cb = CheckButton.new()
+			cb.button_pressed = bool(v)
+			cb.focus_mode = Control.FOCUS_NONE
+			cb.add_theme_icon_override("checked", _switch(true))
+			cb.add_theme_icon_override("unchecked", _switch(false))
+			cb.toggled.connect(func(on): _set_opt(it.id, on); render())
+			r.add_child(cb)
+		"range":
+			var val = _label("%d%s" % [int(v), it.unit], 14, C_TEXT)
+			val.custom_minimum_size.x = 48
+			val.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			var sl = HSlider.new()
+			sl.min_value = it.min; sl.max_value = it.max; sl.step = it.step
+			sl.value = v
+			sl.custom_minimum_size.x = 180
+			sl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			sl.focus_mode = Control.FOCUS_NONE
+			var track = _box(C_PANEL2, C_LINE, 3, 0)
+			track.content_margin_top = 3; track.content_margin_bottom = 3
+			var fill = _box(C_GOLD, C_GOLD, 3, 0)
+			fill.content_margin_top = 3; fill.content_margin_bottom = 3
+			sl.add_theme_stylebox_override("slider", track)
+			sl.add_theme_stylebox_override("grabber_area", fill)
+			sl.add_theme_stylebox_override("grabber_area_highlight", fill)
+			sl.value_changed.connect(func(x): val.text = "%d%s" % [int(x), it.unit]; _set_opt(it.id, int(x)))
+			sl.drag_ended.connect(func(changed): if changed: render())
+			r.add_child(sl)
+			r.add_child(val)
+		_:
+			var seg = HBoxContainer.new()
+			seg.add_theme_constant_override("separation", 0)
+			for opt in it.options:
+				var on = opt[0] == v or (typeof(v) != TYPE_STRING and typeof(opt[0]) != TYPE_STRING and int(opt[0]) == int(v))
+				var text = str(opt[1])
+				if it.id == "preset" and opt[0] == "auto" and on:
+					text += " · now " + str(_option_label(it, o.level))
+				var b = _button(text, func(): _set_opt(it.id, opt[0] if typeof(opt[0]) == TYPE_STRING else int(opt[0])); render())
+				b.add_theme_font_size_override("font_size", 13)
+				for st in ["normal", "hover", "pressed"]:
+					b.add_theme_stylebox_override(st, _box(C_GOLD if on else (C_LINE if st == "hover" else C_PANEL2), C_LINE, 0, 7))
+				b.add_theme_color_override("font_color", Color("#111111") if on else C_TEXT)
+				b.add_theme_color_override("font_hover_color", Color("#111111") if on else C_TEXT)
+				if it.id == "crosshair":
+					b.icon = _swatch(Color(R3D.M.SETTINGS.CROSSHAIR[opt[0]]))
+				seg.add_child(b)
+			r.add_child(seg)
+	if it.has("desc"):
+		card.add_child(_label(it.desc, 13, C_MUTED, true))
+
+func _option_label(it: Dictionary, v) -> String:
+	for opt in it.options:
+		if opt[0] == v:
+			return opt[1]
+	return str(v)
+
+# a switch like the web's: a gold pill with the knob on the right when on, grey with it on the left when off
+func _switch(on: bool) -> Texture2D:
+	var w = 42
+	var h = 24
+	var img = Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var bg = C_GOLD if on else C_PANEL2
+	var knob = Color("#111111") if on else C_MUTED
+	var kx = 32.5 if on else 11.5
+	for y in h:
+		for x in w:
+			var px = Vector2(x + 0.5, y + 0.5)
+			var cx = clamp(px.x, 12.0, w - 12.0)
+			var d = (px - Vector2(cx, 12)).length()
+			var c = Color(bg, clamp(12.0 - d, 0.0, 1.0))
+			if not on:
+				c = c.blend(Color(C_LINE, clamp(1.0 - abs(11.5 - d), 0.0, 1.0)))
+			c = c.blend(Color(knob, clamp(8.5 - (px - Vector2(kx, 12)).length(), 0.0, 1.0)))
+			img.set_pixel(x, y, c)
+	return ImageTexture.create_from_image(img)
+
+func _swatch(c: Color) -> Texture2D:
+	var img = Image.create(10, 10, false, Image.FORMAT_RGBA8)
+	for y in 10:
+		for x in 10:
+			var d = Vector2(x - 4.5, y - 4.5).length()
+			img.set_pixel(x, y, Color(c, clamp(5.0 - d, 0.0, 1.0)))
+	return ImageTexture.create_from_image(img)

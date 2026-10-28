@@ -15,7 +15,8 @@ const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 var sp := {}
 # server: last server typed; tokens: { serverUrl: multiplayer login }; sync: { server, code, base, at, err }
-var settings := {"server": "ws://localhost:8080", "name": "", "tokens": {}, "sync": null}
+# options: the ⚙️ Settings tab's choices (this device only; see R3D.opts())
+var settings := {"server": "ws://localhost:8080", "name": "", "tokens": {}, "sync": null, "options": {}}
 var mode := "sp"
 var in_battle := false
 

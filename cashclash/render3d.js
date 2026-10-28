@@ -128,13 +128,32 @@
     }
   }
 
+  // ---------- Settings (the ⚙️ tab; the list of options is M.SETTINGS) ----------
+  // `saved` is what the player picked; opts() fills in the defaults and the quality preset's values. 'auto'
+  // starts at high and the governor in makeView() steps it down while frames are slow. ?quality=low|medium|high
+  // in the URL pins the preset for that visit.
+  const SET = M.SETTINGS, DEF = Object.fromEntries(SET.groups.flatMap(g => g.items).map(i => [i.id, i.def]));
+  const pinned = { low: 'low', medium: 'medium', high: 'high', ultra: 'ultra' }[new URLSearchParams(location.search).get('quality')];
+  const views = new Set();
+  let saved = {}, autoStep = 0, current = null, drawn = 0; // drawn: frames drawn, for the frame rate counter
+  function opts() {
+    if (current) return current;
+    const o = { ...DEF, ...saved };
+    if (pinned) o.preset = pinned;
+    const level = o.preset === 'auto' ? SET.AUTO[autoStep] : o.preset;
+    Object.assign(o, SET.PRESETS[level] || {});
+    o.level = level; // what the graphics are really at: a preset's name, or 'custom'
+    return (current = o);
+  }
+  function setOptions(s) { saved = { ...s }; current = null; for (const v of views) v.apply(); }
+
   // ---------- Renderer + post-processing ----------
-  // Ambient occlusion (GTAO), bloom and SMAA. A governor drops the expensive bits on slow machines.
+  // Ambient occlusion (GTAO), bloom, the colour grade and SMAA, each switched by the settings.
   // `overlay` (optional) is a second scene drawn on top with a fresh depth buffer: the first-person gun.
+  // `fov` is the view's own field of view at the default setting (70°): the setting moves every view by the same amount.
   function makeView(canvas, fov, overlay) {
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
-    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.enabled = true;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(fov, 1, 0.1, 900);
@@ -151,42 +170,69 @@
     composer.addPass(new THREE.OutputPass());
     const grade = new THREE.ShaderPass(GRADE); composer.addPass(grade);
     const smaa = new THREE.SMAAPass(256, 256); composer.addPass(smaa);
-    // 3 = everything on, 2 = no ambient occlusion, 1 = also lower resolution, 0 = also no post effects.
-    // ?quality=low|medium|high in the URL pins it.
-    const pinned = { low: 0, medium: 2, high: 3 }[new URLSearchParams(location.search).get('quality')];
-    let w = 0, h = 0, slow = 0, tier = 3, lastFrame = 0;
-    function setTier(n) {
-      tier = n; ao.enabled = tier >= 3; w = 0;
-      renderer.setPixelRatio(tier >= 2 ? Math.min(devicePixelRatio, 1.75) : 1);
-      renderer.shadowMap.type = tier >= 1 ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    let w = 0, h = 0, slow = 0, lastFrame = 0, lastDraw = 0, post = true, exposure = 1, shadowKey = '';
+    // tier: how much of the city to build in detail (0 = the least), for scenes built from now on
+    let tier = 3;
+    function apply() {
+      const o = opts(), u = grade.uniforms;
+      ao.enabled = o.ao; bloom.enabled = o.bloom; smaa.enabled = o.aa;
+      u.saturation.value = o.grade ? 0.74 : 1; u.contrast.value = o.grade ? 1.12 : 1;
+      u.shadowTint.value.copy(o.grade ? GRADE.shadowTint : ZERO); u.highTint.value.copy(o.grade ? GRADE.highTint : ZERO);
+      u.vignette.value = o.grain ? 0.42 : 0; u.grain.value = o.grain ? 0.035 : 0;
+      post = o.ao || o.bloom || o.aa || o.grade || o.grain;
+      const pr = Math.min(devicePixelRatio, 1.75) * o.scale / 100;
+      renderer.setPixelRatio(pr); composer.setPixelRatio(pr); w = 0;
+      renderer.toneMappingExposure = exposure * o.brightness / 100;
+      camera.fov = fov + o.fov - 70; camera.updateProjectionMatrix();
+      if (scene.fog) scene.fog.density = U.fog * SET.FOG[o.distance];
+      camera.far = o.distance === 'far' ? 1300 : 900;
+      tier = o.level === 'low' ? 0 : o.distance === 'near' ? 1 : !o.ao ? 2 : 3;
+      // shadows: the suns cast them at the chosen map size; changing the filter recompiles the materials
+      const size = SET.SHADOW_MAP[o.shadows], key = o.shadows;
+      renderer.shadowMap.type = o.shadows === 'low' ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+      scene.traverse(l => {
+        if (!l.userData.sun) return;
+        l.castShadow = size > 0;
+        if (size && l.shadow.mapSize.x !== size) { l.shadow.mapSize.set(size, size); if (l.shadow.map) { l.shadow.map.dispose(); l.shadow.map = null; } }
+      });
+      if (shadowKey && key !== shadowKey) scene.traverse(m => { if (m.material) for (const x of [].concat(m.material)) x.needsUpdate = true; });
+      shadowKey = key;
     }
-    if (pinned !== undefined) setTier(pinned);
-    return {
-      renderer, scene, camera, composer, bloom, ao,
+    const view = {
+      renderer, scene, camera, composer, bloom, ao, apply,
       get tier() { return tier; },
+      // the sky's exposure, before the brightness setting
+      setExposure(e) { exposure = e; renderer.toneMappingExposure = e * opts().brightness / 100; },
       render(dt) {
         const cw = canvas.clientWidth, ch = canvas.clientHeight;
         if (!cw || !ch) return;
         if (cw !== w || ch !== h) { w = cw; h = ch; renderer.setSize(w, h, false); composer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
-        // quality governor: about 2 seconds of frames slower than ~30fps steps the quality down a tier
-        const now = performance.now(), real = lastFrame ? (now - lastFrame) / 1000 : 0; lastFrame = now;
-        if (pinned === undefined && real > 0 && real < 5) {
+        const now = performance.now(), real = lastFrame ? (now - lastFrame) / 1000 : 0, o = opts(); lastFrame = now;
+        // frame rate limit: skip drawing until the frame is due (the game itself keeps running every frame)
+        if (o.fps && now - lastDraw < 1000 / o.fps - 2) return;
+        lastDraw = now; drawn++;
+        // 'auto' quality: about 2 seconds of frames slower than ~30fps steps every view down a preset
+        if (o.preset === 'auto' && !pinned && real > 0 && real < 5) {
           slow = real > 0.034 ? slow + real : Math.max(0, slow - real * 0.5);
-          if (slow > 2 && tier > 0) { slow = 0; setTier(tier - 1); }
+          if (slow > 2 && autoStep < SET.AUTO.length - 1) { slow = 0; autoStep++; current = null; for (const v of views) v.apply(); }
         }
         grade.uniforms.time.value = (now / 1000) % 100;
-        if (tier > 0) return composer.render(dt);
+        if (post) return composer.render(dt);
         renderer.render(scene, camera);
         if (overlay) { renderer.autoClear = false; renderer.clearDepth(); renderer.render(overlay, camera); renderer.autoClear = true; }
       },
     };
+    views.add(view); apply();
+    return view;
   }
+  const ZERO = new THREE.Vector3();
   // Colour grade after tone mapping, in the spirit of GTA IV: washed-out colour, a little more contrast,
   // warm sepia shadows and creamy highlights, a heavy vignette and fine film grain.
   const GRADE = {
     uniforms: { tDiffuse: { value: null }, time: { value: 0 }, saturation: { value: 0.74 }, contrast: { value: 1.12 },
       shadowTint: { value: new THREE.Vector3(0.035, 0.02, 0.0) }, highTint: { value: new THREE.Vector3(0.025, 0.018, -0.03) },
       vignette: { value: 0.42 }, grain: { value: 0.035 } },
+    shadowTint: new THREE.Vector3(0.035, 0.02, 0.0), highTint: new THREE.Vector3(0.025, 0.018, -0.03),
     vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: `uniform sampler2D tDiffuse; uniform float time, saturation, contrast, vignette, grain; uniform vec3 shadowTint, highTint; varying vec2 vUv;
       void main() {
@@ -207,14 +253,14 @@
   async function applySky(view, name, exposure, current = () => true) {
     const hdr = await loadSky(name);
     if (!current()) return;
-    view.renderer.toneMappingExposure = exposure;
+    view.setExposure(exposure);
     if (hdr) { view.scene.background = hdr; view.scene.environment = hdr; view.scene.backgroundBlurriness = 0.02; }
     else { const c = { day: '#9fc3e6', sunset: '#e7a978', dusk: '#6b5a7e', night: '#141a30' }[name]; view.scene.background = new THREE.Color(c); view.scene.environment = null; }
   }
   function sun(scene, color, intensity, range) {
     const d = new THREE.DirectionalLight(color, intensity);
-    d.position.set(18, 30, 12); d.castShadow = true;
-    d.shadow.mapSize.set(2048, 2048); d.shadow.bias = -0.0003; d.shadow.normalBias = 0.03;
+    d.position.set(18, 30, 12); d.castShadow = SET.SHADOW_MAP[opts().shadows] > 0; d.userData.sun = true;
+    const n = SET.SHADOW_MAP[opts().shadows] || 2048; d.shadow.mapSize.set(n, n); d.shadow.bias = -0.0003; d.shadow.normalBias = 0.03;
     Object.assign(d.shadow.camera, { left: -range, right: range, top: range, bottom: -range, near: 1, far: 100 });
     scene.add(d, d.target); return d;
   }
@@ -463,10 +509,11 @@
       if (!o) return; o.position.set(...d.p); o.rotation.y = d.ry; group.add(o);
       if (d.light && night && lights++ < 6) { const l = new THREE.PointLight('#ffd49a', 20, 22, 2); l.position.set(d.p[0], 5.3, d.p[2]); group.add(l); }
     });
-    // traffic (positions from models.js trafficAt(), so the desktop app drives the same cars)
+    // traffic (positions from models.js trafficAt(), so the desktop app drives the same cars); the Traffic
+    // setting takes the cars off the road
     const cars = [];
     for (const c of L.traffic.cars) prop(c.model).then(o => { if (o) { group.add(o); cars.push([o, c]); } });
-    group.userData.tick = t => { for (const [o, c] of cars) { const [x, z, ry] = M.trafficAt(L.traffic, c, t); o.position.set(x, 0, z); o.rotation.y = ry; } };
+    group.userData.tick = t => { const on = opts().traffic; for (const [o, c] of cars) { o.visible = on; if (!on) continue; const [x, z, ry] = M.trafficAt(L.traffic, c, t); o.position.set(x, 0, z); o.rotation.y = ry; } };
     return group;
   }
 
@@ -626,7 +673,7 @@
       const grp = mapGroup = new THREE.Group(); mapIndex = m; scene.add(grp);
       const th = M.ARENA.themes[m], walls = CC.MAPS[m].walls, Hh = M.ARENA.wallHeight;
       applySky(view, th.sky, th.exposure, () => token === mapToken).then(() => { vmScene.environment = scene.environment; });
-      scene.fog = new THREE.FogExp2(U.haze[th.sky], U.fog); // city smog: distant blocks fade out
+      scene.fog = new THREE.FogExp2(U.haze[th.sky], U.fog * SET.FOG[opts().distance]); // city smog: distant blocks fade out
       if (sunLight) scene.remove(sunLight, sunLight.target);
       sunLight = sun(scene, th.sun, th.sunI, 32);
       // floors
@@ -951,9 +998,9 @@
       const base = new THREE.Euler().setFromQuaternion(parent, 'YXZ').y;
       p.root.rotation.y += wrapAng(want - base - p.root.rotation.y) * Math.min(1, dt * 6);
     };
-    // people walking a closed path: [{ p, path, speed, d }]
+    // people walking a closed path: [{ p, path, speed, d }] (with fewer passers-by, every other one stays home)
     function walkers(list, holder, scaleSeed = 0) {
-      return list.map((w, k) => {
+      return list.filter((w, k) => opts().crowd === 'all' || k % 2 === 0).map((w, k) => {
         const p = townsperson(w.who, 0.95 + ((k + scaleSeed) % 5) * 0.025);
         const len = w.path.reduce((a, q, i) => { const r = w.path[(i + 1) % w.path.length]; return a + Math.hypot(r[0] - q[0], r[1] - q[1]); }, 0);
         holder.add(p.root); return { p, path: w.path, speed: w.speed, d: w.phase * len };
@@ -975,7 +1022,7 @@
     function setLevel(lv) {
       level = lv; const th = M.CITY.levels[lv - 1], night = th.lampsOn, my = ++token;
       applySky(view, th.sky, th.exposure, () => my === token);
-      scene.fog = new THREE.FogExp2(U.haze[th.sky], U.fog); // city smog: distant blocks fade out
+      scene.fog = new THREE.FogExp2(U.haze[th.sky], U.fog * SET.FOG[opts().distance]); // city smog: distant blocks fade out
       if (sunLight) scene.remove(sunLight, sunLight.target);
       sunLight = sun(scene, th.sun, th.sunI, 26); sunI = th.sunI;
       for (const r of rooms) if (r) { scene.remove(r.group); } rooms.length = 0; // rebuilt for the new level
@@ -1088,7 +1135,7 @@
       const crew = R.people.stand.map((st, k) => { const p = townsperson(st.who, 0.95 + (k % 5) * 0.025); p.root.position.set(st.p[0], 0, st.p[1]); p.root.rotation.y = st.ry; doClip(p, st.clip, 0); g.add(p.root); return p; });
       const walking = walkers(R.people.walk, g, i);
       const giver = giverFor(CC.BUILDINGS[i].id, R.people.crew, g, R.people.giver);
-      return { i, ms, group: g, R, lines, exit, crew, walking, giver };
+      return { i, ms, group: g, R, lines, exit, crew, walking, giver, crowd: opts().crowd };
     }
     function refreshLot(i, tyc) {
       const b = CC.BUILDINGS[i], lot = lots[i];
@@ -1119,7 +1166,7 @@
     function update(tyc) {
       tycoon = tyc;
       if (tyc.level !== level) setLevel(tyc.level);
-      const pk = CC.reboots(tyc) + '|' + CC.questGiver(tyc, 'plaza').name; // a new person each reboot
+      const pk = CC.reboots(tyc) + '|' + CC.questGiver(tyc, 'plaza').name + '|' + opts().crowd; // a new person each reboot
       if (pk !== plazaKey) {
         plazaKey = pk; if (plazaGiver) scene.remove(plazaGiver.root); plazaGiver = giverFor('plaza', M.CITY.town.crew, scene, M.CITY.town.giver);
         // different people walk the routes after each reboot
@@ -1207,7 +1254,7 @@
         let best = 25;
         lots.forEach((l, i) => { if (!l.door) return; const dd = Math.hypot(me.x - l.x - l.door.x, me.z - l.z - l.door.z); if (dd < best) { best = dd; want = i; } });
       }
-      rooms.forEach((r, i) => { if (r && i !== want) { scene.remove(r.group); rooms[i] = null; } });
+      rooms.forEach((r, i) => { if (r && (i !== want || r.crowd !== opts().crowd)) { scene.remove(r.group); rooms[i] = null; } });
       if (want >= 0 && !rooms[want]) rooms[want] = buildRoom(want, lots[want].ms);
       const room = want >= 0 ? rooms[want] : null;
       roomLights.forEach((l, k) => { const p = room && room.R.lights[k]; l.intensity = p ? (room.R.kind === 'factory' ? 60 : 30) : 0; if (p) l.position.set(...p).add(room.group.position); });
@@ -1294,7 +1341,8 @@
     });
     addEventListener('mousemove', e => {
       if (!locked()) return;
-      me.yaw -= e.movementX * 0.0022; me.pitch = Math.max(-1.3, Math.min(1.3, me.pitch - e.movementY * 0.0022));
+      const o = opts(), k = 0.0022 * o.sens / 100;
+      me.yaw -= e.movementX * k; me.pitch = Math.max(-1.3, Math.min(1.3, me.pitch - e.movementY * k * (o.invert ? -1 : 1)));
     });
     const typing = () => /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName);
     addEventListener('keydown', e => {
@@ -1323,5 +1371,5 @@
   }
 
   function supported() { try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch { return false; } }
-  window.R3D = { createArena, createCity, supported, TEAM, assetsAvailable: ASSETS_OK };
+  window.R3D = { createArena, createCity, supported, TEAM, assetsAvailable: ASSETS_OK, setOptions, opts, pinned, drawn: () => drawn };
 })();

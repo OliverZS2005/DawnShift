@@ -106,8 +106,10 @@ func _input(e: InputEvent) -> void:
 	if not visible or result != null:
 		return
 	if e is InputEventMouseMotion and _captured() and yaw != null:
-		yaw += e.relative.x * SENS
-		pitch = clamp(pitch - e.relative.y * SENS, -0.6, 0.45)
+		var o = R3D.opts()
+		var k = SENS * o.sens / 100.0
+		yaw += e.relative.x * k
+		pitch = clamp(pitch - e.relative.y * k * (-1 if o.invert else 1), -0.6, 0.45)
 	elif e is InputEventMouseButton and e.pressed and not _captured():
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED # first click takes aim; later clicks fire
 		get_viewport().set_input_as_handled()
@@ -251,11 +253,12 @@ func _draw_overlay() -> void:
 	var c = Vector2(W / 2, H / 2)
 	var moving = 1.0 if _move().length() > 0 else 0.0
 	var gap = round(5 + float(gun.spread) * 70 + moving * 5)
+	var tick = Color(R3D.M.SETTINGS.CROSSHAIR[R3D.opts().crosshair])
 	for d in [Vector2(0, -1), Vector2(0, 1), Vector2(-1, 0), Vector2(1, 0)]:
 		var a = c + d * gap
 		var b = c + d * (gap + 9)
 		overlay.draw_line(a, b, Color(0, 0, 0, 0.6), 4.0)
-		overlay.draw_line(a, b, HUD, 2.0)
+		overlay.draw_line(a, b, tick, 2.0)
 	if hit_t > 0:
 		var s = 9 + (hit_t / 0.22) * 3
 		var col = Color(AMBER, hit_t / 0.22)
@@ -289,7 +292,8 @@ func _draw_overlay() -> void:
 	_text(ar.position + Vector2(0, 66), mag, mono_f, 18, DIM, HORIZONTAL_ALIGNMENT_RIGHT, ar.size.x - 14)
 	_text(ar.position + Vector2(0, 66), "–" if reloading else str(int(u0.g.ammo)), num_f, 44, AMBER if low_ammo else HUD, HORIZONTAL_ALIGNMENT_RIGHT, ar.size.x - 20 - mag_w)
 	_text(ar.position + Vector2(0, 90), "Reloading" if reloading else gun.name, bold_f, 20, AMBER if reloading else HUD, HORIZONTAL_ALIGNMENT_RIGHT, ar.size.x - 14)
-	_minimap(Rect2(W - 16 - 225, 16, 225, 140), u0, u1)
+	if R3D.opts().minimap:
+		_minimap(Rect2(W - 16 - 225, 16, 225, 140), u0, u1)
 	# opponent tag over their head, only while you can actually see them (walls hide it)
 	var tag = view3d.foe_tag()
 	var walls = CC.MAPS[int(view.m)].walls
@@ -299,7 +303,7 @@ func _draw_overlay() -> void:
 		_meter(Rect2(tag + Vector2(-39, -3), Vector2(78, 4)), float(u1.hp) / max(1.0, float(u1.mhp)), OK if float(u1.hp) / max(1.0, float(u1.mhp)) > 0.35 else LOW)
 	# controls hint (fades after a few seconds) and the aim prompt while the mouse is free
 	var age = (Time.get_ticks_msec() - started) / 1000.0
-	if age < 7.2:
+	if age < 7.2 and R3D.opts().hints:
 		var alpha = clamp(7.2 - age, 0.0, 1.0)
 		var tip = "W A S D move · mouse looks · click fires · R reload · 1–5 weapons · Esc frees the mouse"
 		var tw = label_f.get_string_size(tip, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x + 24

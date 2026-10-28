@@ -41,7 +41,7 @@ const TWIST = 1.15 # most the opponent's upper body turns from the legs to aim (
 const VM_LEN = {"pistol": 0.24, "smg": 0.44, "shotgun": 0.62, "sniper": 0.62, "rocket": 0.62}
 
 func _init() -> void:
-	v = R3D.viewport(45.0)
+	v = R3D.viewport(64.0)
 	v.container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	v.container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(v.container)
@@ -51,7 +51,6 @@ func _init() -> void:
 	boom_light.omni_range = 14
 	boom_light.light_energy = 0
 	v.world.add_child(boom_light)
-	v.camera.fov = 64.0
 	v.camera.near = 0.01
 	v.camera.rotation_order = EULER_ORDER_YXZ
 	my_flash = OmniLight3D.new()

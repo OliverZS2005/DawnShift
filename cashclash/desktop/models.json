@@ -6639,6 +6639,379 @@
    "seed": 91
   }
  },
+ "SETTINGS": {
+  "groups": [
+   {
+    "id": "graphics",
+    "name": "Graphics",
+    "items": [
+     {
+      "id": "preset",
+      "name": "Quality",
+      "type": "choice",
+      "def": "auto",
+      "options": [
+       [
+        "auto",
+        "Auto"
+       ],
+       [
+        "low",
+        "Low"
+       ],
+       [
+        "medium",
+        "Medium"
+       ],
+       [
+        "high",
+        "High"
+       ],
+       [
+        "ultra",
+        "Ultra"
+       ],
+       [
+        "custom",
+        "Custom"
+       ]
+      ],
+      "desc": "Sets the options below at once. Auto turns quality down by itself if the game runs slowly."
+     },
+     {
+      "id": "scale",
+      "name": "Render resolution",
+      "type": "range",
+      "def": 100,
+      "min": 50,
+      "max": 100,
+      "step": 5,
+      "unit": "%",
+      "desc": "Lower draws fewer pixels and scales the picture up: much faster, a little softer."
+     },
+     {
+      "id": "shadows",
+      "name": "Shadows",
+      "type": "choice",
+      "def": "high",
+      "options": [
+       [
+        "off",
+        "Off"
+       ],
+       [
+        "low",
+        "Low"
+       ],
+       [
+        "high",
+        "High"
+       ],
+       [
+        "ultra",
+        "Ultra"
+       ]
+      ]
+     },
+     {
+      "id": "ao",
+      "name": "Ambient occlusion",
+      "type": "toggle",
+      "def": true,
+      "desc": "Soft shade in corners and under things."
+     },
+     {
+      "id": "bloom",
+      "name": "Bloom",
+      "type": "toggle",
+      "def": true,
+      "desc": "Lamps, lit windows and the bright sky glow softly."
+     },
+     {
+      "id": "aa",
+      "name": "Anti-aliasing",
+      "type": "toggle",
+      "def": true,
+      "desc": "Smooths jagged edges."
+     },
+     {
+      "id": "reflections",
+      "name": "Reflections and bounce light",
+      "type": "toggle",
+      "def": true,
+      "only": "desktop",
+      "desc": "Shiny floors reflect the room; light bounces off walls."
+     },
+     {
+      "id": "haze",
+      "name": "Volumetric haze",
+      "type": "toggle",
+      "def": true,
+      "only": "desktop",
+      "desc": "Sunlight catches in the air between the buildings."
+     },
+     {
+      "id": "distance",
+      "name": "View distance",
+      "type": "choice",
+      "def": "normal",
+      "options": [
+       [
+        "near",
+        "Near"
+       ],
+       [
+        "normal",
+        "Normal"
+       ],
+       [
+        "far",
+        "Far"
+       ]
+      ],
+      "desc": "How far you see before the city fades into the smog."
+     },
+     {
+      "id": "grade",
+      "name": "Film colour grade",
+      "type": "toggle",
+      "def": true,
+      "desc": "The washed-out, warm, gritty look. Off shows plain colours."
+     },
+     {
+      "id": "grain",
+      "name": "Film grain and vignette",
+      "type": "toggle",
+      "def": true,
+      "only": "web"
+     },
+     {
+      "id": "brightness",
+      "name": "Brightness",
+      "type": "range",
+      "def": 100,
+      "min": 60,
+      "max": 150,
+      "step": 5,
+      "unit": "%"
+     },
+     {
+      "id": "fps",
+      "name": "Frame rate limit",
+      "type": "choice",
+      "def": 0,
+      "options": [
+       [
+        30,
+        "30 fps"
+       ],
+       [
+        60,
+        "60 fps"
+       ],
+       [
+        120,
+        "120 fps"
+       ],
+       [
+        0,
+        "No limit"
+       ]
+      ]
+     },
+     {
+      "id": "vsync",
+      "name": "V-Sync",
+      "type": "toggle",
+      "def": true,
+      "only": "desktop",
+      "desc": "Waits for the screen, so the picture never tears."
+     }
+    ]
+   },
+   {
+    "id": "world",
+    "name": "World",
+    "items": [
+     {
+      "id": "crowd",
+      "name": "Passers-by",
+      "type": "choice",
+      "def": "all",
+      "options": [
+       [
+        "all",
+        "Everyone"
+       ],
+       [
+        "fewer",
+        "Fewer"
+       ]
+      ],
+      "desc": "Fewer keeps the workers and the people with jobs, but sends half the walkers home."
+     },
+     {
+      "id": "traffic",
+      "name": "Traffic",
+      "type": "toggle",
+      "def": true,
+      "desc": "Cars driving round the blocks."
+     }
+    ]
+   },
+   {
+    "id": "controls",
+    "name": "Controls",
+    "items": [
+     {
+      "id": "sens",
+      "name": "Mouse sensitivity",
+      "type": "range",
+      "def": 100,
+      "min": 25,
+      "max": 300,
+      "step": 5,
+      "unit": "%"
+     },
+     {
+      "id": "invert",
+      "name": "Invert mouse up/down",
+      "type": "toggle",
+      "def": false
+     },
+     {
+      "id": "fov",
+      "name": "Field of view",
+      "type": "range",
+      "def": 70,
+      "min": 55,
+      "max": 100,
+      "step": 1,
+      "unit": "°",
+      "desc": "How wide you see. Fights are 6° narrower, as you aim down the gun."
+     }
+    ]
+   },
+   {
+    "id": "hud",
+    "name": "Screen",
+    "items": [
+     {
+      "id": "minimap",
+      "name": "Minimap in fights",
+      "type": "toggle",
+      "def": true
+     },
+     {
+      "id": "crosshair",
+      "name": "Crosshair colour",
+      "type": "choice",
+      "def": "white",
+      "options": [
+       [
+        "white",
+        "White"
+       ],
+       [
+        "green",
+        "Green"
+       ],
+       [
+        "yellow",
+        "Yellow"
+       ],
+       [
+        "cyan",
+        "Cyan"
+       ],
+       [
+        "pink",
+        "Pink"
+       ]
+      ]
+     },
+     {
+      "id": "hints",
+      "name": "Key hints",
+      "type": "toggle",
+      "def": true,
+      "desc": "The line of controls along the bottom."
+     },
+     {
+      "id": "showFps",
+      "name": "Show frame rate",
+      "type": "toggle",
+      "def": false
+     }
+    ]
+   }
+  ],
+  "PRESETS": {
+   "low": {
+    "scale": 75,
+    "shadows": "off",
+    "ao": false,
+    "bloom": false,
+    "aa": false,
+    "reflections": false,
+    "haze": false,
+    "distance": "near"
+   },
+   "medium": {
+    "scale": 100,
+    "shadows": "low",
+    "ao": false,
+    "bloom": true,
+    "aa": true,
+    "reflections": false,
+    "haze": false,
+    "distance": "normal"
+   },
+   "high": {
+    "scale": 100,
+    "shadows": "high",
+    "ao": true,
+    "bloom": true,
+    "aa": true,
+    "reflections": true,
+    "haze": true,
+    "distance": "normal"
+   },
+   "ultra": {
+    "scale": 100,
+    "shadows": "ultra",
+    "ao": true,
+    "bloom": true,
+    "aa": true,
+    "reflections": true,
+    "haze": true,
+    "distance": "far"
+   }
+  },
+  "AUTO": [
+   "high",
+   "medium",
+   "low"
+  ],
+  "CROSSHAIR": {
+   "white": "#F2EFE8",
+   "green": "#4ade80",
+   "yellow": "#facc15",
+   "cyan": "#22d3ee",
+   "pink": "#f472b6"
+  },
+  "SHADOW_MAP": {
+   "off": 0,
+   "low": 1024,
+   "high": 2048,
+   "ultra": 4096
+  },
+  "FOG": {
+   "near": 1.7,
+   "normal": 1,
+   "far": 0.55
+  }
+ },
  "LAYOUT": {
   "arena": {
    "buildings": [

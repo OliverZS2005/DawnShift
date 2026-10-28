@@ -13,6 +13,94 @@ func _ready() -> void:
 	var f = FileAccess.open("res://models.json", FileAccess.READ)
 	M = JSON.parse_string(f.get_as_text())
 
+# ---------- Settings (the ⚙️ tab; the list of options is M.SETTINGS, the same as the web's) ----------
+# `_saved` is what the player picked; opts() fills in the defaults and the quality preset's values. 'auto'
+# starts at high, and _process() steps it down a preset while frames are slow. Views (viewport()), skies
+# (environment()) and suns (sun()) made here follow every change; city3d and arena3d listen to
+# options_changed for the rest (people, traffic, the portal's sky).
+signal options_changed
+var _saved := {}
+var _opts := {}
+var _auto_step := 0
+var _slow := 0.0
+var _views := []
+var _suns := []
+
+func opts() -> Dictionary:
+	if _opts.is_empty():
+		var o = {}
+		for g in M.SETTINGS.groups:
+			for it in g.items:
+				o[it.id] = it.def
+		o.merge(_saved, true)
+		var level = M.SETTINGS.AUTO[_auto_step] if o.preset == "auto" else o.preset
+		if M.SETTINGS.PRESETS.has(level):
+			o.merge(M.SETTINGS.PRESETS[level], true)
+		o.level = level # what the graphics are really at: a preset's name, or "custom"
+		for k in ["scale", "brightness", "fps", "sens", "fov"]: # JSON numbers arrive as floats
+			o[k] = int(o[k])
+		_opts = o
+	return _opts
+
+func set_options(saved: Dictionary) -> void:
+	_saved = saved.duplicate()
+	_apply()
+
+func _apply() -> void:
+	_opts = {}
+	var o = opts()
+	Engine.max_fps = o.fps
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if o.vsync else DisplayServer.VSYNC_DISABLED)
+	var size = int(M.SETTINGS.SHADOW_MAP[o.shadows])
+	if size > 0:
+		RenderingServer.directional_shadow_atlas_set_size(size, true)
+	_views = _views.filter(func(v): return is_instance_valid(v.viewport))
+	for v in _views:
+		tune_view(v)
+	_suns = _suns.filter(func(d): return is_instance_valid(d))
+	for d in _suns:
+		d.shadow_enabled = size > 0
+	options_changed.emit()
+
+# a view's resolution, anti-aliasing, field of view and sky follow the settings
+func tune_view(v: Dictionary) -> void:
+	var o = opts()
+	var vp: SubViewport = v.viewport
+	vp.msaa_3d = Viewport.MSAA_4X if o.aa else Viewport.MSAA_DISABLED
+	vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA if o.aa else Viewport.SCREEN_SPACE_AA_DISABLED
+	# FSR upscales on Vulkan; the OpenGL fallback can only stretch
+	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR if RenderingServer.get_rendering_device() else Viewport.SCALING_3D_MODE_BILINEAR
+	vp.scaling_3d_scale = o.scale / 100.0
+	vp.positional_shadow_atlas_size = max(1024, int(M.SETTINGS.SHADOW_MAP[o.shadows]))
+	v.camera.fov = float(v.base_fov) + o.fov - 70
+	v.camera.far = 800.0 if o.distance == "far" else 500.0
+	if v.env.environment:
+		tune_env(v.env.environment)
+
+# a sky made by environment(): the effects the settings switch, brightness and how far the smog lets you see
+func tune_env(e: Environment) -> void:
+	var o = opts()
+	e.ssao_enabled = o.ao
+	e.glow_enabled = o.bloom and not e.get_meta("no_glow", false)
+	e.ssil_enabled = o.reflections
+	e.ssr_enabled = o.reflections
+	e.volumetric_fog_enabled = o.haze
+	e.adjustment_enabled = o.grade and not e.get_meta("no_grade", false)
+	e.tonemap_exposure = float(e.get_meta("exposure", 1.0)) * o.brightness / 100.0
+	var thick = float(M.SETTINGS.FOG[o.distance])
+	e.fog_depth_begin = 15.0 / thick
+	e.fog_depth_end = 330.0 / thick
+
+# 'auto' quality: about 2 seconds of frames slower than ~30fps steps the graphics down a preset
+func _process(dt: float) -> void:
+	if M.is_empty() or opts().preset != "auto" or dt <= 0 or dt > 5 or _views.is_empty():
+		return
+	_slow = _slow + dt if dt > 0.034 else max(0.0, _slow - dt * 0.5)
+	if _slow > 2 and _auto_step < M.SETTINGS.AUTO.size() - 1:
+		_slow = 0
+		_auto_step += 1
+		_apply()
+
 # ---------- Assets ----------
 func asset(rel: String) -> String:
 	return "res://assets/" + rel
@@ -173,6 +261,8 @@ func environment(sky_name: String, exposure: float, _unused := Color.BLACK) -> E
 	e.volumetric_fog_anisotropy = 0.55
 	e.volumetric_fog_length = 90.0
 	e.volumetric_fog_sky_affect = 0.0
+	e.set_meta("exposure", exposure)
+	tune_env(e)
 	return e
 
 func sun(color: Color, energy: float) -> DirectionalLight3D:
@@ -184,6 +274,8 @@ func sun(color: Color, energy: float) -> DirectionalLight3D:
 	d.shadow_blur = 1.5
 	d.directional_shadow_max_distance = 80.0
 	d.rotation = Vector3(deg_to_rad(-52), deg_to_rad(40), 0)
+	d.shadow_enabled = int(M.SETTINGS.SHADOW_MAP[opts().shadows]) > 0
+	_suns.append(d)
 	return d
 
 # ---------- Procedural models from models.json ----------
@@ -273,7 +365,8 @@ func box(size: Vector3, mat: Material, pos: Vector3) -> MeshInstance3D:
 	mi.position = pos
 	return mi
 
-# A view: SubViewportContainer holding its own 3D world, camera, sun and environment.
+# A view: SubViewportContainer holding its own 3D world, camera, sun and environment. `fov` is its field of
+# view at the default setting (70°); the setting moves every view by the same amount.
 func viewport(fov: float) -> Dictionary:
 	var c = SubViewportContainer.new()
 	c.stretch = true
@@ -291,7 +384,10 @@ func viewport(fov: float) -> Dictionary:
 	world.add_child(cam)
 	var we = WorldEnvironment.new()
 	world.add_child(we)
-	return {"container": c, "viewport": vp, "world": world, "camera": cam, "env": we}
+	var v = {"container": c, "viewport": vp, "world": world, "camera": cam, "env": we, "base_fov": fov}
+	_views.append(v)
+	tune_view(v)
+	return v
 
 # ---------- City blocks: GTA-style streets around the arena or the business ----------
 # The layout comes from models.json (LAYOUT, written from cityLayout() in ../models.js), so the web and
@@ -738,7 +834,11 @@ func kit_pieces(b: Dictionary, faces: Array, night: bool, put: Callable) -> void
 # Moves a city()'s traffic to time t (seconds).
 func tick_city(group: Node3D, t: float) -> void:
 	var tr = group.get_meta("traffic")
+	var on = opts().traffic # the Traffic setting takes the cars off the road
 	for pair in tr[1]:
+		pair[0].visible = on
+		if not on:
+			continue
 		var p = traffic_at(tr[0], pair[1], t)
 		pair[0].position = Vector3(p.x, 0, p.y)
 		pair[0].rotation.y = p.z

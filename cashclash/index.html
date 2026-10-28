@@ -63,7 +63,7 @@
   #arenaWrap .meter > i { display: block; height: 100%; width: 100%; background: var(--ok); transition: width .12s linear; }
   /* crosshair: four ticks whose gap opens with weapon spread and movement */
   #crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; --gap: 8px; pointer-events: none; }
-  #crosshair i { position: absolute; background: var(--hud); box-shadow: 0 0 0 1px rgba(0, 0, 0, .6); transition: top .08s, left .08s; }
+  #crosshair i { position: absolute; background: var(--xh, var(--hud)); box-shadow: 0 0 0 1px rgba(0, 0, 0, .6); transition: top .08s, left .08s; }
   #crosshair i:nth-child(1) { width: 2px; height: 9px; left: -1px; top: calc(-1 * var(--gap) - 9px); }
   #crosshair i:nth-child(2) { width: 2px; height: 9px; left: -1px; top: var(--gap); }
   #crosshair i:nth-child(3) { width: 9px; height: 2px; top: -1px; left: calc(-1 * var(--gap) - 9px); }
@@ -109,7 +109,7 @@
   #city { width: 100%; height: 100%; display: block; touch-action: none; cursor: pointer; }
   #cityHint { position: absolute; left: 16px; bottom: 10px; background: #0b0d12aa; border-radius: 8px; padding: 4px 10px; font-size: 12px; pointer-events: none; }
   /* first-person tycoon: a centre dot and what the lot you're looking at costs */
-  #cityDot { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: #F2EFE8; box-shadow: 0 0 0 1px #0b0d10aa; pointer-events: none; }
+  #cityDot { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: var(--xh, #F2EFE8); box-shadow: 0 0 0 1px #0b0d10aa; pointer-events: none; }
   #cityPrompt { position: absolute; left: 50%; top: calc(50% + 28px); transform: translateX(-50%); background: rgba(11,13,16,.78); color: #F2EFE8; border-radius: 2px; padding: 6px 12px; font: 600 15px/1.45 'Barlow Condensed', 'Arial Narrow', sans-serif; letter-spacing: .02em; text-align: center; pointer-events: none; white-space: nowrap; }
   #cityPrompt:empty { display: none; }
   #cityPrompt kbd { font: 700 12px 'JetBrains Mono', ui-monospace, monospace; background: #F2EFE8; color: #0b0d10; border-radius: 2px; padding: 0 5px; margin-right: 6px; }
@@ -137,6 +137,31 @@
   .lvl { font-size: 12px; color: var(--blue); }
   .choice b { display: block; font-size: 15px; margin-bottom: 4px; }
   .job { padding: 6px 0; border-bottom: 1px dashed var(--line); } .job:last-child { border-bottom: 0; }
+  /* ---------- Settings tab ---------- */
+  .sets { columns: 2 400px; column-gap: 12px; }
+  .sets .card { break-inside: avoid; margin-bottom: 12px; }
+  .set { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 16px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .card h3 + .set { border-top: none; }
+  .set .name { font-weight: 600; }
+  .set .desc { flex-basis: 100%; color: var(--muted); font-size: 13px; margin-top: -2px; }
+  .set .only { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px; margin-left: 6px; font-weight: 400; }
+  .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: none; border-radius: 0; padding: 6px 11px; background: var(--panel2); border-left: 1px solid var(--line); font-size: 13px; }
+  .seg button:first-child { border-left: none; }
+  .seg button:hover:not(.on) { background: var(--line); }
+  .seg button.on { background: var(--gold); color: #111; font-weight: 700; }
+  .seg .swatch { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--sw); margin-right: 6px; box-shadow: 0 0 0 1px #0008; }
+  .rng { display: inline-flex; align-items: center; gap: 10px; }
+  .rng input { width: 170px; padding: 0; accent-color: var(--gold); background: none; border: none; }
+  .rng output { min-width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; }
+  input.sw { appearance: none; -webkit-appearance: none; width: 42px; height: 24px; padding: 0; border-radius: 999px; background: var(--panel2); border: 1px solid var(--line); position: relative; cursor: pointer; transition: background .15s; }
+  input.sw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: left .15s, background .15s; }
+  input.sw:checked { background: var(--gold); border-color: var(--gold); }
+  input.sw:checked::after { left: 21px; background: #111; }
+  input.sw:focus-visible, .seg button:focus-visible, .rng input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .nohints #keys, .nohints #cityHint, .nomap #minimap { display: none !important; }
+  #fps { position: fixed; top: 6px; left: 6px; z-index: 30; display: none; font: 600 12px ui-monospace, monospace; color: #4ade80; background: #000a; padding: 2px 6px; border-radius: 4px; pointer-events: none; }
+  @media (prefers-reduced-motion: reduce) { input.sw, input.sw::after { transition: none; } }
 </style>
 </head>
 <body>
@@ -150,6 +175,7 @@
     <button data-tab="armory">🔫 Armory</button>
     <button data-tab="battle">⚔️ Battle</button>
     <button data-tab="reboot">🔄 Reboot</button>
+    <button data-tab="settings">⚙️ Settings</button>
   </nav>
 </header>
 <div id="cityWrap"><canvas id="city"></canvas><div id="cityDot"></div><div id="cityPrompt"></div><div id="talk"></div><div id="cityHint" class="muted">Click to walk around your business · WASD to move, Shift to run · walk through a front door to go inside · look at a lot: E buys, R upgrades · E talks to people with a job for you · Esc frees the mouse</div></div>
@@ -168,6 +194,7 @@
   <div id="result"><b></b><span></span></div>
 </div>
 <div id="toast"></div>
+<div id="fps"></div>
 
 <script src="shared.js"></script>
 <script src="vendor/three.bundle.js"></script>
@@ -180,6 +207,9 @@ const store = {
   get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
+// Settings (⚙️ tab) live on this device only. render3d.js applies them (R3D.opts() gives the effective values).
+let OPTS = store.get('cc_options') || {};
+R3D.setOptions(OPTS);
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = 'none', 3000); }
 
 // ---------- Singleplayer save (exactly one slot; it can only be reset, never duplicated) ----------
@@ -335,6 +365,7 @@ function render() {
         : `<div class="row"><span></span><button class="primary" data-a='{"type":"wbuy","id":"${w.id}"}' ${t.money < w.price ? 'disabled' : ''}>Buy · ${fmt(w.price)}</button></div>`}
       </div>`; }).join('')}</div>`);
   else if (tab === 'reboot') setView(v, renderReboot(t));
+  else if (tab === 'settings') setView(v, renderSettings());
   else setView(v, mode === 'mp' ? renderBattleMP() : renderBattleSP());
   updateMoney(); showCity();
 }
@@ -504,8 +535,9 @@ $('#arenaWrap').addEventListener('pointerdown', e => {
 addEventListener('pointerup', () => mouse.down = false);
 addEventListener('mousemove', e => {
   if (!G || !locked()) return;
-  G.yaw += e.movementX * SENS;
-  G.pitch = Math.max(-0.6, Math.min(0.45, (G.pitch || 0) - e.movementY * SENS));
+  const o = R3D.opts(), k = SENS * o.sens / 100;
+  G.yaw += e.movementX * k;
+  G.pitch = Math.max(-0.6, Math.min(0.45, (G.pitch || 0) - e.movementY * k * (o.invert ? -1 : 1)));
 });
 document.addEventListener('pointerlockchange', () => { if (!locked()) mouse.down = false; });
 
@@ -754,13 +786,68 @@ const city = R3D.createCity($('#city'), {
   onAim: i => { cityAim = i; cityPrompt(); },
 });
 function showCity() {
-  const on = tab === 'tycoon' && !G;
+  const on = (tab === 'tycoon' || tab === 'settings') && !G; // on the Settings tab it's a live preview
   if (!on && talkArea) { talkArea = null; city.talk(null); talkView(); }
   $('#cityWrap').style.display = on ? 'block' : 'none';
   if (on) { city.update(T()); city.start(); } else city.stop();
 }
 // Load the fighters and weapons in the background so the first fight starts instantly.
 setTimeout(() => { if (!arena3d) arena3d = R3D.createArena(cv); arena3d.preload(); }, 1500);
+
+// ---------- Settings tab ----------
+// Every option comes from MODELS.SETTINGS (the desktop app shows the same list). Picking a quality preset
+// fills in its values; changing one of those by hand turns the preset into Custom, starting from what was on.
+const SETS = MODELS.SETTINGS, PRESET_KEYS = Object.keys(SETS.PRESETS.high);
+const optLabel = (it, v) => (it.options.find(o => o[0] === v) || [, v])[1];
+function setOpt(id, v) {
+  const cur = R3D.opts();
+  if (id === 'preset' && SETS.PRESETS[v]) OPTS = { ...OPTS, preset: v, ...SETS.PRESETS[v] };
+  else if (id === 'preset' || PRESET_KEYS.includes(id)) { OPTS = { ...OPTS, preset: id === 'preset' ? v : 'custom' }; if (OPTS.preset === 'custom') for (const k of PRESET_KEYS) OPTS[k] = cur[k]; }
+  if (id !== 'preset') OPTS[id] = v;
+  store.set('cc_options', OPTS); R3D.setOptions(OPTS); applyScreen();
+}
+function applyScreen() {
+  const o = R3D.opts();
+  document.documentElement.style.setProperty('--xh', SETS.CROSSHAIR[o.crosshair]);
+  document.body.classList.toggle('nohints', !o.hints);
+  document.body.classList.toggle('nomap', !o.minimap);
+}
+function renderSettings() {
+  const o = R3D.opts();
+  const control = it => {
+    const v = o[it.id];
+    if (it.type === 'toggle') return `<input type="checkbox" class="sw" data-opt="${it.id}" ${v ? 'checked' : ''} aria-label="${esc(it.name)}">`;
+    if (it.type === 'range') return `<span class="rng"><input type="range" data-opt="${it.id}" min="${it.min}" max="${it.max}" step="${it.step}" value="${v}" aria-label="${esc(it.name)}"><output id="out_${it.id}">${v}${it.unit}</output></span>`;
+    return `<span class="seg" role="group" aria-label="${esc(it.name)}">${it.options.map(([val, label]) => `<button data-opt="${it.id}" data-v='${JSON.stringify(val)}' class="${val === v ? 'on' : ''}" aria-pressed="${val === v}">${it.id === 'crosshair' ? `<i class="swatch" style="--sw:${SETS.CROSSHAIR[val]}"></i>` : ''}${label}${it.id === 'preset' && val === 'auto' && v === 'auto' ? ` · now ${optLabel(it, o.level)}` : ''}</button>`).join('')}</span>`;
+  };
+  const row = it => `<div class="set"><span class="name">${esc(it.name)}</span>${control(it)}${it.desc ? `<span class="desc">${esc(it.desc)}</span>` : ''}</div>`;
+  return `<p class="muted">Changes take effect straight away; your business stays on screen above so you can see them. Settings are kept on this device only${R3D.pinned ? `. Quality is pinned to <b>${R3D.pinned}</b> by <code>?quality=</code> in the address` : ''}.</p>
+    <div class="sets">${SETS.groups.map(g => `<div class="card"><h3>${esc(g.name)}</h3>${g.items.filter(it => it.only !== 'desktop').map(row).join('')}</div>`).join('')}</div>
+    <div class="row"><span class="muted">Desktop-only options (reflections, haze, V-Sync) are in the desktop app.</span><button data-opt-reset>Reset to defaults</button></div>`;
+}
+const fmtOpt = (id, v) => { const it = SETS.groups.flatMap(g => g.items).find(i => i.id === id); return v + (it.unit || ''); };
+$('#view').addEventListener('click', e => {
+  const b = e.target.closest('button[data-opt]');
+  if (b) { setOpt(b.dataset.opt, JSON.parse(b.dataset.v)); render(); }
+  if (e.target.closest('[data-opt-reset]')) { OPTS = {}; store.set('cc_options', OPTS); R3D.setOptions(OPTS); applyScreen(); render(); toast('Settings back to their defaults'); }
+});
+$('#view').addEventListener('input', e => { const r = e.target; if (r.type === 'range' && r.dataset.opt) { setOpt(r.dataset.opt, +r.value); $('#out_' + r.dataset.opt).textContent = fmtOpt(r.dataset.opt, r.value); } });
+$('#view').addEventListener('change', e => { const r = e.target; if (!r.dataset.opt) return; if (r.type === 'checkbox') setOpt(r.dataset.opt, r.checked); render(); });
+applyScreen();
+// frame rate counter (Show frame rate): frames the 3D view drew, or the page's own rate when nothing 3D is up
+{
+  let n = 0, t0 = performance.now(), d0 = R3D.drawn();
+  requestAnimationFrame(function tick(now) {
+    n++;
+    if (now - t0 > 500) {
+      const el = $('#fps'), drawn = R3D.drawn() - d0, on = R3D.opts().showFps;
+      el.style.display = on ? 'block' : 'none';
+      if (on) el.textContent = Math.round((drawn || n) * 1000 / (now - t0)) + ' fps';
+      n = 0; t0 = now; d0 = R3D.drawn();
+    }
+    requestAnimationFrame(tick);
+  });
+}
 
 // ---------- Main loop ----------
 function updateMoney() { const t = T(); $('#money').textContent = fmt(t.money); $('#rate').textContent = `+${fmt(CC.income(t))}/s`; }
@@ -772,7 +859,7 @@ setInterval(() => {
   for (const r of SP.rivals) { const news = CC.tickRival(r, dt); if (news && mode === 'sp' && tab === 'battle') toast('📰 ' + news); }
   if ((eventT += dt) >= 1) { eventT = 0; const ev = CC.rollEvent(SP.tycoon); if (ev && mode === 'sp') eventToast(ev); }
   updateMoney();
-  if (tab === 'tycoon' && !G) { city.update(T()); if (cityAim !== -1) cityPrompt(); if (talkArea && CC.questArea(T(), talkArea).active) talkView(); }
+  if ((tab === 'tycoon' || tab === 'settings') && !G) { city.update(T()); if (cityAim !== -1) cityPrompt(); if (talkArea && CC.questArea(T(), talkArea).active) talkView(); }
   if ((saveT += dt) > 5) { saveT = 0; saveSP(); }
   if ((renderT += dt) > 1 && (tab === 'tycoon' || tab === 'armory' || tab === 'reboot') && !G) { renderT = 0; render(); }
 }, 100);
