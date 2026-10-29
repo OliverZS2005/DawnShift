@@ -177,6 +177,9 @@ func _process(dt: float) -> void:
 		header.visible = false
 		city.custom_minimum_size.y = ui_root.size.y
 		city.place(13 * sin(intro_t * 0.7), 22 + 4 * cos(intro_t), PI * 0.08 * sin(intro_t * 1.3) + sin(intro_t * 0.7) * 0.5, -0.06, -1)
+		var h = intro_panel.get_combined_minimum_size().y
+		intro_panel.size = intro_panel.get_combined_minimum_size()
+		intro_panel.position = Vector2(28 if Game.mobile else 72, intro.size.y - h - (18 if Game.mobile else 64))
 	fps_lbl.visible = R3D.opts().showFps
 	if fps_lbl.visible:
 		fps_lbl.text = "%d fps" % Engine.get_frames_per_second()
@@ -237,9 +240,10 @@ func _build_intro() -> void:
 	intro.visible = false
 	var shade = TextureRect.new()
 	var g = Gradient.new()
-	g.set_color(0, Color(0.03, 0.035, 0.047, 0.93))
-	g.set_color(1, Color(0.03, 0.035, 0.047, 0.0))
-	g.add_point(0.4, Color(0.03, 0.035, 0.047, 0.74))
+	g.set_color(0, Color(0.03, 0.035, 0.047, 0.94))
+	g.set_color(1, Color(0.03, 0.035, 0.047, 0.1))
+	g.add_point(0.45, Color(0.03, 0.035, 0.047, 0.82))
+	g.add_point(0.75, Color(0.03, 0.035, 0.047, 0.35))
 	var gt = GradientTexture2D.new()
 	gt.gradient = g
 	gt.fill_to = Vector2(1, 0)
@@ -251,15 +255,14 @@ func _build_intro() -> void:
 	intro.add_child(shade)
 	intro_panel = VBoxContainer.new()
 	intro_panel.add_theme_constant_override("separation", 10)
-	intro_panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	intro_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	intro.add_child(intro_panel)
+	intro.add_child(intro_panel) # placed bottom-left each frame (see _process): its height changes with the form
 	add_child(intro)
 	move_child(intro, toast_panel.get_index()) # under the toasts ("Logged in as …")
 
 func show_intro(on: bool) -> void:
 	intro.visible = on
 	header.visible = not on
+	city.backdrop = on # no hints or prompts on the city behind the intro
 	if city.pad:
 		city.pad.visible = not on # no buying through the intro
 	if on:
@@ -272,8 +275,6 @@ func _intro_view() -> void:
 		intro_panel.remove_child(c)
 		c.queue_free()
 	var small = Game.mobile
-	intro_panel.offset_left = 28 if small else 72
-	intro_panel.offset_bottom = -(18 if small else 64)
 	var t = Game.sp.tycoon
 	var title = HBoxContainer.new()
 	title.add_theme_constant_override("separation", 0)

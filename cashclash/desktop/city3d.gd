@@ -59,6 +59,7 @@ var talk_body: Label
 var talk_opts: Label
 var aim = -1
 var own_mouse := false
+var backdrop := false # behind the intro screen: just the view, no hints, prompts or crosshair
 var pad = null # touch.gd on phones and tablets
 var pad_used := false # once you've walked or looked with it, the controls hint goes
 const TOUCH_SENS := 0.006 # radians per canvas unit dragged
@@ -347,7 +348,10 @@ func _layout_overlay() -> void:
 	prompt.position = Vector2((size.x - prompt.size.x) / 2, size.y / 2 + 22)
 	hint.reset_size()
 	hint.position = Vector2(12, size.y - hint.size.y - 8)
-	hint.visible = not own_mouse and talking == null and R3D.opts().hints and not pad_used
+	hint.visible = not own_mouse and talking == null and R3D.opts().hints and not pad_used and not backdrop
+	if backdrop:
+		prompt.visible = false
+	dot.visible = not backdrop
 	dot.color = Color(R3D.M.SETTINGS.CROSSHAIR[R3D.opts().crosshair], 0.9)
 	talk_panel.reset_size()
 	talk_panel.position = Vector2((size.x - talk_panel.size.x) / 2, size.y - talk_panel.size.y - 18)
