@@ -170,7 +170,7 @@
     composer.addPass(new THREE.OutputPass());
     const grade = new THREE.ShaderPass(GRADE); composer.addPass(grade);
     const smaa = new THREE.SMAAPass(256, 256); composer.addPass(smaa);
-    let w = 0, h = 0, slow = 0, lastFrame = 0, lastDraw = 0, post = true, exposure = 1, shadowKey = '';
+    let w = 0, h = 0, slow = 0, lastFrame = 0, lastDraw = 0, post = true, exposure = 1, shadowKey = '', settle = 0;
     // tier: how much of the city to build in detail (0 = the least), for scenes built from now on
     let tier = 3;
     function apply() {
@@ -197,6 +197,7 @@
       });
       if (shadowKey && key !== shadowKey) scene.traverse(m => { if (m.material) for (const x of [].concat(m.material)) x.needsUpdate = true; });
       shadowKey = key;
+      settle = performance.now() + 3000; // shaders recompile after a change: don't judge those frames
     }
     const view = {
       renderer, scene, camera, composer, bloom, ao, apply,
@@ -211,8 +212,11 @@
         // frame rate limit: skip drawing until the frame is due (the game itself keeps running every frame)
         if (o.fps && now - lastDraw < 1000 / o.fps - 2) return;
         lastDraw = now; drawn++;
-        // 'auto' quality: about 2 seconds of frames slower than ~30fps steps every view down a preset
-        if (o.preset === 'auto' && !pinned && real > 0 && real < 5) {
+        // 'auto' quality: about 2 seconds of frames slower than ~30fps steps every view down a preset. A
+        // stutter (loading a model, building a street, coming back to the tab) isn't slowness: it, and the
+        // 3 seconds after it while things settle, don't count.
+        if (real > 0.25 || !real) settle = now + 3000; // (!real: the first frame)
+        if (o.preset === 'auto' && !pinned && real > 0 && now > settle) {
           slow = real > 0.034 ? slow + real : Math.max(0, slow - real * 0.5);
           if (slow > 2 && autoStep < SET.AUTO.length - 1) { slow = 0; autoStep++; current = null; for (const v of views) v.apply(); }
         }

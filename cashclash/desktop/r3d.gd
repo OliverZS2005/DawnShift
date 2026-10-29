@@ -23,6 +23,7 @@ var _saved := {}
 var _opts := {}
 var _auto_step := 0
 var _slow := 0.0
+var _settle := 3.0 # seconds before frame times count again (after a stutter or a change)
 var _views := []
 var _suns := []
 
@@ -50,6 +51,7 @@ func set_options(saved: Dictionary) -> void:
 
 func _apply() -> void:
 	_opts = {}
+	_settle = 3.0 # shaders recompile after a change: don't judge those frames
 	var o = opts()
 	Engine.max_fps = o.fps
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if o.vsync else DisplayServer.VSYNC_DISABLED)
@@ -82,20 +84,26 @@ func tune_view(v: Dictionary) -> void:
 # a sky made by environment(): the effects the settings switch, brightness and how far the smog lets you see
 func tune_env(e: Environment) -> void:
 	var o = opts()
-	e.ssao_enabled = o.ao
+	var full = not Game.mobile # the Mobile renderer phones use has none of AO, SSIL, SSR or volumetric fog
+	e.ssao_enabled = o.ao and full
 	e.glow_enabled = o.bloom and not e.get_meta("no_glow", false)
-	e.ssil_enabled = o.reflections
-	e.ssr_enabled = o.reflections
-	e.volumetric_fog_enabled = o.haze
+	e.ssil_enabled = o.reflections and full
+	e.ssr_enabled = o.reflections and full
+	e.volumetric_fog_enabled = o.haze and full
 	e.adjustment_enabled = o.grade and not e.get_meta("no_grade", false)
 	e.tonemap_exposure = float(e.get_meta("exposure", 1.0)) * o.brightness / 100.0
 	var thick = float(M.SETTINGS.FOG[o.distance])
 	e.fog_depth_begin = 15.0 / thick
 	e.fog_depth_end = 330.0 / thick
 
-# 'auto' quality: about 2 seconds of frames slower than ~30fps steps the graphics down a preset
+# 'auto' quality: about 2 seconds of frames slower than ~30fps steps the graphics down a preset. A stutter
+# (loading a model, building the streets, a new room) isn't slowness: it, and the 3 seconds after it while
+# things settle, don't count.
 func _process(dt: float) -> void:
-	if M.is_empty() or opts().preset != "auto" or dt <= 0 or dt > 5 or _views.is_empty():
+	if dt > 0.25:
+		_settle = 3.0
+	_settle -= dt
+	if M.is_empty() or opts().preset != "auto" or dt <= 0 or _settle > 0 or _views.is_empty():
 		return
 	_slow = _slow + dt if dt > 0.034 else max(0.0, _slow - dt * 0.5)
 	if _slow > 2 and _auto_step < M.SETTINGS.AUTO.size() - 1:
@@ -216,7 +224,6 @@ func environment(sky_name: String, exposure: float, _unused := Color.BLACK) -> E
 		e.ambient_light_color = e.background_color
 	e.tonemap_mode = Environment.TONE_MAPPER_ACES
 	e.tonemap_exposure = exposure
-	e.ssao_enabled = true
 	e.ssao_radius = 1.2
 	e.ssao_intensity = 1.6
 	# GTA IV-style bloom: bright sky and highlights bleed a soft glow
@@ -250,21 +257,18 @@ func environment(sky_name: String, exposure: float, _unused := Color.BLACK) -> E
 	# Vulkan (Forward+) only; the OpenGL fallback ignores these. (No SDFGI: outdoors it darkened the
 	# shade more than it added bounce light, and it's the costliest effect on weaker graphics cards.)
 	# Bounce light and contact shading from what's on screen, and reflections on smooth floors.
-	e.ssil_enabled = true
 	e.ssil_radius = 4.0
 	e.ssil_intensity = 0.8
-	e.ssr_enabled = true
 	e.ssr_max_steps = 48
 	e.ssr_fade_out = 1.5
 	# Thin volumetric haze: the air catches the sunlight (soft light shafts between the buildings).
-	e.volumetric_fog_enabled = true
 	e.volumetric_fog_density = 0.005
 	e.volumetric_fog_albedo = haze
 	e.volumetric_fog_anisotropy = 0.55
 	e.volumetric_fog_length = 90.0
 	e.volumetric_fog_sky_affect = 0.0
 	e.set_meta("exposure", exposure)
-	tune_env(e)
+	tune_env(e) # switches the effects above on or off, as the settings say
 	return e
 
 func sun(color: Color, energy: float) -> DirectionalLight3D:
@@ -386,7 +390,19 @@ func viewport(fov: float) -> Dictionary:
 	world.add_child(cam)
 	var we = WorldEnvironment.new()
 	world.add_child(we)
-	var v = {"container": c, "viewport": vp, "world": world, "camera": cam, "env": we, "base_fov": fov}
+	var outer: Control = c
+	if Game.mobile:
+		# Phones lay the UI out on a small canvas scaled up to the screen, and a stretched SubViewport would
+		# render at that canvas size and look blurry. So the container is made `sharp` times bigger and shrunk
+		# back by the same scale: the 3D renders at up to 1.5x the canvas resolution (sharper, but still
+		# far fewer pixels than the whole screen, which phone GPUs can't afford for this scene).
+		outer = Control.new()
+		outer.add_child(c)
+		outer.resized.connect(func():
+			var sharp = clamp(get_tree().root.get_final_transform().x.x, 1.0, 1.5)
+			c.scale = Vector2.ONE / sharp
+			c.size = outer.size * sharp)
+	var v = {"container": outer, "viewport": vp, "world": world, "camera": cam, "env": we, "base_fov": fov}
 	_views.append(v)
 	tune_view(v)
 	return v

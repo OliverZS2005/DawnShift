@@ -89,6 +89,7 @@ jobs:
           else
             mkdir -p ~/.android-key
             if [ ! -f ~/.android-key/release.keystore ]; then
+              touch "$RUNNER_TEMP/new-android-key" # the release notes warn about it
               openssl rand -hex 24 > ~/.android-key/pass
               keytool -genkeypair -keystore ~/.android-key/release.keystore -alias hustlefront -keyalg RSA -keysize 2048 -validity 10000 \
                 -storepass "$(cat ~/.android-key/pass)" -keypass "$(cat ~/.android-key/pass)" -dname "CN=Hustlefront" > /dev/null
@@ -142,6 +143,12 @@ jobs:
 
           Singleplayer works offline. For multiplayer and syncing with the web version, join a Hustlefront server from the Play tab.
           EOF
+          if [ -f "$RUNNER_TEMP/new-android-key" ]; then
+            cat >> notes.md <<'EOF'
+
+          **Android, this build:** the app is signed with a new key (GitHub forgets the old one after a week without builds), so it won't install over the Hustlefront you have. In the old app, make a sync code (Play tab → Sync) so your game is saved, uninstall it, install this APK and enter the code again. Set the `ANDROID_KEYSTORE_BASE64` and `ANDROID_KEYSTORE_PASSWORD` secrets to keep one key for good (see the README).
+          EOF
+          fi
           gh release delete hustlefront-latest --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
           gh release delete cashclash-latest --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true # the old names' releases
           gh release delete dawnshift-latest --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
@@ -166,6 +173,10 @@ jobs:
   iphone:
     needs: export
     runs-on: macos-latest
+    # GitHub's Macs are sometimes all busy: give up after half an hour instead of failing the whole build
+    # (the other downloads are already published; the next build tries again)
+    timeout-minutes: 30
+    continue-on-error: true
     steps:
       - name: Fetch the Xcode project
         env:

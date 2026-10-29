@@ -425,6 +425,9 @@ function renderReboot(t) {
   </div>`;
 }
 
+// The web version needs a mouse and keyboard; on a phone or tablet, point to the apps (touch controls).
+const TOUCH_ONLY = matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
+const APPS_URL = 'https://github.com/OliverZS2005/DawnShift/releases/tag/hustlefront-latest';
 function renderPlay() {
   const t = SP.tycoon, known = Object.keys(tokens());
   const choice = pendingChoice ? `
@@ -436,7 +439,8 @@ function renderPlay() {
       </div>
       <div class="row"><span></span><button data-cancel-join>Cancel</button></div>
     </div>` : '';
-  return `<div class="grid">
+  const apps = TOUCH_ONLY ? `<div class="card current" style="margin-bottom:12px"><h3>📱 On a phone or tablet?</h3><p class="muted">This web version needs a mouse and keyboard. The Android and iPhone apps have touch controls and the same game; with a sync code (below) they share your progress with this page.</p><div class="row"><span></span><button class="primary" onclick="window.open(APPS_URL, '_blank', 'noopener')">Get the app</button></div></div>` : '';
+  return apps + `<div class="grid">
     <div class="card ${mode === 'sp' ? 'current' : ''}"><h3>💻 Singleplayer</h3>
       <p class="muted">Runs entirely on your PC. Fight computer rivals. You have one singleplayer game — you can reset it, but not make another.</p>
       ${R3D.assetsAvailable ? '' : `<p class="loss">You opened this page straight from a file, so the 3D art can't load and you're seeing simple shapes. For full graphics run <code>npm start</code> in the cashclash folder and open <b>http://localhost:8080</b>.</p>`}

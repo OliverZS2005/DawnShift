@@ -33,6 +33,7 @@ var queue_lbl: Label
 var fps_lbl: Label
 var city_full := false # phones: the city fills the screen (the ⤢ button)
 var header: PanelContainer
+var ui_root: VBoxContainer
 
 func _ready() -> void:
 	R3D.set_options(Game.settings.get("options", {}))
@@ -44,12 +45,14 @@ func _ready() -> void:
 		w.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
 		w.content_scale_size = Vector2i(800, 500)
 	theme = _make_theme()
+	get_tree().set_quit_on_go_back(false) # Android's Back button: see _notification
 	var bg = ColorRect.new()
 	bg.color = C_BG
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
 	var root = VBoxContainer.new()
+	ui_root = root
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.add_theme_constant_override("separation", 0)
 	add_child(root)
@@ -159,13 +162,15 @@ func _process(dt: float) -> void:
 	if queue_lbl and is_instance_valid(queue_lbl):
 		queue_lbl.text = Game.net.get("queue_text", "") if Game.mode == "mp" else Game.sp_queue_status()
 	city.visible = tab in ["tycoon", "settings"] and not arena.visible # on the Settings tab it's a live preview
+	if Game.mobile:
+		_safe_area()
 	fps_lbl.visible = R3D.opts().showFps
 	if fps_lbl.visible:
 		fps_lbl.text = "%d fps" % Engine.get_frames_per_second()
 		move_child(fps_lbl, -1)
 	if city.visible:
 		if Game.mobile:
-			city.custom_minimum_size.y = size.y - header.size.y if city_full else size.y * 0.6
+			city.custom_minimum_size.y = ui_root.size.y - header.size.y if city_full else ui_root.size.y * 0.6
 		else:
 			city.custom_minimum_size.y = max(340.0, size.y * 0.62)
 		city.update_city(t)
@@ -176,6 +181,36 @@ func _process(dt: float) -> void:
 	if dirty or (rerender_acc > 1.0 and tab in ["tycoon", "armory", "reboot"]):
 		rerender_acc = 0.0
 		render()
+
+# Android's Back button steps back: out of a conversation, out of the full-screen city, to the Tycoon tab,
+# and only then saves and quits. In a fight it does nothing (no running away).
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_WM_GO_BACK_REQUEST or arena == null:
+		return
+	if arena.visible:
+		return
+	if city.talking != null:
+		city.talk(null)
+	elif city_full:
+		city_full = false
+	elif tab != "tycoon":
+		tab = "tycoon"
+		render()
+	else:
+		Game.save_sp()
+		get_tree().quit()
+
+# Phones: keep the UI and the fight's HUD clear of the notch, the camera hole and the home bar.
+func _safe_area() -> void:
+	var safe = DisplayServer.get_display_safe_area()
+	var win = DisplayServer.window_get_size()
+	if safe.size.x <= 0 or win.x <= 0:
+		return
+	var k = get_tree().root.get_final_transform().x.x
+	var m = Vector4(safe.position.x, safe.position.y, win.x - safe.end.x, win.y - safe.end.y) / k
+	for c in [ui_root, arena]:
+		c.offset_left = max(0.0, m.x); c.offset_top = max(0.0, m.y)
+		c.offset_right = -max(0.0, m.z); c.offset_bottom = -max(0.0, m.w)
 
 func show_toast(msg: String) -> void:
 	toast_lbl.text = msg

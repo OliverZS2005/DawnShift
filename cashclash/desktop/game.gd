@@ -48,6 +48,10 @@ func _notification(what: int) -> void:
 		save_sp()
 		await sync_now(true)
 		get_tree().quit()
+	elif what == NOTIFICATION_APPLICATION_PAUSED or (mobile and what == NOTIFICATION_APPLICATION_FOCUS_OUT):
+		# phones can close an app in the background without warning: keep the game safe as it goes there
+		save_sp()
+		sync_now(true)
 
 func _toast_later(msg: String) -> void:
 	await get_tree().create_timer(0.3).timeout

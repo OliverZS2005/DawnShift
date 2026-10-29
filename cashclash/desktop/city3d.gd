@@ -60,6 +60,7 @@ var talk_opts: Label
 var aim = -1
 var own_mouse := false
 var pad = null # touch.gd on phones and tablets
+var pad_used := false # once you've walked or looked with it, the controls hint goes
 const TOUCH_SENS := 0.006 # radians per canvas unit dragged
 var sun_light: DirectionalLight3D
 var steel: StandardMaterial3D
@@ -346,7 +347,7 @@ func _layout_overlay() -> void:
 	prompt.position = Vector2((size.x - prompt.size.x) / 2, size.y / 2 + 22)
 	hint.reset_size()
 	hint.position = Vector2(12, size.y - hint.size.y - 8)
-	hint.visible = not own_mouse and talking == null and R3D.opts().hints
+	hint.visible = not own_mouse and talking == null and R3D.opts().hints and not pad_used
 	dot.color = Color(R3D.M.SETTINGS.CROSSHAIR[R3D.opts().crosshair], 0.9)
 	talk_panel.reset_size()
 	talk_panel.position = Vector2((size.x - talk_panel.size.x) / 2, size.y - talk_panel.size.y - 18)
@@ -849,6 +850,8 @@ func _process(dt: float) -> void:
 		rooms[want] = _build_room(want, lots[want].ms)
 	if pad:
 		var look = pad.take_look()
+		if look != Vector2.ZERO or pad.stick != Vector2.ZERO:
+			pad_used = true
 		var o = R3D.opts()
 		me.yaw -= look.x * TOUCH_SENS * o.sens / 100.0
 		me.pitch = clamp(me.pitch - look.y * TOUCH_SENS * o.sens / 100.0 * (-1 if o.invert else 1), -1.3, 1.3)

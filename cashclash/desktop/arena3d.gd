@@ -491,7 +491,8 @@ func foe_tag():
 	var head = ch.root.position + Vector3(0, 2.2, 0)
 	if v.camera.is_position_behind(head):
 		return null
-	return v.camera.unproject_position(head)
+	# in the 3D view's pixels; on phones those are finer than the HUD's (see R3D.viewport), so scale back
+	return v.camera.unproject_position(head) * Vector2(v.container.size) / Vector2(v.viewport.size)
 
 # ---------- Per frame ----------
 # view = {m, u: [{x,y,hp,mhp,ang,g:{id,ammo,rl}}], b: [[x,y,big,vx,vy]], fx: [[x,y,r,t]]}
