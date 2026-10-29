@@ -234,7 +234,7 @@
     // a cylinder turned on its side (o.r), placed by its centre rather than its bottom
     const pipe = (rad, len, x, y, z, c, o) => cyl(rad, len, x, y - len / 2, z, c, o);
     // a neon strip (not so bright that it washes out to white)
-    const stripe = (x, y, z, len, c, along = 'z', a) => P.push(box(along === 'z' ? 0.06 : len, 0.06, along === 'z' ? len : 0.06, x, y, z, c, { ...glow(c, 1.4), ...(a ? { a } : {}) }));
+    const stripe = (x, y, z, len, c, along = 'z', a) => P.push(box(along === 'z' ? 0.06 : len, 0.06, along === 'z' ? len : 0.06, x, y, z, c, { ...glow(c, 0.9), ...(a ? { a } : {}) }));
     if (id === 'lemon') {
       // a striped awning over the counter, crates of lemons, a juice press and a lit drinks fridge
       for (let k = 0; k < 9; k++) P.push(box(0.75, 0.05, 1.3, -4.1 + k * 0.75, 2.45, -6.9, k % 2 ? '#fff6dc' : '#f2c21b', { r: [0.32, 0, 0] }));
@@ -330,10 +330,10 @@
           for (let k = 0; k < 5; k++) P.push(sph(0.03, x - Math.sign(x) * 0.07, 2.25 + r() * 0.7, z - 0.5 + r(), '#ffffff', { ...glow('#ffffff', 4), seg: 6 }));
         }
       }
-      for (const x of [-X + 0.06, X - 0.06]) stripe(x, 0.3, -d / 2, d - 1, '#5ab8ff', 'z');
+      for (const x of [-X + 0.06, X - 0.06]) stripe(x, 0.3, -d / 2, d - 1, '#2f8fff', 'z');
       stripe(0, h - 0.05, -d / 2, w - 2, '#8fd3ff', 'x');
       for (const [x, z] of [[-8.4, -6], [-8.6, -9], [-8.3, -15], [-8.6, -20], [8.5, -8], [8.4, -18]]) {
-        for (let k = 0; k < 4; k++) P.push(cone(0.18 + r() * 0.12, 0.6 + r() * 0.8, x + (r() - 0.5) * 0.6, 0, z + (r() - 0.5) * 0.6, '#7ff6ff', { ...glow('#3fd8ff', 2.2), a: 'pulse', seg: 6, r: [(r() - 0.5) * 0.5, 0, (r() - 0.5) * 0.5] }));
+        for (let k = 0; k < 4; k++) P.push(cone(0.18 + r() * 0.12, 0.6 + r() * 0.8, x + (r() - 0.5) * 0.6, 0, z + (r() - 0.5) * 0.6, '#1fb8e8', { ...glow('#18c8ff', 0.9), a: 'pulse', seg: 6, r: [(r() - 0.5) * 0.5, 0, (r() - 0.5) * 0.5] }));
         block([x - 0.7, z - 0.7, x + 0.7, z + 0.7]);
       }
       P.push(cyl(1.2, 2.4, 7.6, 0, -13, '#e9ecef', { rt: 0.9, m: 0.4, seg: 28 }), cone(0.9, 1.4, 7.6, 2.4, -13, '#e9ecef', { m: 0.4, seg: 28 }), pipe(0.5, 0.06, 7.6, 1.4, -11.82, '#0b1730', { r: [PI / 2, 0, 0], ...glow('#3a7bff', 0.6) }));
