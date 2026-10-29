@@ -311,8 +311,9 @@ func _intro_view() -> void:
 		var f = VBoxContainer.new()
 		box.add_child(f)
 		f.add_child(_label("Sign up: pick a name and a password" if intro_form == "signup" else "Log in to your account", 14))
-		_account_form(f, func(): intro_form = ""; show_intro(false))
-	intro_panel.add_child(_label("Tap Play, then walk around your business with your left thumb." if small else "Click Play, then click the city to walk around your business.", 12, C_MUTED))
+		_account_form(f, func(): intro_form = ""; show_intro(false), intro_form)
+	var go_word = "Continue" if Game.has_progress() else "Play"
+	intro_panel.add_child(_label(("Tap %s, then walk around your business with your left thumb." if small else "Click %s, then click the city to walk around your business.") % go_word, 12, C_MUTED))
 	intro_panel.reset_size()
 
 func show_toast(msg: String) -> void:
@@ -524,8 +525,9 @@ func _render_play() -> void:
 		r.add_child(_button("Create new sync code", func(): Game.sync_create(ss.text)))
 		r.add_child(_button("Link with code", func(): ask("Replace the singleplayer game on this computer with the synced one?", func(): Game.sync_link(ss.text, code.text))))
 
-# Server, name and password, with Sign up and Log in. `done` runs once logged in. Returns the server field.
-func _account_form(parent: Control, done := Callable()) -> LineEdit:
+# Server, name and password, with Sign up and Log in (`main` is the one in gold). `done` runs once logged in.
+# Returns the server field.
+func _account_form(parent: Control, done := Callable(), main := "login") -> LineEdit:
 	var srv = _input_field(parent, "Server", str(Game.settings.get("account_server", Game.settings.server)))
 	var nm = _input_field(parent, "Name", "")
 	nm.max_length = 20
@@ -551,9 +553,9 @@ func _account_form(parent: Control, done := Callable()) -> LineEdit:
 			return
 		if done.is_valid():
 			done.call()
-	pw.text_submitted.connect(func(_t): go.call("login"))
-	r.add_child(_button("Sign up", func(): go.call("signup")))
-	r.add_child(_button("Log in", func(): go.call("login"), false, true))
+	pw.text_submitted.connect(func(_t): go.call(main))
+	r.add_child(_button("Sign up", func(): go.call("signup"), false, main == "signup"))
+	r.add_child(_button("Log in", func(): go.call("login"), false, main == "login"))
 	return srv
 
 func _render_tycoon() -> void:

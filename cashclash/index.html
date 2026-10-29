@@ -317,16 +317,19 @@ function adoptSave(save) {
 async function syncNow(quiet) {
   if (!SYNC || syncBusy || G) return;
   syncBusy = true;
+  const s = SYNC; // logging out (or linking something else) meanwhile mustn't get this answer
   try {
     SP.last = Date.now();
-    const r = await fetch(syncUrl(), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ save: syncBlob(), base: SYNC.base, device: 'web' }) });
+    const r = await fetch(httpBase(s.server) + '/api/sync/' + s.code, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ save: syncBlob(), base: s.base, device: 'web' }) });
     const b = await r.json();
-    if (r.status === 409) { adoptSave(b.save); SYNC.base = b.updatedAt; toast('☁️ Loaded newer progress from your other device'); }
-    else if (r.ok) SYNC.base = b.updatedAt;
+    if (SYNC !== s) { syncBusy = false; return; }
+    if (r.status === 409) { adoptSave(b.save); s.base = b.updatedAt; toast('☁️ Loaded newer progress from your other device'); }
+    else if (r.ok) s.base = b.updatedAt;
     else throw new Error(b.error || r.status);
-    SYNC.at = Date.now(); SYNC.err = null;
-  } catch (e) { SYNC.err = e.message || 'offline'; if (!quiet) toast('Sync failed: ' + SYNC.err); }
-  store.set('cc_sync', SYNC); syncBusy = false;
+    s.at = Date.now(); s.err = null;
+  } catch (e) { s.err = e.message || 'offline'; if (!quiet && SYNC === s) toast('Sync failed: ' + s.err); }
+  if (SYNC === s) store.set('cc_sync', SYNC);
+  syncBusy = false;
   if (tab === 'play') renderSoon();
 }
 async function syncCreate(server) {
@@ -365,9 +368,10 @@ async function account(op, server, name, password) {
   toast(op === 'signup' ? `Welcome, ${b.name}! Your game now saves to your account.` : `Logged in as ${b.name}`);
   render(); return null;
 }
-function logout() {
+async function logout() {
   if (!confirm('Log out? Your game stays on this device but stops saving to your account.')) return;
-  syncNow(true); SYNC = null; store.set('cc_sync', null); toast('Logged out'); render();
+  await syncNow(true); // a last save to the account first
+  SYNC = null; store.set('cc_sync', null); toast('Logged out'); render();
 }
 setInterval(() => syncNow(true), 20000);
 addEventListener('visibilitychange', () => { if (document.hidden) syncNow(true); });
@@ -967,7 +971,7 @@ function introView() {
       <label>Password</label><input id="accPw" type="password" autocomplete="${introForm === 'signup' ? 'new-password' : 'current-password'}">
       <div class="row"><span class="loss" id="accErr"></span><button class="primary" data-intro-go>${introForm === 'signup' ? 'Sign up' : 'Log in'}</button></div>
     </form>
-    <p class="small">${TOUCH_ONLY ? `On a phone? <a href="${APPS_URL}" target="_blank" rel="noopener">Get the app</a> for touch controls. ` : ''}Click Play, then click the city to walk around your business.</p>`;
+    <p class="small">${TOUCH_ONLY ? `On a phone? <a href="${APPS_URL}" target="_blank" rel="noopener">Get the app</a> for touch controls. ` : ''}Click ${hasProgress(t) ? 'Continue' : 'Play'}, then click the city to walk around your business.</p>`;
 }
 function showIntro(on) {
   introOn = on; document.body.classList.toggle('intro', on);
