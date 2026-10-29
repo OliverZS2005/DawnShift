@@ -355,16 +355,17 @@
       block([6.2, -21, X, -15]);
       P.push(box(2.6, 1.4, 0.05, 0, 3.6, -d + 0.08, '#081420', glow('#1d6fff', 0.8)), box(2.2, 0.08, 0.05, 0, 4.0, -d + 0.12, '#41ff8a', { ...glow('#41ff8a', 2.5), a: 'pulse' }));
     } else if (id === 'dyson') {
-      // the control room: a huge window onto the sun, an arc of consoles, pulsing energy conduits, gold trim
-      P.push(box(w - 2, h - 1.6, 0.1, 0, 0.9, -d + 0.15, '#050505'), sph(5.5, 0, 3.4, -d - 6.5, '#ffd27a', { ...glow('#ff9a1f', 5), seg: 40 }), box(w - 2, 0.12, 0.3, 0, h - 0.7, -d + 0.3, '#c9a227', { m: 1, ro: 0.3 }));
-      for (let k = 0; k < 7; k++) {
-        const a = -0.9 + k * 0.3, x = Math.sin(a) * 7.4, z = -3.5 - Math.cos(a) * 0.9;
-        if (Math.abs(x) < 6) continue;
-        P.push(box(1.1, 0.9, 0.6, x, 0, z, '#2a2622', { r: [0, -a, 0] }), box(0.95, 0.45, 0.05, x, 0.95, z - 0.1, '#ffb45e', { ...glow('#ffb45e', 1.8), r: [-0.5, -a, 0] }));
-        block([x - 0.7, z - 0.5, x + 0.7, z + 0.5]);
+      // the control room: the sun filling a huge dark window, consoles by the walls, energy conduits, gold trim
+      P.push(box(w - 2, h - 1.6, 0.1, 0, 0.9, -d + 0.15, '#050505'), box(w - 2, 0.12, 0.3, 0, h - 0.7, -d + 0.3, '#c9a227', { m: 1, ro: 0.3 }));
+      P.push(pipe(3.9, 0.04, 0, 3.5, -d + 0.24, '#ff6a00', { r: [PI / 2, 0, 0], ...glow('#ff5a00', 0.7), seg: 48 }));
+      P.push(pipe(3.2, 0.06, 0, 3.5, -d + 0.28, '#ffcf6a', { r: [PI / 2, 0, 0], ...glow('#ffa53a', 1.3), a: 'pulse', seg: 48 }));
+      for (const sg of [-1, 1]) for (let k = 0; k < 3; k++) {
+        const x = sg * 8.8, z = -2.2 - k * 1.4;
+        P.push(box(0.6, 0.9, 1.1, x, 0, z, '#2a2622'), box(0.05, 0.45, 0.95, x - sg * 0.32, 0.95, z, '#ffb45e', { ...glow('#ffa040', 0.9), r: [0, 0, sg * 0.45] }));
+        block([x - 0.35, z - 0.6, x + 0.35, z + 0.6]);
       }
-      for (const z of [-6, -12, -18, -24]) for (const x of [-X + 0.6, X - 0.6]) { P.push(cyl(0.28, h, x, 0, z, '#ff8a2a', { ...glow('#ff7a1a', 2.4), a: 'pulse', seg: 18 }), cyl(0.36, 0.25, x, 0, z, '#c9a227', { m: 1 }), cyl(0.36, 0.25, x, h - 0.25, z, '#c9a227', { m: 1 })); block([x - 0.4, z - 0.4, x + 0.4, z + 0.4]); }
-      for (const x of [-5.4, 3.4]) P.push(box(0.08, 0.01, d - 3, x, 0.001, -d / 2 - 1, '#ffb45e', glow('#ffb45e', 1.2)));
+      for (const z of [-7, -12, -18, -24]) for (const x of [-X + 0.6, X - 0.6]) { P.push(cyl(0.28, h, x, 0, z, '#ff8a2a', { ...glow('#ff7a1a', 1.0), a: 'pulse', seg: 18 }), cyl(0.36, 0.25, x, 0, z, '#c9a227', { m: 1 }), cyl(0.36, 0.25, x, h - 0.25, z, '#c9a227', { m: 1 })); block([x - 0.4, z - 0.4, x + 0.4, z + 0.4]); }
+      for (const x of [-5.4, 3.4]) P.push(box(0.08, 0.01, d - 3, x, 0.001, -d / 2 - 1, '#ffb45e', glow('#ffb45e', 0.6)));
     }
     return P;
   }
