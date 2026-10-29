@@ -300,6 +300,7 @@ func _intro_view() -> void:
 	var url = Game.update_url()
 	if url != "":
 		var up = _button("⬆️  A new version is out: download it", func(): OS.shell_open(url), false, true)
+		up.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		intro_panel.add_child(up)
 	var posts = Game.news_posts()
 	if not posts.is_empty():
@@ -596,6 +597,13 @@ func _account_form(parent: Control, done := Callable(), main := "login") -> Line
 		ok.text = ("✓ Found %s. You can sign up or log in." % r.body.name) if found else "✗ No Hustlefront server answers there. Check the address, and that the server is running."
 		ok.add_theme_color_override("font_color", C_GREEN if found else C_RED)))
 	cr.add_child(_button("How do I get a server?", func(): help.visible = not help.visible))
+	if not Game.mobile: # phones can't run it
+		cr.add_child(_button("Download the server", func():
+			ok.text = "Saving…"
+			var e = await Game.save_server_zip()
+			if is_instance_valid(ok):
+				ok.text = e if e != "" else "✓ Saved to your Downloads. Unzip it and read READ ME.txt."
+				ok.add_theme_color_override("font_color", C_RED if e != "" else C_GREEN)))
 	cr.add_child(ok)
 	parent.add_child(help)
 	var nm = _input_field(parent, "Name", "")
@@ -847,7 +855,7 @@ func _render_reboot() -> void:
 # fills in its values; changing one of those by hand turns the preset into Custom, starting from what was on.
 # How to get a server, under the login forms' Check button (the web version shows the same steps)
 const SERVER_HELP = """1. Someone you know runs one: type the address they give you, like ws://192.168.1.20:8080 (on the same Wi-Fi) or wss://their-site.com.
-2. Run your own on a computer that stays on: install Node.js (nodejs.org), download the game's code from GitHub (Code → Download ZIP) and unzip it, open a terminal in its cashclash folder, and type  npm install --omit=dev  and then  npm start . Leave that window open.
+2. Run your own on a computer that stays on: get the server (Download the server, in the desktop app; or Hustlefront-Server.zip from the downloads page), unzip it, install Node.js (nodejs.org), open a terminal in the unzipped folder and type  node server.js . Leave that window open. READ ME.txt in the folder says the same, step by step.
 3. Its address is ws://localhost:8080 on that computer, and ws://<the computer's IP>:8080 from a phone or another computer on the same Wi-Fi. Find the IP on Windows by typing ipconfig (IPv4 Address), on a Mac in System Settings → Wi-Fi → Details.
 4. To play from anywhere, run it on a hosting service (or forward port 8080 on your router) and use that address."""
 

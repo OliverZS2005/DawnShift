@@ -122,6 +122,22 @@ function news() {
   return { server: SERVER_NAME, version: Math.max(a.version || 0, b.version || 0), download: (up ? b.download : a.download) || a.download || b.download || '', posts: posts.slice(0, 30) };
 }
 
+// ---------- The server itself, to download (Hustlefront-Server.zip) ----------
+// So anyone playing here can host their own: the server, the web version and its art, ready for
+// `node server.js` (tools/server-zip.js). Made on the first request, then kept for as long as this runs.
+let serverZipFile = null;
+function sendServerZip(res) {
+  try {
+    if (!serverZipFile) {
+      const f = path.join(require('os').tmpdir(), `hustlefront-server-${process.pid}.zip`);
+      fs.writeFileSync(f, require('./tools/server-zip.js').serverZip());
+      serverZipFile = f;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Disposition': 'attachment; filename="Hustlefront-Server.zip"', 'Content-Length': fs.statSync(serverZipFile).size });
+    fs.createReadStream(serverZipFile).pipe(res);
+  } catch (e) { json(res, 500, { error: 'Could not pack the server: ' + e.message }); }
+}
+
 // ---------- HTTP (static files + sync and account API) ----------
 const STATIC = { '/': 'index.html', '/index.html': 'index.html', '/shared.js': 'shared.js', '/models.js': 'models.js', '/render3d.js': 'render3d.js', '/vendor/three.bundle.js': 'vendor/three.bundle.js' };
 // The 3D art (models, textures, skies) lives in desktop/assets so the Godot app shares it.
@@ -144,6 +160,7 @@ const server = http.createServer((req, res) => {
   // lets the login forms check an address before you sign up ("Check" next to Server)
   if (req.url === '/api/info') return json(res, 200, { game: 'Hustlefront', name: SERVER_NAME, accounts: true });
   if (req.url === '/api/news') return json(res, 200, news());
+  if (req.url === '/download/server.zip') return sendServerZip(res);
   const am = req.url.match(/^\/api\/account\/(\w+)$/);
   if (am) return handleAccount(req, res, am[1]);
   const f = staticFile(req.url.split('?')[0]);

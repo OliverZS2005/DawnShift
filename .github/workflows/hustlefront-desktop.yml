@@ -58,6 +58,12 @@ jobs:
           godot --headless --path . --script res://tests/parity.gd > /tmp/parity.txt 2>&1
           node tests/parity.js /tmp/parity.txt
 
+      # The server, ready to run, for the desktop apps' "Download the server" button and the downloads page
+      - name: Pack the server
+        run: |
+          (cd .. && npm ci --omit=dev --no-audit --no-fund)
+          node ../tools/server-zip.js server/Hustlefront-Server.zip
+
       - name: Export
         run: |
           mkdir -p build/windows build/linux build/mac
@@ -120,6 +126,7 @@ jobs:
           cp build/linux/Hustlefront.x86_64 out/Hustlefront-Linux.x86_64
           cp build/mac/Hustlefront.zip out/Hustlefront-Mac.zip
           cp build/android/Hustlefront.apk out/Hustlefront-Android.apk
+          cp server/Hustlefront-Server.zip out/Hustlefront-Server.zip
           cat > notes.md <<'EOF'
           Hustlefront for your computer or phone. Pick the file for your system:
 
@@ -130,6 +137,7 @@ jobs:
           | Linux | `Hustlefront-Linux.x86_64` |
           | Android phone or tablet (64-bit, Android 7+) | `Hustlefront-Android.apk` |
           | iPhone or iPad (iOS 14+) | `Hustlefront-iPhone.ipa` (added a few minutes after the others) |
+          | Your own server (needs Node.js) | `Hustlefront-Server.zip`: unzip it and read `READ ME.txt` |
 
           **Windows:** open the `.exe`. If Windows says it protected your PC, click **More info → Run anyway**.
 

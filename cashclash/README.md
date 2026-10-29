@@ -62,7 +62,7 @@ Both versions open on an intro screen: your city pans slowly behind the title, w
 
 An **account** is a name and a password on a Hustlefront server. Sign up on one device and the game on it becomes your account's; log in on another (web, desktop or phone) and your game comes along, then keeps saving to the account as you play. Under the hood an account is a sync code with a name and password in front of it (below), so the same rules apply: play on one device at a time. The server keeps only salted scrypt hashes of the passwords, and makes anyone who gets a password wrong too often wait a few minutes. The Play tab shows who you're logged in as, with **Save now** and **Log out**.
 
-**Getting a server.** Under every login form, **How do I get a server?** explains the options, and **Check** tells you straight away whether a Hustlefront server answers at the address you typed. In short: use the address of a server someone runs, or run your own (install Node.js, download the code, then `npm install --omit=dev` and `npm start` in the `cashclash` folder), which is `ws://localhost:8080` on that computer and `ws://<its IP>:8080` from a phone on the same Wi-Fi. For players outside your home, run it on a hosting service or forward port 8080.
+**Getting a server.** Under every login form, **How do I get a server?** explains the options, and **Check** tells you straight away whether a Hustlefront server answers at the address you typed. In short: use the address of a server someone runs, or run your own: **Download the server** (a button in the desktop app's login form; on the web, the help's link; or `Hustlefront-Server.zip` on the downloads page, or `/download/server.zip` on any server) gives a ready-to-run zip with the server, the web version and its art and the one library it needs, so you unzip it, install Node.js and type `node server.js` (its `READ ME.txt` walks through it). That's which is `ws://localhost:8080` on that computer and `ws://<its IP>:8080` from a phone on the same Wi-Fi. For players outside your home, run it on a hosting service or forward port 8080.
 
 ## News and updates
 The game isn't in an app store, so it tells players about new versions and news itself. The Play tab has a **📣 News** card, the intro shows the latest headline, and new posts get a dot on the Play tab and a pop-up while you play. When a newer version of the app is out than the one you have, the app says so on the intro and in the Play tab, with a **Download** button.
@@ -86,6 +86,7 @@ In 🎮 Play, enter a server address and join. The first time you join a server,
 The server remembers you through a token stored in your browser, so the next time you join you go straight back in.
 
 ## Host your own server
+The easy way: get `Hustlefront-Server.zip` (the desktop app's **Download the server**, the downloads page, or `/download/server.zip` on any server), unzip it, install Node.js and run `node server.js` in the folder. `node tools/server-zip.js <out.zip>` makes that zip from this folder (after `npm install --omit=dev`; it never includes the server's players, accounts or saves). Or from the code:
 ```
 cd cashclash
 npm install --omit=dev

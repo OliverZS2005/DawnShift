@@ -421,6 +421,37 @@ func sync_link(server: String, code: String) -> void:
 	toast.emit("☁️ Linked! This computer now syncs.")
 	changed.emit()
 
+# ---------- The server, to download ----------
+# The desktop builds carry Hustlefront-Server.zip (tools/server-zip.js): "Download the server" saves it to
+# Downloads and shows it. A build without it (run from source) fetches it from your server instead.
+const SERVER_ZIP = "res://server/Hustlefront-Server.zip"
+
+func save_server_zip() -> String:
+	var dir = OS.get_system_dir(OS.SYSTEM_DIR_DOWNLOADS)
+	if dir == "":
+		dir = OS.get_user_data_dir()
+	var dest = dir.path_join("Hustlefront-Server.zip")
+	if FileAccess.file_exists(SERVER_ZIP):
+		var f = FileAccess.open(dest, FileAccess.WRITE)
+		if f == null:
+			return "Couldn't save to " + dir
+		f.store_buffer(FileAccess.get_file_as_bytes(SERVER_ZIP))
+		f.close()
+	else:
+		var s = settings.sync
+		var server = s.server if s != null else str(settings.get("account_server", settings.server))
+		var req = HTTPRequest.new()
+		req.download_file = dest
+		add_child(req)
+		req.request(http_base(server) + "/download/server.zip")
+		var res = await req.request_completed
+		req.queue_free()
+		if res[1] != 200:
+			return "This build doesn't include the server, and %s didn't hand it over. Get Hustlefront-Server.zip from the downloads page." % server
+	OS.shell_show_in_file_manager(dest)
+	toast.emit("Saved Hustlefront-Server.zip to " + dir + ". Unzip it and read READ ME.txt.")
+	return ""
+
 # ---------- News ----------
 # Announcements come live from your Hustlefront server (GET /api/news), checked every 10 minutes, on top of
 # the posts this build shipped with (models.json NEWS). When the server's version is higher than this app's,
