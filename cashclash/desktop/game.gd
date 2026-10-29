@@ -8,6 +8,7 @@ signal news(msg: String)
 signal match_started(info: Dictionary)
 signal snap_received(snap: Dictionary, ack: int)
 signal battle_result(won: bool, text: String)
+signal news_changed
 
 const SAVE_PATH = "user://cashclash_save.json"
 const SETTINGS_PATH = "user://cashclash_settings.json"
@@ -28,7 +29,7 @@ var pending_choice := ""
 var _ws_open := false
 
 var sp_queue := -1.0
-var _acc := {"save": 0.0, "event": 0.0, "sync": 0.0}
+var _acc := {"save": 0.0, "event": 0.0, "sync": 0.0, "news": 590.0}
 var _sync_busy := false
 
 # ---------- Lifecycle ----------
@@ -130,6 +131,10 @@ func _process(dt: float) -> void:
 	if _acc.save > 5.0:
 		_acc.save = 0.0
 		save_sp()
+	_acc.news += dt
+	if _acc.news > 600.0:
+		_acc.news = 0.0
+		fetch_news()
 	_acc.sync += dt
 	if _acc.sync > 20.0:
 		_acc.sync = 0.0
@@ -415,6 +420,56 @@ func sync_link(server: String, code: String) -> void:
 	save_settings()
 	toast.emit("☁️ Linked! This computer now syncs.")
 	changed.emit()
+
+# ---------- News ----------
+# Announcements come live from your Hustlefront server (GET /api/news), checked every 10 minutes, on top of
+# the posts this build shipped with (models.json NEWS). When the server's version is higher than this app's,
+# a new version is out: update_url() says where to get it.
+var feed := {} # the server's news (GET /api/news)
+
+func news_posts() -> Array:
+	var out = []
+	var seen = {}
+	for p in feed.get("posts", []) + R3D.M.NEWS.posts:
+		if not seen.has(p.id):
+			seen[p.id] = true
+			out.append(p)
+	out.sort_custom(func(a, b): return str(a.date) > str(b.date))
+	return out
+
+func unread_news() -> Array:
+	var seen = settings.get("news_seen", [])
+	return news_posts().filter(func(p): return not seen.has(p.id))
+
+func mark_news_seen() -> void:
+	if unread_news().is_empty():
+		return
+	var ids = settings.get("news_seen", [])
+	for p in news_posts():
+		if not ids.has(p.id):
+			ids.append(p.id)
+	settings.news_seen = ids.slice(-200)
+	save_settings()
+
+func update_url() -> String:
+	return str(feed.get("download", R3D.M.NEWS.download)) if int(feed.get("version", 0)) > int(R3D.M.NEWS.version) else ""
+
+func fetch_news() -> void:
+	var s = settings.sync
+	var server = s.server if s != null else str(settings.get("account_server", settings.server))
+	var r = await _http(HTTPClient.METHOD_GET, http_base(server) + "/api/news")
+	if r.code != 200 or typeof(r.body) != TYPE_DICTIONARY or typeof(r.body.get("posts")) != TYPE_ARRAY:
+		return
+	var before = {}
+	for p in feed.get("posts", []):
+		before[p.id] = true
+	var first = feed.is_empty()
+	feed = r.body
+	if not first:
+		for p in feed.posts:
+			if not before.has(p.id) and not settings.get("news_seen", []).has(p.id):
+				toast.emit("📣 " + str(p.title))
+	news_changed.emit()
 
 # ---------- Accounts (sign up / log in on a Hustlefront server) ----------
 # Same as the web version: an account is a name and password in front of a sync code; the server hands that

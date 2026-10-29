@@ -13,7 +13,9 @@ const SHOP_BUILDINGS = Object.fromEntries(Object.keys(MODELS.SHOPS).map(id => [i
 const INTERIORS = Object.fromEntries(Object.keys(MODELS.SHOPS).map(id => [id, [0, 1, 2, 3, 4].map(ms => MODELS.interior(id, ms))]));
 // the quest givers' words and the reboot goals' names, so the desktop app needn't keep its own copy of them
 const { QUEST_TEXT, REBOOT_GOALS } = require('../shared.js');
-const json = JSON.stringify({ ...MODELS, LAYOUT, SHOP_BUILDINGS, INTERIORS, QUEST_TEXT, REBOOT_GOALS }, null, 1) + '\n';
+// the news as this build ships it: the app's own version, and posts to show before it reaches a server
+const NEWS = require('../news.json');
+const json = JSON.stringify({ ...MODELS, LAYOUT, SHOP_BUILDINGS, INTERIORS, QUEST_TEXT, REBOOT_GOALS, NEWS }, null, 1) + '\n';
 if (process.argv.includes('--check')) {
   const cur = fs.existsSync(out) ? fs.readFileSync(out, 'utf8') : '';
   if (cur !== json) { console.error('desktop/models.json is out of date: run `node tools/build-models.js`'); process.exit(1); }

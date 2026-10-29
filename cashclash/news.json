@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "download": "https://github.com/OliverZS2005/DawnShift/releases/tag/hustlefront-latest",
+  "posts": [
+    {
+      "id": "2026-10-29-news",
+      "date": "2026-10-29",
+      "title": "News, right in the game",
+      "body": "Announcements like this one now show up in the Play tab and on the intro screen, straight from your Hustlefront server. When a new version of the app is out, the game tells you and links to the download."
+    },
+    {
+      "id": "2026-10-29-accounts",
+      "date": "2026-10-29",
+      "title": "Accounts, an intro screen and nine new interiors",
+      "body": "Sign up with a name and password and your game follows you between the web, your computer and your phone. Every business now has its own inside, from the lemonade stand's juice bar to the Dyson sphere's control room. And new buildings take real saving up: the first coffee shop is about five minutes from the start."
+    },
+    {
+      "id": "2026-10-28-phones",
+      "date": "2026-10-28",
+      "title": "Hustlefront on Android and iPhone",
+      "body": "The whole game now runs on phones and tablets, with touch controls: a stick under your left thumb, drag to look, and buttons to buy, talk and fire. Get it from the download page."
+    },
+    {
+      "id": "2026-10-28-settings",
+      "date": "2026-10-28",
+      "title": "Settings, and reboots that take work",
+      "body": "A Settings tab lets you tune the graphics, the controls and the screen. Reboots now ask for fights won, jobs done, milestones and weapon upgrades as well as money."
+    }
+  ]
+}

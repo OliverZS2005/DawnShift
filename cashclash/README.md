@@ -62,6 +62,15 @@ Both versions open on an intro screen: your city pans slowly behind the title, w
 
 An **account** is a name and a password on a Hustlefront server. Sign up on one device and the game on it becomes your account's; log in on another (web, desktop or phone) and your game comes along, then keeps saving to the account as you play. Under the hood an account is a sync code with a name and password in front of it (below), so the same rules apply: play on one device at a time. The server keeps only salted scrypt hashes of the passwords, and makes anyone who gets a password wrong too often wait a few minutes. The Play tab shows who you're logged in as, with **Save now** and **Log out**.
 
+**Getting a server.** Under every login form, **How do I get a server?** explains the options, and **Check** tells you straight away whether a Hustlefront server answers at the address you typed. In short: use the address of a server someone runs, or run your own (install Node.js, download the code, then `npm install --omit=dev` and `npm start` in the `cashclash` folder), which is `ws://localhost:8080` on that computer and `ws://<its IP>:8080` from a phone on the same Wi-Fi. For players outside your home, run it on a hosting service or forward port 8080.
+
+## News and updates
+The game isn't in an app store, so it tells players about new versions and news itself. The Play tab has a **📣 News** card, the intro shows the latest headline, and new posts get a dot on the Play tab and a pop-up while you play. When a newer version of the app is out than the one you have, the app says so on the intro and in the Play tab, with a **Download** button.
+- The news comes live from the Hustlefront server you play on: it serves `news.json` at `/api/news`, rereading the file whenever it changes, so players see a new post within ten minutes.
+- **Posting:** on the server's computer, `npm run announce -- "Title" "What's new."` adds a post. Add `--update` once a new version is on the download page: that raises the version number, and every app older than it shows the update notice.
+- **A network of servers:** start a server with `NEWS_URL=https://main-server/api/news` and it follows that server's feed too, passing its posts and version on to its own players. Announce once on a main server and every server following it spreads the news.
+- Each build also carries the `news.json` it was made with (in `desktop/models.json`), so the app knows its own version and shows recent news even offline.
+
 ## Sync between web and desktop
 In the 🎮 Play tab, under **Log in or sign up → Or use a sync code instead**, create a sync code on one device and enter it on the other. Your singleplayer game and your multiplayer logins are then stored on a Hustlefront server under that code and stay in sync. Each device pushes its save every 20 seconds and when you close it, and loads the other device's progress if that's newer. Play on one device at a time; if both play at once, the device that saves second loses its progress since the last sync.
 
@@ -92,6 +101,8 @@ Players can open `http://<your-ip>:8080` or type that address into the Play tab.
 | `DATA_FILE` | ./players.json | Where player profiles are saved |
 | `SYNC_FILE` | next to `DATA_FILE`, `syncs.json` | Where sync codes and their saves are kept |
 | `ACCOUNT_FILE` | next to `DATA_FILE`, `accounts.json` | Where accounts are kept (names, password hashes, their sync codes) |
+| `NEWS_FILE` | `news.json` next to `server.js` | The announcements this server serves (see News and updates) |
+| `NEWS_URL` | (none) | Another server's `/api/news` to follow and pass on |
 | `ALLOW_IMPORT` | 1 | Set to `0` to forbid importing singleplayer saves (they're edited locally, so players could cheat) |
 
 The server controls money, purchases, matchmaking and the battle simulation, so clients can only send inputs.

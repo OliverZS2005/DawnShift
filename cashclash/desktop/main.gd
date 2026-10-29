@@ -153,6 +153,10 @@ func _ready() -> void:
 	add_child(confirm_dlg)
 
 	Game.changed.connect(func(): dirty = true)
+	Game.news_changed.connect(func():
+		dirty = true
+		if intro.visible:
+			_intro_view())
 	Game.toast.connect(show_toast)
 	Game.news.connect(func(m): if tab == "battle": show_toast(m))
 	Game.match_started.connect(func(info): city.release(); arena.open(info))
@@ -292,6 +296,19 @@ func _intro_view() -> void:
 	var you = _label(who + game, 13, Color("#B9B4AA"))
 	you.add_theme_font_override("font", R3D.font("jetbrains-mono-500"))
 	intro_panel.add_child(you)
+	# a new version, and the latest news (opens the Play tab)
+	var url = Game.update_url()
+	if url != "":
+		var up = _button("⬆️  A new version is out: download it", func(): OS.shell_open(url), false, true)
+		intro_panel.add_child(up)
+	var posts = Game.news_posts()
+	if not posts.is_empty():
+		var more = Game.unread_news().size()
+		var nb = _button("📣  %s%s" % [posts[0].title, ("  (and %d more)" % (more - 1)) if more > 1 else ""], func(): show_intro(false); tab = "play"; render())
+		nb.flat = true
+		nb.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		nb.add_theme_color_override("font_color", Color("#d8d4cb"))
+		intro_panel.add_child(nb)
 	var acts = _row(intro_panel)
 	var play = _button("CONTINUE" if Game.has_progress() else "PLAY", func(): show_intro(false), false, true)
 	play.add_theme_font_override("font", R3D.font("barlow-condensed-800"))
@@ -433,6 +450,7 @@ func render() -> void:
 	queue_lbl = null
 	for t in tab_btns:
 		var active = t == tab
+		tab_btns[t].text = _tab_label(t)
 		tab_btns[t].add_theme_stylebox_override("normal", _box(C_GOLD if active else C_PANEL, C_LINE, 8, 8))
 		tab_btns[t].add_theme_color_override("font_color", Color("#111111") if active else C_TEXT)
 	mode_lbl.text = ("🌐 " + str(Game.net.get("server", "Multiplayer"))) if Game.mode == "mp" else "💻 Singleplayer"
@@ -448,7 +466,40 @@ func render() -> void:
 		"reboot": _render_reboot()
 		"settings": _render_settings()
 
+# a tab's name, with a dot on Play while there's news you haven't seen
+func _tab_label(id: String) -> String:
+	for t in TABS:
+		if t[0] == id:
+			return t[1] + ("  •" if id == "play" and not Game.unread_news().is_empty() else "")
+	return id
+
+# A new version, and the latest announcements (marked New until you've seen them here)
+func _news(parent: Control) -> void:
+	var url = Game.update_url()
+	if url != "":
+		var u = _card(parent, "⬆️ A new version of Hustlefront is out", true)
+		var r = _row(u)
+		r.add_child(_label("Download it to get the latest. Your game is kept.", 13, C_MUTED, true))
+		_spacer(r)
+		r.add_child(_button("Download", func(): OS.shell_open(url), false, true))
+	var posts = Game.news_posts()
+	if posts.is_empty():
+		return
+	var c = _card(parent, "📣 News")
+	var unread = Game.unread_news()
+	for k in min(4, posts.size()):
+		var p = posts[k]
+		var head = _row(c)
+		head.add_child(_label(str(p.title), 15))
+		if unread.has(p):
+			head.add_child(_label("New", 12, C_GOLD))
+		_spacer(head)
+		head.add_child(_label(str(p.date), 12, C_MUTED))
+		c.add_child(_label(str(p.body), 13, Color("#c9cfdc"), true))
+	Game.mark_news_seen()
+
 func _render_play() -> void:
+	_news(content)
 	var t = Game.sp.tycoon
 	var g = _grid(content)
 	var c = _card(g, "💻 Singleplayer", Game.mode == "sp")
@@ -528,7 +579,25 @@ func _render_play() -> void:
 # Server, name and password, with Sign up and Log in (`main` is the one in gold). `done` runs once logged in.
 # Returns the server field.
 func _account_form(parent: Control, done := Callable(), main := "login") -> LineEdit:
-	var srv = _input_field(parent, "Server", str(Game.settings.get("account_server", Game.settings.server)))
+	var srv = _input_field(parent, "Server", str(Game.settings.get("account_server", Game.settings.server)), "ws://192.168.1.20:8080")
+	# Check: is there a Hustlefront server at that address? And how to get one.
+	var cr = _row(parent)
+	var ok = _label("", 13, C_MUTED, true)
+	ok.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var help = _label(SERVER_HELP, 13, C_MUTED, true)
+	help.visible = false
+	cr.add_child(_button("Check", func():
+		ok.text = "Checking…"
+		ok.add_theme_color_override("font_color", C_MUTED)
+		var r = await Game._http(HTTPClient.METHOD_GET, Game.http_base(srv.text.strip_edges()) + "/api/info")
+		if not is_instance_valid(ok):
+			return
+		var found = r.code == 200 and typeof(r.body) == TYPE_DICTIONARY and r.body.get("game") == "Hustlefront"
+		ok.text = ("✓ Found %s. You can sign up or log in." % r.body.name) if found else "✗ No Hustlefront server answers there. Check the address, and that the server is running."
+		ok.add_theme_color_override("font_color", C_GREEN if found else C_RED)))
+	cr.add_child(_button("How do I get a server?", func(): help.visible = not help.visible))
+	cr.add_child(ok)
+	parent.add_child(help)
 	var nm = _input_field(parent, "Name", "")
 	nm.max_length = 20
 	var pw = _input_field(parent, "Password", "")
@@ -776,6 +845,12 @@ func _render_reboot() -> void:
 # ---------- Settings ----------
 # Every option comes from models.json SETTINGS (the web version shows the same list). Picking a quality preset
 # fills in its values; changing one of those by hand turns the preset into Custom, starting from what was on.
+# How to get a server, under the login forms' Check button (the web version shows the same steps)
+const SERVER_HELP = """1. Someone you know runs one: type the address they give you, like ws://192.168.1.20:8080 (on the same Wi-Fi) or wss://their-site.com.
+2. Run your own on a computer that stays on: install Node.js (nodejs.org), download the game's code from GitHub (Code → Download ZIP) and unzip it, open a terminal in its cashclash folder, and type  npm install --omit=dev  and then  npm start . Leave that window open.
+3. Its address is ws://localhost:8080 on that computer, and ws://<the computer's IP>:8080 from a phone or another computer on the same Wi-Fi. Find the IP on Windows by typing ipconfig (IPv4 Address), on a Mac in System Settings → Wi-Fi → Details.
+4. To play from anywhere, run it on a hosting service (or forward port 8080 on your router) and use that address."""
+
 # the phone renderer can't do these (and phones always wait for the screen)
 const MOBILE_HIDDEN = ["ao", "reflections", "haze", "vsync"]
 

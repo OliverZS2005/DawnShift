@@ -1,8 +1,8 @@
 // Hustlefront multiplayer server. Anyone can host one:
 //   npm install && npm start            (PORT=8080 by default)
 // It serves the game page too, so players can just open http://<host>:<port>.
-// Env: PORT, DATA_FILE (default ./players.json), SYNC_FILE, ACCOUNT_FILE, ALLOW_IMPORT=0 to forbid importing
-// singleplayer saves.
+// Env: PORT, DATA_FILE (default ./players.json), SYNC_FILE, ACCOUNT_FILE, NEWS_FILE, NEWS_URL (another server's
+// /api/news to follow), ALLOW_IMPORT=0 to forbid importing singleplayer saves.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -92,6 +92,36 @@ function handleAccount(req, res, op) {
   });
 }
 
+// ---------- News (announcements and "a new version is out") ----------
+// GET /api/news hands out news.json: announcements, and the game's latest version number with where to
+// download it (the apps compare it with their own). The file is read again whenever it changes, so editing
+// it (or `npm run announce`) reaches every player within minutes. With NEWS_URL set to another server's
+// /api/news, this server follows that feed too and passes its posts on: one main server can announce to
+// every server that follows it.
+const NEWS_FILE = process.env.NEWS_FILE || path.join(__dirname, 'news.json');
+const NEWS_URL = process.env.NEWS_URL || '';
+let newsLocal = { version: 0, posts: [] }, newsAt = 0, newsUp = null;
+function localNews() {
+  try { const t = fs.statSync(NEWS_FILE).mtimeMs; if (t !== newsAt) { newsLocal = JSON.parse(fs.readFileSync(NEWS_FILE, 'utf8')); newsAt = t; } } catch {}
+  return newsLocal;
+}
+function followNews() {
+  if (!NEWS_URL) return;
+  const get = NEWS_URL.startsWith('https:') ? require('https').get : http.get;
+  get(NEWS_URL, { timeout: 10000 }, r => {
+    let body = ''; r.on('data', c => { body += c; if (body.length > 256 * 1024) r.destroy(); });
+    r.on('end', () => { try { const n = JSON.parse(body); if (Array.isArray(n.posts)) newsUp = n; } catch {} });
+  }).on('error', () => {});
+}
+followNews(); setInterval(followNews, 10 * 60e3);
+function news() {
+  const a = localNews(), b = newsUp || { version: 0, posts: [] }, seen = new Set(), posts = [];
+  for (const p of [...(a.posts || []), ...(b.posts || [])]) if (p && p.id && !seen.has(p.id)) { seen.add(p.id); posts.push(p); }
+  posts.sort((x, y) => String(y.date).localeCompare(String(x.date)));
+  const up = (b.version || 0) > (a.version || 0);
+  return { server: SERVER_NAME, version: Math.max(a.version || 0, b.version || 0), download: (up ? b.download : a.download) || a.download || b.download || '', posts: posts.slice(0, 30) };
+}
+
 // ---------- HTTP (static files + sync and account API) ----------
 const STATIC = { '/': 'index.html', '/index.html': 'index.html', '/shared.js': 'shared.js', '/models.js': 'models.js', '/render3d.js': 'render3d.js', '/vendor/three.bundle.js': 'vendor/three.bundle.js' };
 // The 3D art (models, textures, skies) lives in desktop/assets so the Godot app shares it.
@@ -111,6 +141,9 @@ const server = http.createServer((req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   const sm = req.url.match(/^\/api\/sync\/([^/?]+)/);
   if (sm) return handleSync(req, res, sm[1]);
+  // lets the login forms check an address before you sign up ("Check" next to Server)
+  if (req.url === '/api/info') return json(res, 200, { game: 'Hustlefront', name: SERVER_NAME, accounts: true });
+  if (req.url === '/api/news') return json(res, 200, news());
   const am = req.url.match(/^\/api\/account\/(\w+)$/);
   if (am) return handleAccount(req, res, am[1]);
   const f = staticFile(req.url.split('?')[0]);

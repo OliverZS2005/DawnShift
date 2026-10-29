@@ -162,6 +162,25 @@
   #intro .small { font-size: 13px; color: #8a93a8; margin-top: 20px; }
   #intro .small a { color: #B9B4AA; }
   @media (prefers-reduced-motion: reduce) { #intro .panel { animation: none; } }
+  /* ---------- News ---------- */
+  nav button.unread::after { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); margin-left: 6px; vertical-align: 2px; }
+  .post { padding: 10px 0; border-top: 1px solid var(--line); }
+  .card h3 + .post { border-top: none; }
+  .post .when { font-size: 12px; color: var(--muted); }
+  .post .new { font-size: 11px; font-weight: 700; color: #111; background: var(--gold); border-radius: 999px; padding: 1px 7px; margin-left: 6px; }
+  .post p { margin: 4px 0 0; color: #c9cfdc; }
+  #intro .news { font-size: 14px; color: #d8d4cb; margin: -8px 0 20px; cursor: pointer; }
+  #intro .news b { color: #f5c542; }
+  /* ---------- Server field: Check button and the "how do I get a server?" help ---------- */
+  .srvrow { display: flex; gap: 8px; align-items: center; }
+  .srvrow input { flex: 1; }
+  .srvok { font-size: 13px; margin-top: 4px; min-height: 1em; }
+  details.srvhelp { margin-top: 8px; font-size: 13px; color: var(--muted); }
+  details.srvhelp summary { cursor: pointer; color: var(--blue); }
+  details.srvhelp ol { margin: 8px 0 4px; padding-left: 20px; line-height: 1.5; }
+  details.srvhelp li { margin-bottom: 6px; }
+  details.srvhelp code { color: var(--text); background: var(--panel2); padding: 1px 5px; border-radius: 4px; }
+  #intro details.srvhelp { color: #B9B4AA; }
   /* ---------- Reboot goals ---------- */
   .goals { display: grid; gap: 10px; margin-top: 10px; }
   .goal { display: grid; grid-template-columns: 26px 1fr; gap: 8px; align-items: start; }
@@ -404,7 +423,7 @@ function render() {
   document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active', x.dataset.tab === tab));
   const pill = $('#modePill'); pill.className = 'mode' + (mode === 'mp' ? ' mp' : ''); pill.textContent = mode === 'mp' ? `🌐 ${NET?.server || 'Multiplayer'}` : '💻 Singleplayer';
   const v = $('#view'), t = T();
-  if (tab === 'play') setView(v, renderPlay());
+  if (tab === 'play') { setView(v, newsCard() + renderPlay()); markNewsSeen(); }
   else if (tab === 'tycoon') setView(v, eventBanner(t) + jobsCard(t) + rebootLine(t) + `<p class="muted"><b class="lvl">${CC.LEVELS[t.level - 1]}</b> · income x${CC.globalMult(t).toFixed(2)} · Owning 25/50/100/200 of a building doubles its output each time.</p>
     <div class="grid">${BUILDINGS.map(b => !CC.unlocked(t, b) ? `
       <div class="card locked"><h3>🔒 ${b.icon} ${b.name}</h3><div class="muted">Unlocks at business level ${b.unlock}: <b>${CC.LEVELS[b.unlock - 1]}</b>. Reboot to get there.</div></div>` : `
@@ -528,7 +547,7 @@ function accountCard() {
   return `<h3>👤 Log in or sign up</h3>
     <p class="muted">An account saves your game on a Hustlefront server, so you can carry on in the desktop app, the phone apps or another browser.</p>
     <form data-account-form onsubmit="return false">
-      <label>Server</label><input id="accSrv" value="${esc(store.get('cc_server') || defaultServer)}">
+      ${serverField()}
       <label>Name</label><input id="accName" maxlength="20" autocomplete="username">
       <label>Password</label><input id="accPw" type="password" autocomplete="current-password">
       <div class="row"><span class="loss" id="accErr"></span><span><button data-signup>Sign up</button> <button class="primary" data-login>Log in</button></span></div>
@@ -537,6 +556,23 @@ function accountCard() {
       <label>Sync code (to link an existing one)</label><input id="syncCode" maxlength="10" placeholder="e.g. K7Q2M9XPLR" style="text-transform:uppercase">
       <div class="row"><button data-sync-create>Create new sync code</button><button data-sync-link>Link with code</button></div>
     </details>`;
+}
+// The Server field of the login forms: the address with a Check button, and how to get a server.
+const SERVER_HELP = `<details class="srvhelp"><summary>How do I get a server?</summary><ol>
+  <li><b>Someone you know runs one:</b> type the address they give you, like <code>ws://192.168.1.20:8080</code> (on the same Wi-Fi) or <code>wss://their-site.com</code>.</li>
+  <li><b>Run your own</b> on a computer that stays on: install <a href="https://nodejs.org" target="_blank" rel="noopener">Node.js</a>, download the game's code from GitHub (<b>Code → Download ZIP</b>) and unzip it, open a terminal in its <code>cashclash</code> folder, and type <code>npm install --omit=dev</code> and then <code>npm start</code>. Leave that window open.</li>
+  <li><b>Its address</b> is <code>ws://localhost:8080</code> on that computer, and <code>ws://&lt;the computer's IP&gt;:8080</code> from a phone or another computer on the same Wi-Fi. Find the IP on Windows by typing <code>ipconfig</code> (IPv4 Address), on a Mac in System Settings → Wi-Fi → Details.</li>
+  <li>To play from anywhere, run it on a hosting service (or forward port 8080 on your router) and use that address.</li>
+</ol>If you opened this page from a server, its address is already filled in.</details>`;
+const serverField = () => `<label>Server</label><div class="srvrow"><input id="accSrv" value="${esc(store.get('cc_server') || defaultServer)}" placeholder="ws://192.168.1.20:8080"><button type="button" data-srv-check>Check</button></div><div class="srvok" id="srvOk"></div>${SERVER_HELP}`;
+async function checkServer(root = document) {
+  const out = root.querySelector('#srvOk'), url = root.querySelector('#accSrv').value.trim();
+  out.className = 'srvok muted'; out.textContent = 'Checking…';
+  try {
+    const r = await fetch(httpBase(url) + '/api/info'), b = await r.json();
+    if (b.game !== 'Hustlefront') throw 0;
+    out.className = 'srvok win'; out.textContent = `✓ Found ${b.name}. You can sign up or log in.`;
+  } catch { out.className = 'srvok loss'; out.textContent = '✗ No Hustlefront server answers there. Check the address, and that the server is running.'; }
 }
 async function accountFromForm(op, root = document) {
   const q = id => root.querySelector('#' + id), err = q('accErr');
@@ -584,6 +620,7 @@ $('#view').addEventListener('click', e => {
   else if ('syncLink' in d) syncLink($('#accSrv').value, $('#syncCode').value);
   else if ('login' in d || 'signup' in d) accountFromForm('login' in d ? 'login' : 'signup', $('#view'));
   else if ('logout' in d) logout();
+  else if ('srvCheck' in d) checkServer($('#view'));
   else if ('syncNow' in d) syncNow();
   else if ('syncOff' in d) { SYNC = null; store.set('cc_sync', null); render(); }
   else if ('reboot' in d) { const t = T(); if (confirm(t.level < CC.MAX_BIZ ? `Reboot to ${CC.LEVELS[t.level]}? You lose all money, buildings and weapons.` : `Prestige for ${CC.prestigePoints(t)} Boost Points? You lose all money, buildings and weapons.`)) { act({ type: 'reboot' }); toast('🔄 Rebooted!'); if (mode === 'sp') render(); } }
@@ -953,6 +990,34 @@ applyScreen();
   });
 }
 
+// ---------- News ----------
+// Announcements come live from the Hustlefront server (GET /api/news: its news.json, plus any feed it
+// follows), checked every 10 minutes. New ones get a dot on the Play tab and a toast; the Play tab lists
+// them and the intro shows the latest. (The web page always comes from that server, so it's never an old
+// version: the apps are the ones told about updates.)
+let NEWS = null, newsSeen = new Set(store.get('cc_news_seen') || []);
+const newsServer = () => location.protocol.startsWith('http') ? location.origin : SYNC ? httpBase(SYNC.server) : null;
+const unreadNews = () => (NEWS?.posts || []).filter(p => !newsSeen.has(p.id));
+async function fetchNews() {
+  const url = newsServer(); if (!url) return;
+  try {
+    const n = await fetch(url + '/api/news').then(r => r.json());
+    if (!Array.isArray(n.posts)) return;
+    const before = NEWS ? new Set(NEWS.posts.map(p => p.id)) : null;
+    NEWS = n;
+    if (before) for (const p of n.posts) if (!before.has(p.id) && !newsSeen.has(p.id)) toast('📣 ' + p.title);
+    newsBadge(); if (introOn) introView(); else if (tab === 'play') renderSoon();
+  } catch {}
+}
+function newsBadge() { $('nav [data-tab=play]').classList.toggle('unread', unreadNews().length > 0); }
+function markNewsSeen() { if (!NEWS || !unreadNews().length) return; for (const p of NEWS.posts) newsSeen.add(p.id); store.set('cc_news_seen', [...newsSeen].slice(-200)); setTimeout(newsBadge, 4000); }
+function newsCard() {
+  if (!NEWS || !NEWS.posts.length) return '';
+  const when = d => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  return `<div class="card" style="margin-bottom:12px"><h3>📣 News</h3>${NEWS.posts.slice(0, 4).map(p => `<div class="post"><b>${esc(p.title)}</b>${newsSeen.has(p.id) ? '' : '<span class="new">New</span>'} <span class="when">${when(p.date)}</span><p>${esc(p.body)}</p></div>`).join('')}</div>`;
+}
+setTimeout(fetchNews, 800); setInterval(fetchNews, 10 * 60e3);
+
 // ---------- Intro screen ----------
 // Shown each time the game opens: your city pans slowly behind it (the tycoon view, full-screen), with
 // Play and, if you aren't logged in, Log in / Sign up. Add ?intro=0 to the address to skip it.
@@ -964,9 +1029,10 @@ function introView() {
   p.innerHTML = `<h2>Hustle<b>front</b></h2>
     <p class="pitch">Build a business empire block by block, keep the townspeople happy, and fight anyone who wants a cut of your money.</p>
     <div class="you">${game}</div>
+    ${NEWS?.posts?.length ? `<div class="news" data-intro-news>📣 <b>${esc(NEWS.posts[0].title)}</b>${unreadNews().length > 1 ? ` and ${unreadNews().length - 1} more` : ''}</div>` : ''}
     <div class="acts"><button class="primary" data-intro-play>${hasProgress(t) ? 'Continue' : 'Play'}</button>${SYNC?.account ? '' : '<button data-intro-form="login">Log in</button><button data-intro-form="signup">Sign up</button>'}</div>
     <form class="${introForm ? 'on' : ''}" onsubmit="return false">
-      <label>Server</label><input id="accSrv" value="${esc(store.get('cc_server') || defaultServer)}">
+      ${serverField()}
       <label>Name</label><input id="accName" maxlength="20" autocomplete="username">
       <label>Password</label><input id="accPw" type="password" autocomplete="${introForm === 'signup' ? 'new-password' : 'current-password'}">
       <div class="row"><span class="loss" id="accErr"></span><button class="primary" data-intro-go>${introForm === 'signup' ? 'Sign up' : 'Log in'}</button></div>
@@ -979,8 +1045,10 @@ function showIntro(on) {
   else { render(); }
 }
 $('#intro').addEventListener('click', async e => {
+  if (e.target.closest('[data-intro-news]')) { showIntro(false); tab = 'play'; render(); return; }
   const b = e.target.closest('button'); if (!b) return;
-  if ('introPlay' in b.dataset) showIntro(false);
+  if ('srvCheck' in b.dataset) checkServer($('#intro'));
+  else if ('introPlay' in b.dataset) showIntro(false);
   else if (b.dataset.introForm) { introForm = b.dataset.introForm; introView(); $('#accName').focus(); }
   else if ('introGo' in b.dataset) { if (await accountFromForm(introForm, $('#intro'))) { introForm = ''; showIntro(false); } }
 });
