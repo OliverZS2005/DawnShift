@@ -272,7 +272,7 @@
       const screens = ['#ff4d6d', '#4dd2ff', '#9dff4d', '#ffd34d', '#c44dff'];
       for (let k = 0; k < 4; k++) for (const sg of [-1, 1]) {
         const x = sg * (X - 0.55), z = -1.8 - k * 1.3, c = screens[(k * 2 + (sg > 0)) % screens.length];
-        P.push(box(0.8, 1.7, 0.75, x, 0, z, '#15131c'), box(0.06, 0.55, 0.55, x - sg * 0.42, 1.05, z, c, glow(c, 2.6)), box(0.06, 0.22, 0.7, x - sg * 0.42, 1.75, z, c, { ...glow(c, 3.2), a: 'blink' }));
+        P.push(box(0.8, 1.7, 0.75, x, 0, z, '#15131c'), box(0.06, 0.55, 0.55, x - sg * 0.42, 1.05, z, c, glow(c, 1.1)), box(0.06, 0.22, 0.7, x - sg * 0.42, 1.75, z, c, { ...glow(c, 1.4), a: 'blink' }));
         prop('bar_chair', x - sg * 1.0, 0, z, 0);
       }
       block([-X, -6.6, -X + 1.0, -1.2]); block([X - 1.0, -6.6, X, -1.2]);
