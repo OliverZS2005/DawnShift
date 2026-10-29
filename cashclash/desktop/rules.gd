@@ -3,15 +3,15 @@
 extends Node
 
 const BUILDINGS = [
-	{"id": "lemon",  "name": "Lemonade Stand", "icon": "🍋", "base": 15.0,     "income": 1.0,       "unlock": 1},
-	{"id": "cafe",   "name": "Coffee Shop",    "icon": "☕", "base": 120.0,    "income": 6.0,       "unlock": 1},
-	{"id": "arcade", "name": "Arcade",         "icon": "🕹️", "base": 1300.0,   "income": 40.0,      "unlock": 1},
-	{"id": "fact",   "name": "Factory",        "icon": "🏭", "base": 14000.0,  "income": 260.0,     "unlock": 2},
-	{"id": "bank",   "name": "Bank",           "icon": "🏦", "base": 160000.0, "income": 1800.0,    "unlock": 3},
-	{"id": "oil",    "name": "Oil Rig",        "icon": "🛢️", "base": 2.2e6,    "income": 14000.0,   "unlock": 4},
-	{"id": "space",  "name": "Space Mine",     "icon": "🚀", "base": 3.5e7,    "income": 120000.0,  "unlock": 5},
-	{"id": "ailab",  "name": "AI Lab",         "icon": "🧠", "base": 6e8,      "income": 1.1e6,     "unlock": 6},
-	{"id": "dyson",  "name": "Dyson Sphere",   "icon": "☀️", "base": 1.2e10,   "income": 1.2e7,     "unlock": 7},
+	{"id": "lemon",  "name": "Lemonade Stand", "icon": "🍋", "base": 10.0,    "income": 0.5,     "unlock": 1},
+	{"id": "cafe",   "name": "Coffee Shop",    "icon": "☕", "base": 400.0,   "income": 4.0,     "unlock": 1},
+	{"id": "arcade", "name": "Arcade",         "icon": "🕹️", "base": 6000.0,  "income": 30.0,    "unlock": 1},
+	{"id": "fact",   "name": "Factory",        "icon": "🏭", "base": 90000.0, "income": 220.0,   "unlock": 2},
+	{"id": "bank",   "name": "Bank",           "icon": "🏦", "base": 1.4e6,   "income": 1700.0,  "unlock": 3},
+	{"id": "oil",    "name": "Oil Rig",        "icon": "🛢️", "base": 2.2e7,   "income": 13000.0, "unlock": 4},
+	{"id": "space",  "name": "Space Mine",     "icon": "🚀", "base": 3.5e8,   "income": 1e5,     "unlock": 5},
+	{"id": "ailab",  "name": "AI Lab",         "icon": "🧠", "base": 5.5e9,   "income": 8e5,     "unlock": 6},
+	{"id": "dyson",  "name": "Dyson Sphere",   "icon": "☀️", "base": 9e10,    "income": 6.5e6,   "unlock": 7},
 ]
 const WEAPONS = [
 	{"id": "pistol",  "name": "Pistol",          "icon": "🔫", "price": 0.0,      "dmg": 14.0, "rate": 3.0,  "mag": 12, "reload": 1.1, "speed": 700.0,  "spread": 0.03,  "pellets": 1, "splash": 0.0},
@@ -138,11 +138,16 @@ func unlocked(t, b) -> bool:
 func event_on(t, type) -> bool:
 	return t.event != null and t.event.type == type and t.event.until > now_ms()
 
+# Buildings cost 1.5x more at each business level, so the x2 income a reboot brings still speeds you up,
+# but a new run still takes saving up for each new building.
+func price_mult(t) -> float:
+	return pow(1.5, int(t.level) - 1)
+
 func b_cost(t, b) -> float:
-	return b.base * pow(1.15, owned(t, b.id)) * (0.6 if event_on(t, "sale") else 1.0)
+	return b.base * pow(1.15, owned(t, b.id)) * price_mult(t) * (0.6 if event_on(t, "sale") else 1.0)
 
 func b_up_cost(t, b) -> float:
-	return b.base * 25.0 * pow(4.0, b_level(t, b.id))
+	return b.base * 25.0 * pow(4.0, b_level(t, b.id)) * price_mult(t)
 
 func milestone_mult(n) -> float:
 	var m = 1.0

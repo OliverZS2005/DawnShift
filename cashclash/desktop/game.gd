@@ -416,6 +416,51 @@ func sync_link(server: String, code: String) -> void:
 	toast.emit("☁️ Linked! This computer now syncs.")
 	changed.emit()
 
+# ---------- Accounts (sign up / log in on a Hustlefront server) ----------
+# Same as the web version: an account is a name and password in front of a sync code; the server hands that
+# code over and the sync above does the rest. Returns an error message, "" when logged in, or "replace?"
+# when logging in would replace a game on this device (ask, then call again with replace = true).
+func has_progress() -> bool:
+	var t = sp.tycoon
+	if int(t.level) > 1 or int(t.prestige) > 0:
+		return true
+	for b in CC.BUILDINGS:
+		if CC.owned(t, b.id) > 0:
+			return true
+	return false
+
+func account(op: String, server: String, name: String, password: String, replace := false) -> String:
+	var r = await _http(HTTPClient.METHOD_POST, http_base(server) + "/api/account/" + op, JSON.stringify({"name": name, "password": password}))
+	if r.code != 200:
+		return r.body.error if typeof(r.body) == TYPE_DICTIONARY and r.body.has("error") else "Could not reach " + server
+	var code = str(r.body.code)
+	var who = str(r.body.name)
+	settings.account_server = server
+	if op == "login":
+		var g = await _http(HTTPClient.METHOD_GET, http_base(server) + "/api/sync/" + code)
+		if g.code == 200 and typeof(g.body) == TYPE_DICTIONARY and g.body.has("save"):
+			if has_progress() and not replace:
+				return "replace?"
+			adopt_save(g.body.save)
+			settings.sync = {"server": server, "code": code, "base": g.body.updatedAt, "at": CC.now_ms(), "err": null, "account": who}
+		else:
+			settings.sync = {"server": server, "code": code, "base": 0, "at": null, "err": null, "account": who}
+			await sync_now(true)
+	else: # a new account takes the game on this device
+		settings.sync = {"server": server, "code": code, "base": 0, "at": null, "err": null, "account": who}
+		await sync_now(true)
+	save_settings()
+	toast.emit(("Welcome, %s! Your game now saves to your account." % who) if op == "signup" else ("Logged in as " + who))
+	changed.emit()
+	return ""
+
+func logout() -> void:
+	await sync_now(true)
+	settings.sync = null
+	save_settings()
+	toast.emit("Logged out")
+	changed.emit()
+
 func sync_off() -> void:
 	settings.sync = null
 	save_settings()

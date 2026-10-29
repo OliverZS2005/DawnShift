@@ -472,6 +472,9 @@ func _build_room(i: int, ms: int) -> Dictionary:
 		var c = Vector3(part[1][0], part[1][1], part[1][2])
 		var tint = Color(part[3])
 		g.add_child(R3D.box(sz, R3D.pbr(part[2], tint, 2.5, 0.0, tint) if part[2] != null else R3D.flat(tint, 0.6, 0.0), c))
+	# the business's own furnishings (glowing, blinking and pulsing parts: see decor() in ../models.js)
+	var fit = R3D.build({"parts": R.extra})
+	g.add_child(fit.root)
 	for d in R.props:
 		var o = R3D.prop(d.model)
 		if o:
@@ -488,8 +491,8 @@ func _build_room(i: int, ms: int) -> Dictionary:
 	var fac = R.kind == "factory"
 	for p in R.lights:
 		var l = OmniLight3D.new()
-		l.light_color = Color("#f2f4ff") if fac else Color("#ffe6c4")
-		l.light_energy = 3.6 if fac else 1.9
+		l.light_color = Color(R.light)
+		l.light_energy = (3.6 if fac else 1.9) * float(R.glow)
 		l.omni_range = 20.0
 		l.light_cull_mask = ROOM_LAYER
 		l.position = Vector3(p[0], p[1], p[2])
@@ -530,7 +533,7 @@ func _build_room(i: int, ms: int) -> Dictionary:
 	for w in walking:
 		_layers(w.p.root, ROOM_LAYER)
 	_layers(giver.root, ROOM_LAYER)
-	return {"i": i, "ms": ms, "group": g, "R": R, "lines": lines, "exit": exit, "crew": crew, "walking": walking, "giver": giver, "crowd": R3D.opts().crowd}
+	return {"i": i, "ms": ms, "group": g, "R": R, "lines": lines, "exit": exit, "crew": crew, "walking": walking, "giver": giver, "anims": fit.anims, "crowd": R3D.opts().crowd}
 
 func _refresh_lot(i: int, tyc: Dictionary) -> void:
 	var b = CC.BUILDINGS[i]
@@ -905,6 +908,8 @@ func _process(dt: float) -> void:
 		var pm = lots[i].pad.material_override
 		pm.emission_enabled = typeof(aim) == TYPE_INT and i == aim
 		pm.emission = Color("#3a5a8a") * 0.5
+	for r in rooms.values():
+		R3D.animate(r.anims, t)
 	if crate:
 		crate.root.rotation.y = t * 1.5
 		crate.root.position.y = 0.6 + sin(t * 3) * 0.2

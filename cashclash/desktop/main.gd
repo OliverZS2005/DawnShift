@@ -34,6 +34,10 @@ var fps_lbl: Label
 var city_full := false # phones: the city fills the screen (the ⤢ button)
 var header: PanelContainer
 var ui_root: VBoxContainer
+var intro: Control # the intro screen (shown at launch): see _build_intro
+var intro_panel: VBoxContainer
+var intro_form := "" # "login" / "signup" while that form is open
+var intro_t := 0.0
 
 func _ready() -> void:
 	R3D.set_options(Game.settings.get("options", {}))
@@ -134,6 +138,10 @@ func _ready() -> void:
 	toast_panel.visible = false
 	add_child(toast_panel)
 
+	_build_intro()
+	if not OS.get_cmdline_user_args().has("--no-intro"):
+		show_intro(true)
+
 	fps_lbl = _label("", 12, C_GREEN)
 	fps_lbl.position = Vector2(6, 4)
 	fps_lbl.add_theme_color_override("font_shadow_color", Color.BLACK)
@@ -164,12 +172,19 @@ func _process(dt: float) -> void:
 	city.visible = tab in ["tycoon", "settings"] and not arena.visible # on the Settings tab it's a live preview
 	if Game.mobile:
 		_safe_area()
+	if intro.visible: # the city fills the window behind the intro, its camera drifting round the plaza
+		intro_t += dt * 0.045
+		header.visible = false
+		city.custom_minimum_size.y = ui_root.size.y
+		city.place(13 * sin(intro_t * 0.7), 22 + 4 * cos(intro_t), PI * 0.08 * sin(intro_t * 1.3) + sin(intro_t * 0.7) * 0.5, -0.06, -1)
 	fps_lbl.visible = R3D.opts().showFps
 	if fps_lbl.visible:
 		fps_lbl.text = "%d fps" % Engine.get_frames_per_second()
 		move_child(fps_lbl, -1)
 	if city.visible:
-		if Game.mobile:
+		if intro.visible:
+			pass
+		elif Game.mobile:
 			city.custom_minimum_size.y = ui_root.size.y - header.size.y if city_full else ui_root.size.y * 0.6
 		else:
 			city.custom_minimum_size.y = max(340.0, size.y * 0.62)
@@ -211,6 +226,93 @@ func _safe_area() -> void:
 	for c in [ui_root, arena]:
 		c.offset_left = max(0.0, m.x); c.offset_top = max(0.0, m.y)
 		c.offset_right = -max(0.0, m.z); c.offset_bottom = -max(0.0, m.w)
+
+# ---------- Intro screen ----------
+# Shown at launch (--no-intro skips it), like the web version's: the city fills the window behind a dark
+# gradient, with the title, a line of pitch, your game, and Play / Log in / Sign up.
+func _build_intro() -> void:
+	intro = Control.new()
+	intro.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	intro.mouse_filter = Control.MOUSE_FILTER_STOP
+	intro.visible = false
+	var shade = TextureRect.new()
+	var g = Gradient.new()
+	g.set_color(0, Color(0.03, 0.035, 0.047, 0.93))
+	g.set_color(1, Color(0.03, 0.035, 0.047, 0.0))
+	g.add_point(0.4, Color(0.03, 0.035, 0.047, 0.74))
+	var gt = GradientTexture2D.new()
+	gt.gradient = g
+	gt.fill_to = Vector2(1, 0)
+	shade.texture = gt
+	shade.stretch_mode = TextureRect.STRETCH_SCALE
+	shade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	intro.add_child(shade)
+	intro_panel = VBoxContainer.new()
+	intro_panel.add_theme_constant_override("separation", 10)
+	intro_panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	intro_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	intro.add_child(intro_panel)
+	add_child(intro)
+	move_child(intro, toast_panel.get_index()) # under the toasts ("Logged in as …")
+
+func show_intro(on: bool) -> void:
+	intro.visible = on
+	header.visible = not on
+	if city.pad:
+		city.pad.visible = not on # no buying through the intro
+	if on:
+		tab = "tycoon"
+		_intro_view()
+	render()
+
+func _intro_view() -> void:
+	for c in intro_panel.get_children():
+		intro_panel.remove_child(c)
+		c.queue_free()
+	var small = Game.mobile
+	intro_panel.offset_left = 28 if small else 72
+	intro_panel.offset_bottom = -(18 if small else 64)
+	var t = Game.sp.tycoon
+	var title = HBoxContainer.new()
+	title.add_theme_constant_override("separation", 0)
+	for part in [["HUSTLE", Color("#F2EFE8")], ["FRONT", C_GOLD]]:
+		var l = _label(part[0], 64 if small else 120, part[1])
+		l.add_theme_font_override("font", R3D.font("barlow-condensed-800"))
+		title.add_child(l)
+	intro_panel.add_child(title)
+	var pitch = _label("Build a business empire block by block, keep the townspeople happy, and fight anyone who wants a cut of your money.", 15 if small else 18, Color("#d8d4cb"), true)
+	pitch.custom_minimum_size.x = 420 if small else 560
+	intro_panel.add_child(pitch)
+	var s = Game.settings.sync
+	var who = ("Logged in as %s · " % s.account) if s != null and s.get("account") else ""
+	var game = ("Your game: %s · %s" % [CC.LEVELS[int(t.level) - 1], CC.fmt(t.money)]) if Game.has_progress() else "A new game: $50 and a pistol"
+	var you = _label(who + game, 13, Color("#B9B4AA"))
+	you.add_theme_font_override("font", R3D.font("jetbrains-mono-500"))
+	intro_panel.add_child(you)
+	var acts = _row(intro_panel)
+	var play = _button("CONTINUE" if Game.has_progress() else "PLAY", func(): show_intro(false), false, true)
+	play.add_theme_font_override("font", R3D.font("barlow-condensed-800"))
+	play.add_theme_font_size_override("font_size", 22)
+	play.custom_minimum_size = Vector2(150, 46)
+	acts.add_child(play)
+	if not (s != null and s.get("account")):
+		for op in [["login", "Log in"], ["signup", "Sign up"]]:
+			var b = _button(op[1], func(): intro_form = op[0]; _intro_view())
+			b.custom_minimum_size.y = 46
+			acts.add_child(b)
+	if intro_form != "":
+		var box = PanelContainer.new()
+		box.add_theme_stylebox_override("panel", _box(Color(0.043, 0.051, 0.063, 0.85), Color(0.95, 0.94, 0.91, 0.2), 2, 12))
+		box.custom_minimum_size.x = 380
+		intro_panel.add_child(box)
+		var f = VBoxContainer.new()
+		box.add_child(f)
+		f.add_child(_label("Sign up: pick a name and a password" if intro_form == "signup" else "Log in to your account", 14))
+		_account_form(f, func(): intro_form = ""; show_intro(false))
+	intro_panel.add_child(_label("Tap Play, then walk around your business with your left thumb." if small else "Click Play, then click the city to walk around your business.", 12, C_MUTED))
+	intro_panel.reset_size()
 
 func show_toast(msg: String) -> void:
 	toast_lbl.text = msg
@@ -390,24 +492,68 @@ func _render_play() -> void:
 		_spacer(r)
 		r.add_child(_button("Cancel", func(): Game.pending_choice = ""; render()))
 
-	c = _card(content, "☁️ Sync with the web version")
+	c = _card(content, "")
 	var s = Game.settings.sync
-	if s != null:
-		c.add_child(_label("Sync code  %s  on %s" % [s.code, s.server], 16, C_GOLD))
+	if s != null and s.get("account"):
+		c.add_child(_label("👤 " + str(s.account), 16))
+		var st = "Last saved %s." % Time.get_time_string_from_unix_time(int(s.at / 1000.0)) if s.get("at") else ""
+		if s.get("err") != null:
+			st = "Last save failed: %s" % s.err
+		c.add_child(_label("Logged in on %s. Your game saves to your account and follows you to the web version, the phone apps and other computers: log in there with the same name. %s Play on one device at a time." % [s.server, st], 13, C_MUTED, true))
+		r = _row(c)
+		r.add_child(_button("Save now", func(): Game.sync_now()))
+		r.add_child(_button("Log out", func(): ask("Log out? Your game stays on this computer but stops saving to your account.", Game.logout), false, false, true))
+	elif s != null:
+		c.add_child(_label("☁️ Sync code  %s  on %s" % [s.code, s.server], 16, C_GOLD))
 		var st = "Last synced %s." % Time.get_time_string_from_unix_time(int(s.at / 1000.0)) if s.get("at") else ""
 		if s.get("err") != null:
 			st = "Last sync failed: %s" % s.err
-		c.add_child(_label("Enter this code in the web version (Play tab → Sync) to share your singleplayer game and multiplayer logins. %s Play on one device at a time." % st, 13, C_MUTED, true))
+		c.add_child(_label("Enter this code in the web version (Play tab) or another device to share your singleplayer game and multiplayer logins. %s Play on one device at a time." % st, 13, C_MUTED, true))
 		r = _row(c)
 		r.add_child(_button("Sync now", func(): Game.sync_now()))
 		r.add_child(_button("Stop syncing", Game.sync_off, false, false, true))
 	else:
-		c.add_child(_label("Keep this app and the web version in sync through a Hustlefront server. Create a code here, or enter the code shown in the web version.", 13, C_MUTED, true))
-		var ss = _input_field(c, "Sync server", Game.settings.server)
+		c.add_child(_label("👤 Log in or sign up", 16))
+		c.add_child(_label("An account saves your game on a Hustlefront server, so you can carry on in the web version, the phone apps or on another computer.", 13, C_MUTED, true))
+		var ss = _account_form(c)
+		var more = _label("Or use a sync code instead:", 13, C_MUTED)
+		c.add_child(more)
 		var code = _input_field(c, "Sync code (to link an existing one)", "", "e.g. K7Q2M9XPLR")
 		r = _row(c)
-		r.add_child(_button("Create new sync code", func(): Game.sync_create(ss.text), false, true))
+		r.add_child(_button("Create new sync code", func(): Game.sync_create(ss.text)))
 		r.add_child(_button("Link with code", func(): ask("Replace the singleplayer game on this computer with the synced one?", func(): Game.sync_link(ss.text, code.text))))
+
+# Server, name and password, with Sign up and Log in. `done` runs once logged in. Returns the server field.
+func _account_form(parent: Control, done := Callable()) -> LineEdit:
+	var srv = _input_field(parent, "Server", str(Game.settings.get("account_server", Game.settings.server)))
+	var nm = _input_field(parent, "Name", "")
+	nm.max_length = 20
+	var pw = _input_field(parent, "Password", "")
+	pw.secret = true
+	var r = _row(parent)
+	var err = _label("", 13, C_RED, true)
+	err.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	r.add_child(err)
+	var go = func(op: String, replace := false):
+		err.text = "Signing up…" if op == "signup" else "Logging in…"
+		var e = await Game.account(op, srv.text.strip_edges(), nm.text.strip_edges(), pw.text, replace)
+		if e == "replace?":
+			err.text = ""
+			ask("Load %s's saved game? It replaces the game on this device." % nm.text.strip_edges(), func():
+				var e2 = await Game.account("login", srv.text.strip_edges(), nm.text.strip_edges(), pw.text, true)
+				if e2 == "" and done.is_valid():
+					done.call())
+			return
+		if e != "":
+			if is_instance_valid(err):
+				err.text = e
+			return
+		if done.is_valid():
+			done.call()
+	pw.text_submitted.connect(func(_t): go.call("login"))
+	r.add_child(_button("Sign up", func(): go.call("signup")))
+	r.add_child(_button("Log in", func(): go.call("login"), false, true))
+	return srv
 
 func _render_tycoon() -> void:
 	var t = Game.tycoon()

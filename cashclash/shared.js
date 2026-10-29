@@ -5,15 +5,15 @@
   else root.CC = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   const BUILDINGS = [
-    { id: 'lemon',  name: 'Lemonade Stand', icon: '🍋', base: 15,     income: 1,       unlock: 1 },
-    { id: 'cafe',   name: 'Coffee Shop',    icon: '☕', base: 120,    income: 6,       unlock: 1 },
-    { id: 'arcade', name: 'Arcade',         icon: '🕹️', base: 1300,   income: 40,      unlock: 1 },
-    { id: 'fact',   name: 'Factory',        icon: '🏭', base: 14000,  income: 260,     unlock: 2 },
-    { id: 'bank',   name: 'Bank',           icon: '🏦', base: 160000, income: 1800,    unlock: 3 },
-    { id: 'oil',    name: 'Oil Rig',        icon: '🛢️', base: 2.2e6,  income: 14000,   unlock: 4 },
-    { id: 'space',  name: 'Space Mine',     icon: '🚀', base: 3.5e7,  income: 120000,  unlock: 5 },
-    { id: 'ailab',  name: 'AI Lab',         icon: '🧠', base: 6e8,    income: 1.1e6,   unlock: 6 },
-    { id: 'dyson',  name: 'Dyson Sphere',   icon: '☀️', base: 1.2e10, income: 1.2e7,   unlock: 7 },
+    { id: 'lemon',  name: 'Lemonade Stand', icon: '🍋', base: 10,     income: 0.5,     unlock: 1 },
+    { id: 'cafe',   name: 'Coffee Shop',    icon: '☕', base: 400,    income: 4,       unlock: 1 },
+    { id: 'arcade', name: 'Arcade',         icon: '🕹️', base: 6000,   income: 30,      unlock: 1 },
+    { id: 'fact',   name: 'Factory',        icon: '🏭', base: 90000,  income: 220,     unlock: 2 },
+    { id: 'bank',   name: 'Bank',           icon: '🏦', base: 1.4e6,  income: 1700,    unlock: 3 },
+    { id: 'oil',    name: 'Oil Rig',        icon: '🛢️', base: 2.2e7,  income: 13000,   unlock: 4 },
+    { id: 'space',  name: 'Space Mine',     icon: '🚀', base: 3.5e8,  income: 100000,  unlock: 5 },
+    { id: 'ailab',  name: 'AI Lab',         icon: '🧠', base: 5.5e9,  income: 8e5,     unlock: 6 },
+    { id: 'dyson',  name: 'Dyson Sphere',   icon: '☀️', base: 9e10,   income: 6.5e6,   unlock: 7 },
   ];
   const WEAPONS = [
     { id: 'pistol',  name: 'Pistol',          icon: '🔫', price: 0,      dmg: 14, rate: 3,   mag: 12, reload: 1.1, speed: 700,  spread: .03,  pellets: 1 },
@@ -56,8 +56,11 @@
   const unlocked = (t, b) => t.level >= b.unlock;
   const now = () => Date.now();
   const eventOn = (t, type) => t.event && t.event.type === type && t.event.until > now();
-  const bCost = (t, b) => b.base * Math.pow(1.15, owned(t, b.id)) * (eventOn(t, 'sale') ? 0.6 : 1);
-  const bUpCost = (t, b) => b.base * 25 * Math.pow(4, bLevel(t, b.id));
+  // Buildings cost 1.5x more at each business level, so the x2 income a reboot brings still speeds you up,
+  // but a new run still takes saving up for each new building.
+  const priceMult = t => Math.pow(1.5, t.level - 1);
+  const bCost = (t, b) => b.base * Math.pow(1.15, owned(t, b.id)) * priceMult(t) * (eventOn(t, 'sale') ? 0.6 : 1);
+  const bUpCost = (t, b) => b.base * 25 * Math.pow(4, bLevel(t, b.id)) * priceMult(t);
   const MILESTONES = [25, 50, 100, 200];
   const milestoneMult = n => Math.pow(2, MILESTONES.filter(m => n >= m).length);
   const nextMilestone = n => MILESTONES.find(m => n < m);

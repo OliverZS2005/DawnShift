@@ -1,7 +1,8 @@
 // Hustlefront multiplayer server. Anyone can host one:
 //   npm install && npm start            (PORT=8080 by default)
 // It serves the game page too, so players can just open http://<host>:<port>.
-// Env: PORT, DATA_FILE (default ./players.json), ALLOW_IMPORT=0 to forbid importing singleplayer saves.
+// Env: PORT, DATA_FILE (default ./players.json), SYNC_FILE, ACCOUNT_FILE, ALLOW_IMPORT=0 to forbid importing
+// singleplayer saves.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -53,7 +54,45 @@ function handleSync(req, res, code) {
   });
 }
 
-// ---------- HTTP (static files + sync API) ----------
+// ---------- Accounts (sign up / log in) ----------
+// An account is a name and password in front of a sync code: logging in hands the device the account's
+// code, and the sync above does the rest (the save, other devices, conflicts). Passwords are kept only as
+// salted scrypt hashes; names are matched without case. Too many attempts from one address wait a while.
+const ACCOUNT_FILE = process.env.ACCOUNT_FILE || path.join(path.dirname(DATA_FILE), 'accounts.json');
+let accounts = {}; // lowercased name -> { name, salt, hash, code, created }
+try { accounts = JSON.parse(fs.readFileSync(ACCOUNT_FILE, 'utf8')); } catch {}
+const saveAccounts = () => fs.writeFile(ACCOUNT_FILE + '.tmp', JSON.stringify(accounts), e => { if (!e) fs.rename(ACCOUNT_FILE + '.tmp', ACCOUNT_FILE, () => {}); });
+const ACCOUNT_NAME = /^[\w][\w .-]{1,18}[\w]$/; // 3-20 letters, digits, spaces, dots, dashes
+const hashPw = (pw, salt) => crypto.scryptSync(pw, salt, 64).toString('hex');
+const tries = new Map(); // address -> [times of recent attempts]
+const tooMany = ip => { const now = Date.now(), t = (tries.get(ip) || []).filter(x => now - x < 10 * 60e3); t.push(now); tries.set(ip, t); return t.length > 20; };
+const newCode = () => Array.from(crypto.randomBytes(10), n => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[n % 32]).join('');
+function handleAccount(req, res, op) {
+  if (req.method !== 'POST' || (op !== 'signup' && op !== 'login')) return json(res, 404, { error: 'Not found' });
+  if (tooMany(req.socket.remoteAddress)) return json(res, 429, { error: 'Too many tries. Wait a few minutes and try again.' });
+  let body = '';
+  req.on('data', c => { body += c; if (body.length > 4096) req.destroy(); });
+  req.on('end', () => {
+    let m; try { m = JSON.parse(body); } catch { return json(res, 400, { error: 'Bad JSON' }); }
+    const name = String(m?.name || '').trim(), pw = String(m?.password || ''), key = name.toLowerCase();
+    if (op === 'signup') {
+      if (!ACCOUNT_NAME.test(name)) return json(res, 400, { error: 'Pick a name of 3 to 20 letters or digits.' });
+      if (pw.length < 6) return json(res, 400, { error: 'Pick a password of at least 6 characters.' });
+      if (accounts[key]) return json(res, 409, { error: 'That name is taken.' });
+      let code; do code = newCode(); while (syncs[code]);
+      const salt = crypto.randomBytes(16).toString('hex');
+      accounts[key] = { name, salt, hash: hashPw(pw, salt), code, created: Date.now() };
+      saveAccounts();
+      return json(res, 200, { name, code });
+    }
+    const a = accounts[key];
+    const ok = a && crypto.timingSafeEqual(Buffer.from(hashPw(pw, a.salt), 'hex'), Buffer.from(a.hash, 'hex'));
+    if (!ok) return json(res, 401, { error: 'Wrong name or password.' });
+    json(res, 200, { name: a.name, code: a.code });
+  });
+}
+
+// ---------- HTTP (static files + sync and account API) ----------
 const STATIC = { '/': 'index.html', '/index.html': 'index.html', '/shared.js': 'shared.js', '/models.js': 'models.js', '/render3d.js': 'render3d.js', '/vendor/three.bundle.js': 'vendor/three.bundle.js' };
 // The 3D art (models, textures, skies) lives in desktop/assets so the Godot app shares it.
 const ASSET_DIR = path.join(__dirname, 'desktop', 'assets');
@@ -67,11 +106,13 @@ function staticFile(url) {
 const server = http.createServer((req, res) => {
   // Desktop app and file:// pages call the sync API from other origins.
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   const sm = req.url.match(/^\/api\/sync\/([^/?]+)/);
   if (sm) return handleSync(req, res, sm[1]);
+  const am = req.url.match(/^\/api\/account\/(\w+)$/);
+  if (am) return handleAccount(req, res, am[1]);
   const f = staticFile(req.url.split('?')[0]);
   if (!f || !fs.existsSync(f)) { res.writeHead(404); return res.end('Not found'); }
   const art = f.startsWith(ASSET_DIR);

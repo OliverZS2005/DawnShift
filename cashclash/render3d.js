@@ -1127,6 +1127,8 @@
         batches.get(key).geos.push(boxGeo(sx, sy, sz, 2.5, 2.5, x, y, z));
       }
       for (const { mat, geos } of batches.values()) { const m = new THREE.Mesh(mergeGeos(geos), mat); m.receiveShadow = true; g.add(m); }
+      // the business's own furnishings (glowing, blinking and pulsing parts: see decor() in models.js)
+      const fit = build({ parts: R.extra }); g.add(fit.root);
       for (const d of R.props) prop(d.model).then(o => { if (o && rooms[i] && rooms[i].group === g) { o.position.set(...d.p); o.rotation.y = d.ry; g.add(o); } });
       const lines = R.lines.map(ln => {
         const line = productionLine(i, ln.machines); line.group.position.set(ln.x, 0, ln.z); g.add(line.group);
@@ -1139,7 +1141,7 @@
       const crew = R.people.stand.map((st, k) => { const p = townsperson(st.who, 0.95 + (k % 5) * 0.025); p.root.position.set(st.p[0], 0, st.p[1]); p.root.rotation.y = st.ry; doClip(p, st.clip, 0); g.add(p.root); return p; });
       const walking = walkers(R.people.walk, g, i);
       const giver = giverFor(CC.BUILDINGS[i].id, R.people.crew, g, R.people.giver);
-      return { i, ms, group: g, R, lines, exit, crew, walking, giver, crowd: opts().crowd };
+      return { i, ms, group: g, R, lines, exit, crew, walking, giver, anims: fit.anims, crowd: opts().crowd };
     }
     function refreshLot(i, tyc) {
       const b = CC.BUILDINGS[i], lot = lots[i];
@@ -1261,7 +1263,8 @@
       rooms.forEach((r, i) => { if (r && (i !== want || r.crowd !== opts().crowd)) { scene.remove(r.group); rooms[i] = null; } });
       if (want >= 0 && !rooms[want]) rooms[want] = buildRoom(want, lots[want].ms);
       const room = want >= 0 ? rooms[want] : null;
-      roomLights.forEach((l, k) => { const p = room && room.R.lights[k]; l.intensity = p ? (room.R.kind === 'factory' ? 60 : 30) : 0; if (p) l.position.set(...p).add(room.group.position); });
+      roomLights.forEach((l, k) => { const p = room && room.R.lights[k]; l.intensity = p ? (room.R.kind === 'factory' ? 60 : 30) * room.R.glow : 0; if (p) { l.position.set(...p).add(room.group.position); l.color.set(room.R.light); } });
+      if (room) animate(room.anims, t);
       const speed = move(dt); me.walk += speed * dt * 1.9;
       const bob = reduceMotion || !speed ? 0 : Math.abs(Math.cos(me.walk)) * 0.04;
       const onPad = me.room >= 0 || lots.some(l => Math.abs(me.x - l.x) < P / 2 && Math.abs(me.z - l.z) < P / 2);

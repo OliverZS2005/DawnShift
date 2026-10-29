@@ -210,35 +210,181 @@
   // A factory hall for the industries, a shop with a counter and customers' side for the rest; the
   // production lines (one more per milestone) run across the back. parts: plain boxes [size, centre,
   // texture, tint]; props: models; lights: [x, y, z]; blocks: footprints you can't walk through.
-  // crew: who works there (ASSETS.npcs); the quest giver is one of them too, picked per reboot
+  // crew: who works there (ASSETS.npcs); the quest giver is one of them too, picked per reboot.
+  // Every business has its own room on top of that: textures and tints (floor/walls/ceil), the colour and
+  // strength of its lights (light, glow), and its own furnishings (decor(): procedural parts like the
+  // models above, so they can glow, blink and pulse, plus downloaded props).
   const INSIDE = {
-    lemon: { kind: 'shop', floor: 'slate', walls: 'brick', front: 'stall', crew: ['woman2', 'man1', 'courier', 'woman4', 'man3'] },
-    cafe: { kind: 'shop', floor: 'slate', walls: 'brick', front: 'cafe', crew: ['chef', 'woman1', 'man2', 'woman3', 'courier'] },
-    arcade: { kind: 'shop', floor: 'concrete_floor', walls: 'plaster', front: 'arcade', crew: ['man3', 'woman4', 'man1', 'guard', 'woman1'] },
-    bank: { kind: 'shop', floor: 'marble', walls: 'plaster', front: 'bank', crew: ['banker', 'exec', 'guard', 'woman2', 'man2'] },
-    fact: { kind: 'factory', crew: ['builder', 'builder2', 'builder3', 'guard', 'courier'] },
-    oil: { kind: 'factory', crew: ['builder2', 'builder', 'builder3', 'man3', 'guard'] },
-    space: { kind: 'factory', crew: ['pilot', 'builder', 'builder3', 'exec', 'guard'] },
-    ailab: { kind: 'factory', crew: ['exec', 'banker', 'builder3', 'woman3', 'man2'] },
-    dyson: { kind: 'factory', crew: ['builder3', 'builder2', 'pilot', 'exec', 'builder'] },
+    lemon: { kind: 'shop', floor: ['slate', '#e8dcc0'], walls: ['plaster', '#f4e7a6'], ceil: '#fbf6e2', light: '#fff1c9', glow: 1, front: 'lemon', crew: ['woman2', 'man1', 'courier', 'woman4', 'man3'] },
+    cafe: { kind: 'shop', floor: ['slate', '#8a6a52'], walls: ['brick', '#c9b2a0'], ceil: '#d8c8b8', light: '#ffd9a8', glow: 0.85, front: 'cafe', crew: ['chef', 'woman1', 'man2', 'woman3', 'courier'] },
+    arcade: { kind: 'shop', floor: ['concrete_floor', '#3a3046'], walls: ['plaster', '#2a2436'], ceil: '#1c1826', light: '#d2b8ff', glow: 0.8, front: 'arcade', crew: ['man3', 'woman4', 'man1', 'guard', 'woman1'] },
+    bank: { kind: 'shop', floor: ['marble', '#efe9df'], walls: ['plaster', '#e4dccd'], ceil: '#f2ede4', light: '#fff3dd', glow: 1, front: 'bank', crew: ['banker', 'exec', 'guard', 'woman2', 'man2'] },
+    fact: { kind: 'factory', floor: ['concrete_floor', '#9c978f'], walls: ['brick', '#a89e94'], ceil: '#7b7f84', light: '#f2f4ff', glow: 1, front: 'fact', crew: ['builder', 'builder2', 'builder3', 'guard', 'courier'] },
+    oil: { kind: 'factory', floor: ['metal_plate', '#7d7a74'], walls: ['concrete_wall', '#8f8a80'], ceil: '#5c5a56', light: '#ffc27a', glow: 0.9, front: 'oil', crew: ['builder2', 'builder', 'builder3', 'man3', 'guard'] },
+    space: { kind: 'factory', floor: ['metal_plate', '#c9ced6'], walls: ['metal_plate', '#d9dee6'], ceil: '#b9c0ca', light: '#d6e8ff', glow: 0.8, front: 'space', crew: ['pilot', 'builder', 'builder3', 'exec', 'guard'] },
+    ailab: { kind: 'factory', floor: ['plaster', '#e9ecef'], walls: ['plaster', '#eef1f4'], ceil: '#f4f6f8', light: '#eaf2ff', glow: 0.9, front: 'ailab', crew: ['exec', 'banker', 'builder3', 'woman3', 'man2'] },
+    dyson: { kind: 'factory', floor: ['marble', '#3c3630'], walls: ['metal_plate', '#4a4038'], ceil: '#2c2622', light: '#ffb45e', glow: 0.75, front: 'dyson', crew: ['builder3', 'builder2', 'pilot', 'exec', 'builder'] },
   };
+  // Each business's own furnishings. Rooms are w wide (x from -w/2 to w/2) and run back to z = -d; the
+  // production lines, the counter (shops), the people's spots and the walking rounds stay clear, so this
+  // only fills the walls, the corners, the space by the door and the ceiling. Returns procedural parts;
+  // `prop` and `block` add downloaded models and footprints.
+  function decor(id, w, d, h, r, prop, block) {
+    const P = [], glow = (c, ei = 2) => ({ e: c, ei }), X = w / 2;
+    // a cylinder turned on its side (o.r), placed by its centre rather than its bottom
+    const pipe = (rad, len, x, y, z, c, o) => cyl(rad, len, x, y - len / 2, z, c, o);
+    // a neon strip (not so bright that it washes out to white)
+    const stripe = (x, y, z, len, c, along = 'z', a) => P.push(box(along === 'z' ? 0.06 : len, 0.06, along === 'z' ? len : 0.06, x, y, z, c, { ...glow(c, 1.4), ...(a ? { a } : {}) }));
+    if (id === 'lemon') {
+      // a striped awning over the counter, crates of lemons, a juice press and a lit drinks fridge
+      for (let k = 0; k < 9; k++) P.push(box(0.75, 0.05, 1.3, -4.1 + k * 0.75, 2.45, -6.9, k % 2 ? '#fff6dc' : '#f2c21b', { r: [0.32, 0, 0] }));
+      for (const [x, z] of [[-5.6, -2.4], [-5.6, -3.6], [-4.6, -2.4]]) {
+        P.push(box(0.8, 0.45, 0.6, x, 0, z, '#9c6b3e'));
+        for (let k = 0; k < 15; k++) P.push(sph(0.065, x - 0.28 + (k % 5) * 0.14, 0.5, z - 0.16 + Math.floor(k / 5) * 0.16, k % 4 ? '#f4d21c' : '#e9c412', { seg: 10 }));
+      }
+      block([-6.1, -4.0, -4.1, -2.0]);
+      P.push(cyl(0.22, 0.5, 1.4, 1.06, -7.2, '#c7ccd1', { m: 0.8, ro: 0.3 }), cyl(0.18, 0.32, 1.4, 1.56, -7.2, '#f6e27a', { o: 0.75 }), sph(0.07, 1.4, 1.95, -7.2, '#2b2b2b'));
+      P.push(box(1.4, 2.1, 0.7, X - 0.8, 0, -4.8, '#e8eef2', { m: 0.3 }), box(1.25, 1.7, 0.05, X - 0.8, 0.25, -4.44, '#bfe8ff', glow('#bfe8ff', 0.6)));
+      for (let k = 0; k < 8; k++) P.push(cyl(0.05, 0.28, X - 1.3 + (k % 4) * 0.33, 0.5 + Math.floor(k / 4) * 0.75, -4.6, k % 2 ? '#f4d21c' : '#ffe98a', { seg: 10 }));
+      block([X - 1.6, -5.2, X, -4.4]);
+      P.push(box(2.2, 0.5, 0.06, -1.2, 3.1, -9.3, '#fff3b0', glow('#ffd84a', 1.6)));
+    } else if (id === 'cafe') {
+      // pendant lamps over the tables, a pastry case on the counter, an espresso machine and a bookshelf
+      for (const [x, z] of [[-4.2, -2.6], [-1.2, -4.4], [-4.4, -5.6]]) {
+        P.push(box(0.02, h - 2.3, 0.02, x, 2.3, z, '#222'), sph(0.2, x, 2.25, z, '#ffd9a0', { ...glow('#ffc27a', 2.2), seg: 14 }));
+      }
+      P.push(box(1.6, 0.5, 0.6, -3.2, 1.06, -7.2, '#d9eef5', { o: 0.35 }));
+      for (let k = 0; k < 8; k++) P.push(sph(0.09, -3.8 + (k % 4) * 0.4, 1.2, -7.3 + Math.floor(k / 4) * 0.2, k % 3 ? '#c98b4a' : '#f2d2b0', { seg: 10 }));
+      P.push(box(0.7, 0.55, 0.45, -0.4, 1.06, -7.25, '#9aa3ab', { m: 0.9, ro: 0.25 }), box(0.6, 0.06, 0.06, -0.4, 1.45, -7.0, '#ff7a3d', glow('#ff7a3d', 2)));
+      // a bookshelf: back panel, sides and shelves, with books standing on each shelf
+      P.push(box(0.05, 2.6, 2.6, -X + 0.03, 0, -3.6, '#4a2f1e'));
+      for (const z of [-4.9, -2.3]) P.push(box(0.4, 2.6, 0.05, -X + 0.22, 0, z, '#5a3b26'));
+      for (let k = 0; k < 5; k++) P.push(box(0.4, 0.04, 2.6, -X + 0.22, 0.3 + k * 0.58, -3.6, '#5a3b26'));
+      for (let k = 0; k < 4; k++) for (let j = 0; j < 14; j++) {
+        const tall = 0.3 + ((j * 7 + k) % 4) * 0.04;
+        P.push(box(0.26, tall, 0.12 + ((j + k) % 3) * 0.03, -X + 0.2, 0.34 + k * 0.58, -4.75 + j * 0.17, ['#8c2f2f', '#2f4f8c', '#2f7a4a', '#c9a227', '#5b3a6e'][(j * 3 + k) % 5]));
+      }
+      block([-X, -5.0, -X + 0.5, -2.2]);
+    } else if (id === 'arcade') {
+      // neon along the walls and ceiling, rows of glowing cabinets, a claw machine and a prize counter
+      for (const x of [-X + 0.05, X - 0.05]) { stripe(x, 0.15, -10, 20, '#ff3cf0', 'z', 'pulse'); stripe(x, h - 0.3, -10, 20, '#3cf0ff', 'z', 'pulse'); }
+      for (const z of [-2.5, -6.5]) stripe(0, h - 0.05, z, w - 1, '#7a5cff', 'x');
+      const screens = ['#ff4d6d', '#4dd2ff', '#9dff4d', '#ffd34d', '#c44dff'];
+      for (let k = 0; k < 4; k++) for (const sg of [-1, 1]) {
+        const x = sg * (X - 0.55), z = -1.8 - k * 1.3, c = screens[(k * 2 + (sg > 0)) % screens.length];
+        P.push(box(0.8, 1.7, 0.75, x, 0, z, '#15131c'), box(0.06, 0.55, 0.55, x - sg * 0.42, 1.05, z, c, glow(c, 2.6)), box(0.06, 0.22, 0.7, x - sg * 0.42, 1.75, z, c, { ...glow(c, 3.2), a: 'blink' }));
+        prop('bar_chair', x - sg * 1.0, 0, z, 0);
+      }
+      block([-X, -6.6, -X + 1.0, -1.2]); block([X - 1.0, -6.6, X, -1.2]);
+      // the claw machine, further in, full of prizes
+      const cx = -3.6, cz = -4.6;
+      P.push(box(1.0, 0.9, 1.0, cx, 0, cz, '#d43c6a'), box(0.95, 1.1, 0.95, cx, 0.9, cz, '#cfefff', { o: 0.3 }), box(1.0, 0.15, 1.0, cx, 2.0, cz, '#ffd34d', glow('#ffd34d', 1.6)));
+      for (let k = 0; k < 9; k++) P.push(sph(0.1, cx - 0.25 + (k % 3) * 0.25, 1.0, cz - 0.25 + Math.floor(k / 3) * 0.25, screens[k % 5], { seg: 10 }));
+      P.push(box(0.04, 0.5, 0.04, cx, 1.5, cz, '#c0c4c8', { m: 1 }));
+      block([cx - 0.6, cz - 0.6, cx + 0.6, cz + 0.6]);
+      // a glowing sign over the counter
+      P.push(box(2.6, 0.45, 0.06, -1.2, 3.1, -9.3, '#ff3cf0', { ...glow('#ff3cf0', 1.8), a: 'pulse' }));
+      for (let k = 0; k < 6; k++) P.push(sph(0.14, -4.0 + k * 0.5, 1.17, -7.2, screens[k % 5], { seg: 10 }));
+    } else if (id === 'bank') {
+      // a round vault door in the back wall, glass teller windows on the counter, velvet ropes and gold
+      P.push(pipe(1.5, 0.35, 0, 1.6, -d + 0.2, '#8d939a', { r: [PI / 2, 0, 0], m: 0.9, ro: 0.3, seg: 40 }), pipe(0.35, 0.5, 0, 1.6, -d + 0.45, '#c9ced4', { r: [PI / 2, 0, 0], m: 1, ro: 0.2 }));
+      for (let k = 0; k < 6; k++) { const a = k * PI / 3; P.push(box(0.08, 0.9, 0.08, Math.cos(a) * 0.6, 1.6 - 0.45 + Math.sin(a) * 0.6, -d + 0.55, '#d8dde2', { m: 1, r: [0, 0, a + PI / 2] })); }
+      for (const x of [-3.6, -1.6, 0.4]) P.push(box(0.04, 1.0, 0.7, x, 1.09, -7.2, '#dff3ff', { o: 0.3 }));
+      P.push(box(6.6, 0.06, 0.82, -1.2, 2.09, -7.2, '#b8963e', { m: 0.8, ro: 0.35 }));
+      const posts = [[-6.2, -1.8], [-6.2, -3.4], [-6.2, -5.0], [-6.2, -6.4]]; // a queue line along the wall
+      for (const [x, z] of posts) P.push(cyl(0.05, 0.95, x, 0, z, '#d4af37', { m: 1, ro: 0.25 }), sph(0.08, x, 0.98, z, '#d4af37', { m: 1, ro: 0.25 }));
+      for (let k = 0; k < posts.length - 1; k++) { const [a, b] = [posts[k], posts[k + 1]]; P.push(box(Math.abs(b[0] - a[0]) + 0.04, 0.05, Math.abs(b[1] - a[1]) + 0.04, (a[0] + b[0]) / 2, 0.82, (a[1] + b[1]) / 2, '#8b1a2b')); }
+      block([-6.4, -6.6, -6.0, -1.6]);
+      for (let k = 0; k < 12; k++) P.push(box(0.36, 0.12, 0.18, X - 1.0 + (k % 3) * 0.38, 0.06 + Math.floor(k / 6) * 0.13, -11 - (Math.floor(k / 3) % 2) * 0.2, '#e7c14b', { m: 1, ro: 0.2 }));
+      block([X - 1.3, -11.4, X - 0.0, -10.7]);
+    } else if (id === 'fact') {
+      // the original: steel columns and roof beams, the overhead crane, racks and carts along the walls
+      for (const z of [-6, -12, -18, -24]) for (const x of [-6.5, 6.5]) block([x - 0.15, z - 0.15, x + 0.15, z + 0.15]);
+      P.push(...[-6, -12, -18, -24].flatMap(z => [box(0.3, h, 0.3, -6.5, 0, z, '#4a5058', { tx: 'metal_plate', tc: '#4a5058' }), box(0.3, h, 0.3, 6.5, 0, z, '#4a5058', { tx: 'metal_plate', tc: '#4a5058' }), box(w, 0.35, 0.25, 0, h - 0.35, z, '#4a5058', { tx: 'metal_plate', tc: '#4a5058' })]));
+      prop('crane', -1, h - 1.25, -15);
+      for (const x of [-5.4, 3.4]) P.push(box(0.1, 0.01, d - 3, x, 0.001, -d / 2 - 1, '#d9a72a'));
+      for (let z = -3; z > -d + 1.5; z -= 1.25) prop(z > -12 ? 'shelves_narrow' : 'shelves', -X + 0.4, 0, z, PI / 2);
+      block([-X, -d, -X + 1.3, -1.5]);
+      ['rack', 'rack', 'storage_cart', 'tool_cart', 'welding_cart', 'tool_chest', 'rack', 'rack', 'hand_truck', 'crate2', 'crate2', 'propane', 'propane'].forEach((m, k) => prop(m, X - 0.6, 0, -3 - k * 1.7, -PI / 2));
+      block([X - 1.5, -d, X, -1.5]);
+    } else if (id === 'oil') {
+      // a refinery floor: tall tanks down one side, pipe runs along the walls and ceiling, barrels, beacons
+      for (const z of [-5, -11, -17, -23]) {
+        P.push(cyl(1.3, h - 1.2, -X + 1.5, 0, z, '#b9b4a8', { m: 0.6, ro: 0.45, seg: 32 }), cyl(1.32, 0.12, -X + 1.5, h * 0.45, z, '#d9a72a'));
+        P.push(cyl(0.12, 2.2, -X + 2.9, 0, z + 0.9, '#8a8f95', { m: 0.8 }));
+        block([-X, z - 1.4, -X + 3.1, z + 1.4]);
+      }
+      for (const y of [h - 0.6, h - 1.1]) P.push(pipe(0.16, d - 2, X - 0.4, y, -d / 2, '#a45a2a', { r: [PI / 2, 0, 0], m: 0.6 }), pipe(0.12, w - 1, 0, y + 0.2, -d + 0.6, '#6f7b85', { r: [0, 0, PI / 2], m: 0.7 }));
+      for (const z of [-4, -10, -16, -22]) P.push(pipe(0.16, 0.3, X - 0.4, h - 0.6, z, '#2d2d2d', { r: [PI / 2, 0, 0] }), pipe(0.22, 0.08, X - 0.75, h - 0.6, z, '#c0392b', { r: [0, 0, PI / 2] }));
+      for (let k = 0; k < 10; k++) prop('barrel', X - 0.7 - (k % 2) * 0.7, 0, -3 - Math.floor(k / 2) * 0.8, r() * PI);
+      block([X - 1.6, -7.2, X, -2.4]);
+      prop('generator', X - 1.0, 0, -12, -PI / 2, [0.8, 1.0]); prop('compressor', X - 1.0, 0, -15, -PI / 2, [0.7, 0.8]); prop('propane', X - 0.6, 0, -18, 0); prop('propane', X - 0.6, 0, -18.7, 0);
+      block([X - 1.8, -19.2, X, -11]);
+      for (const x of [-5.4, 3.4]) for (let k = 0; k < 10; k++) P.push(box(0.12, 0.01, 1.0, x, 0.001, -2.5 - k * 2.2, k % 2 ? '#1c1c1c' : '#e0b21c'));
+      for (const z of [-6, -14, -22]) P.push(sph(0.18, 6.5, h - 0.25, z, '#ff8c1a', { ...glow('#ff7a00', 3), a: 'blink' }));
+    } else if (id === 'space') {
+      // a mining bay: portholes full of stars, glowing ore crystals, light strips, a landed capsule
+      for (const z of [-5, -11, -17, -23]) {
+        for (const x of [-X + 0.05, X - 0.05]) {
+          P.push(pipe(0.9, 0.12, x, 2.6, z, '#0a0d18', { r: [0, 0, PI / 2], seg: 32 }), pipe(1.02, 0.08, x, 2.6, z, '#9aa6b4', { r: [0, 0, PI / 2], m: 0.9, seg: 32 }));
+          for (let k = 0; k < 5; k++) P.push(sph(0.03, x - Math.sign(x) * 0.07, 2.25 + r() * 0.7, z - 0.5 + r(), '#ffffff', { ...glow('#ffffff', 4), seg: 6 }));
+        }
+      }
+      for (const x of [-X + 0.06, X - 0.06]) stripe(x, 0.3, -d / 2, d - 1, '#5ab8ff', 'z');
+      stripe(0, h - 0.05, -d / 2, w - 2, '#8fd3ff', 'x');
+      for (const [x, z] of [[-8.4, -6], [-8.6, -9], [-8.3, -15], [-8.6, -20], [8.5, -8], [8.4, -18]]) {
+        for (let k = 0; k < 4; k++) P.push(cone(0.18 + r() * 0.12, 0.6 + r() * 0.8, x + (r() - 0.5) * 0.6, 0, z + (r() - 0.5) * 0.6, '#7ff6ff', { ...glow('#3fd8ff', 2.2), a: 'pulse', seg: 6, r: [(r() - 0.5) * 0.5, 0, (r() - 0.5) * 0.5] }));
+        block([x - 0.7, z - 0.7, x + 0.7, z + 0.7]);
+      }
+      P.push(cyl(1.2, 2.4, 7.6, 0, -13, '#e9ecef', { rt: 0.9, m: 0.4, seg: 28 }), cone(0.9, 1.4, 7.6, 2.4, -13, '#e9ecef', { m: 0.4, seg: 28 }), pipe(0.5, 0.06, 7.6, 1.4, -11.82, '#0b1730', { r: [PI / 2, 0, 0], ...glow('#3a7bff', 0.6) }));
+      block([6.2, -14.4, X, -11.6]);
+      prop('drill_press', 8.6, 0, -23.5, -PI / 2, [0.6, 0.6]); prop('storage_cart', 8.6, 0, -3.5, -PI / 2, [0.6, 0.6]);
+    } else if (id === 'ailab') {
+      // rows of server racks with blinking lights, desks with monitors, a glass meeting room, cable trays
+      for (let k = 0; k < 7; k++) {
+        const z = -6 - k * 2.6;
+        for (const x of [-X + 0.5, -X + 1.3]) {
+          P.push(box(0.7, 2.3, 1.0, x, 0, z, '#1a1d22', { m: 0.5, ro: 0.4 }));
+          for (let j = 0; j < 6; j++) P.push(box(0.05, 0.04, 0.04, x + 0.36, 0.3 + j * 0.33, z - 0.3 + (j % 3) * 0.25, j % 3 ? '#41ff8a' : '#3ab0ff', { ...glow(j % 3 ? '#41ff8a' : '#3ab0ff', 3.5), a: (j + k) % 2 ? 'blink' : 'pulse' }));
+        }
+        block([-X, z - 0.55, -X + 1.7, z + 0.55]);
+      }
+      P.push(box(0.3, 0.1, d - 6, -X + 0.9, h - 0.6, -d / 2 - 1, '#7e8792', { m: 0.6 }));
+      for (const z of [-4, -7.5]) { prop('desk', X - 1.3, 0, z, -PI / 2, [0.6, 1.1]); prop('tv', X - 1.5, 0.78, z - 0.4, -PI / 2); prop('tv', X - 1.5, 0.78, z + 0.4, -PI / 2); prop('armchair', X - 2.4, 0, z, PI / 2); }
+      P.push(box(0.06, 2.6, 6, 6.3, 0, -18, '#dff3ff', { o: 0.22 }), box(3.6, 2.6, 0.06, X - 1.85, 0, -15, '#dff3ff', { o: 0.22 }), box(1.6, 0.75, 3.2, 8.2, 0, -18.5, '#ffffff'));
+      block([6.2, -21, X, -15]);
+      P.push(box(2.6, 1.4, 0.05, 0, 3.6, -d + 0.08, '#081420', glow('#1d6fff', 0.8)), box(2.2, 0.08, 0.05, 0, 4.0, -d + 0.12, '#41ff8a', { ...glow('#41ff8a', 2.5), a: 'pulse' }));
+    } else if (id === 'dyson') {
+      // the control room: a huge window onto the sun, an arc of consoles, pulsing energy conduits, gold trim
+      P.push(box(w - 2, h - 1.6, 0.1, 0, 0.9, -d + 0.15, '#050505'), sph(5.5, 0, 3.4, -d - 6.5, '#ffd27a', { ...glow('#ff9a1f', 5), seg: 40 }), box(w - 2, 0.12, 0.3, 0, h - 0.7, -d + 0.3, '#c9a227', { m: 1, ro: 0.3 }));
+      for (let k = 0; k < 7; k++) {
+        const a = -0.9 + k * 0.3, x = Math.sin(a) * 7.4, z = -3.5 - Math.cos(a) * 0.9;
+        if (Math.abs(x) < 6) continue;
+        P.push(box(1.1, 0.9, 0.6, x, 0, z, '#2a2622', { r: [0, -a, 0] }), box(0.95, 0.45, 0.05, x, 0.95, z - 0.1, '#ffb45e', { ...glow('#ffb45e', 1.8), r: [-0.5, -a, 0] }));
+        block([x - 0.7, z - 0.5, x + 0.7, z + 0.5]);
+      }
+      for (const z of [-6, -12, -18, -24]) for (const x of [-X + 0.6, X - 0.6]) { P.push(cyl(0.28, h, x, 0, z, '#ff8a2a', { ...glow('#ff7a1a', 2.4), a: 'pulse', seg: 18 }), cyl(0.36, 0.25, x, 0, z, '#c9a227', { m: 1 }), cyl(0.36, 0.25, x, h - 0.25, z, '#c9a227', { m: 1 })); block([x - 0.4, z - 0.4, x + 0.4, z + 0.4]); }
+      for (const x of [-5.4, 3.4]) P.push(box(0.08, 0.01, d - 3, x, 0.001, -d / 2 - 1, '#ffb45e', glow('#ffb45e', 1.2)));
+    }
+    return P;
+  }
   function interior(id, milestones) {
     const I = INSIDE[id], door = DOORWAY[SHOPS[id].kit], fac = I.kind === 'factory';
     const w = fac ? 20 : 14, d = fac ? 26 : 20, h = fac ? 7 : 4.5, r = rng(([...id].reduce((a, c) => a + c.charCodeAt(0), 0) % 1000) + 1);
     const parts = [], props = [], lights = [], blocks = [], lines = [];
-    const box = (sx, sy, sz, x, y, z, tex, tint) => parts.push([[sx, sy, sz].map(round2), [x, y, z].map(round2), tex, tint]);
+    const box2 = (sx, sy, sz, x, y, z, tex, tint) => parts.push([[sx, sy, sz].map(round2), [x, y, z].map(round2), tex, tint]);
     const prop = (model, x, y, z, ry = 0, block) => { props.push({ model, p: [x, y, z].map(round2), ry: round2(ry) }); if (block) blocks.push([x - block[0], z - block[1], x + block[0], z + block[1]].map(round2)); };
-    // the shell: floor, ceiling, walls (the front one round the doorway), skirting
-    const wallTex = I.walls || 'brick', wallTint = fac ? '#a89e94' : '#e2d9ce';
-    box(w, 0.1, d, 0, -0.05, -d / 2, I.floor || 'concrete_floor', fac ? '#9c978f' : '#d6cfc4');
-    box(w, 0.2, d, 0, h + 0.1, -d / 2, fac ? 'corrugated' : 'plaster', fac ? '#7b7f84' : '#d8d2c8');
-    box(0.3, h, d, -w / 2 - 0.15, h / 2, -d / 2, wallTex, wallTint); box(0.3, h, d, w / 2 + 0.15, h / 2, -d / 2, wallTex, wallTint);
-    box(w, h, 0.3, 0, h / 2, -d - 0.15, wallTex, wallTint);
+    // the shell: floor, ceiling, walls (the front one round the doorway)
+    const [wallTex, wallTint] = I.walls, [floorTex, floorTint] = I.floor;
+    box2(w, 0.1, d, 0, -0.05, -d / 2, floorTex, floorTint);
+    box2(w, 0.2, d, 0, h + 0.1, -d / 2, fac ? 'corrugated' : 'plaster', I.ceil);
+    box2(0.3, h, d, -w / 2 - 0.15, h / 2, -d / 2, wallTex, wallTint); box2(0.3, h, d, w / 2 + 0.15, h / 2, -d / 2, wallTex, wallTint);
+    box2(w, h, 0.3, 0, h / 2, -d - 0.15, wallTex, wallTint);
     const side = (w - door.w) / 2;
-    box(side, h, 0.3, -door.w / 2 - side / 2, h / 2, 0.15, wallTex, wallTint); box(side, h, 0.3, door.w / 2 + side / 2, h / 2, 0.15, wallTex, wallTint);
-    box(door.w, h - door.h, 0.3, 0, door.h + (h - door.h) / 2, 0.15, wallTex, wallTint);
-    for (const x of [-1, 1]) box(0.12, door.h + 0.1, 0.36, x * (door.w / 2 + 0.06), (door.h + 0.1) / 2, 0.15, 'metal_plate', '#3b3e42'); // door frame
-    box(door.w + 0.24, 0.12, 0.36, 0, door.h + 0.06, 0.15, 'metal_plate', '#3b3e42');
+    box2(side, h, 0.3, -door.w / 2 - side / 2, h / 2, 0.15, wallTex, wallTint); box2(side, h, 0.3, door.w / 2 + side / 2, h / 2, 0.15, wallTex, wallTint);
+    box2(door.w, h - door.h, 0.3, 0, door.h + (h - door.h) / 2, 0.15, wallTex, wallTint);
+    for (const x of [-1, 1]) box2(0.12, door.h + 0.1, 0.36, x * (door.w / 2 + 0.06), (door.h + 0.1) / 2, 0.15, 'metal_plate', '#3b3e42'); // door frame
+    box2(door.w + 0.24, 0.12, 0.36, 0, door.h + 0.06, 0.15, 'metal_plate', '#3b3e42');
     // production lines across the back, one more for each milestone (4 in a factory hall, 3 in a shop)
     const n = Math.min(fac ? 4 : 3, 1 + milestones), lz = fac ? [-8, -12.5, -17, -21.5] : [-11.5, -15, -18.5];
     const half = CITY.line.length / 2;
@@ -246,60 +392,36 @@
       lines.push({ x: fac ? -1 : 0, z: lz[k], machines: 3 });
       blocks.push([(fac ? -1 : 0) - half - 0.15, lz[k] - 1.4, (fac ? -1 : 0) + half + 0.9, lz[k] + 0.45].map(round2));
     }
+    const extra = clean(decor(id, w, d, h, r, prop, b => blocks.push(b.map(round2))));
     if (fac) {
-      // steel columns and roof beams, the overhead crane, safety lines on the floor
-      for (const z of [-6, -12, -18, -24]) {
-        for (const x of [-6.5, 6.5]) { box(0.3, h, 0.3, x, h / 2, z, 'metal_plate', '#4a5058'); blocks.push([x - 0.15, z - 0.15, x + 0.15, z + 0.15]); }
-        box(w, 0.35, 0.25, 0, h - 0.18, z, 'metal_plate', '#4a5058');
-      }
-      prop('crane', -1, h - 1.25, -15);
-      for (const x of [-5.4, 3.4]) box(0.1, 0.01, d - 3, x, 0.006, -d / 2 - 1, null, '#d9a72a');
-      // storage along the walls
-      for (let z = -3; z > -d + 1.5; z -= 1.25) prop(z > -12 ? 'shelves_narrow' : 'shelves', -w / 2 + 0.4, 0, z, PI / 2);
-      blocks.push([-w / 2, -d, -w / 2 + 1.3, -1.5]);
-      const right = ['rack', 'rack', 'storage_cart', 'tool_cart', 'welding_cart', 'tool_chest', 'rack', 'rack', 'hand_truck', 'crate2', 'crate2', 'propane', 'propane'];
-      right.forEach((m, k) => prop(m, w / 2 - 0.6, 0, -3 - k * 1.7, -PI / 2));
-      blocks.push([w / 2 - 1.5, -d, w / 2, -1.5]);
-      for (let k = 0; k < 6; k++) prop('cement_bag', 4.6 + (k % 2) * 0.5, 0.18 * Math.floor(k / 2), -d + 1.2, PI / 2);
-      blocks.push([4.2, -d, 5.6, -d + 1.8]);
       prop('extinguisher', -w / 2 + 0.25, 0, -1.2, PI / 2); prop('wet_floor', 2.2, 0, -3.2, r() * PI);
       prop('power_box', w / 2 - 0.05, 1.4, -2, -PI / 2);
-      for (const z of [-8, -12.5, -17, -21.5]) for (const x of [-4.5, 2.5]) prop('hanging_lamp', x, h, z + 1.2);
+      for (const z of [-8, -12.5, -17, -21.5]) for (const x of [-4.5, 2.5]) prop(id === 'fact' || id === 'oil' ? 'hanging_lamp' : 'fluorescent', x, h, z + 1.2);
       lights.push([-1, h - 1.6, -6], [-1, h - 1.6, -12.5], [-1, h - 1.6, -19], [-7, h - 1.6, -10], [7, h - 1.6, -16]);
     } else {
-      // the counter with the till, menu board, customers' side by the door, a partition wall to the back
-      box(6.4, 1.0, 0.7, -1.2, 0.5, -7.2, 'plaster', '#6b4a35'); box(6.6, 0.06, 0.82, -1.2, 1.03, -7.2, 'marble', '#e8e2d8');
+      // the counter with the till, a partition wall to the back with shelves, plants by the door
+      box2(6.4, 1.0, 0.7, -1.2, 0.5, -7.2, 'plaster', { lemon: '#e6c34a', cafe: '#6b4a35', arcade: '#2b2140', bank: '#7a5c3e' }[id]); box2(6.6, 0.06, 0.82, -1.2, 1.03, -7.2, 'marble', id === 'arcade' ? '#3a2f55' : '#e8e2d8');
       blocks.push([-4.6, -7.8, 2.2, -6.6]);
       prop('cash_register', 0.8, 1.06, -7.2, 0);
-      prop('chalkboard', 2.6, 0, -1.3, PI * 0.85); blocks.push([2.1, -1.8, 3.1, -0.8]);
-      prop('plant', -w / 2 + 0.7, 0, -1.0); prop('plant', w / 2 - 0.7, 0, -1.0);
-      box(w / 2 - 3.2, 2.4, 0.15, -w / 2 + (w / 2 - 3.2) / 2, 1.2, -9.4, 'plaster', '#b8afa4'); box(w / 2 - 3.2, 2.4, 0.15, w / 2 - (w / 2 - 3.2) / 2, 1.2, -9.4, 'plaster', '#b8afa4');
+      if (id !== 'arcade') { prop('chalkboard', 2.6, 0, -1.3, PI * 0.85); blocks.push([2.1, -1.8, 3.1, -0.8]); }
+      if (id !== 'arcade') { prop('plant', -w / 2 + 0.7, 0, -1.0); prop('plant', w / 2 - 0.7, 0, -1.0); }
+      box2(w / 2 - 3.2, 2.4, 0.15, -w / 2 + (w / 2 - 3.2) / 2, 1.2, -9.4, 'plaster', id === 'arcade' ? '#221c30' : '#b8afa4'); box2(w / 2 - 3.2, 2.4, 0.15, w / 2 - (w / 2 - 3.2) / 2, 1.2, -9.4, 'plaster', id === 'arcade' ? '#221c30' : '#b8afa4');
       blocks.push([-w / 2, -9.6, -3.2, -9.2], [3.2, -9.6, w / 2, -9.2]);
-      for (let k = 0; k < 4; k++) prop('wall_shelf', -w / 2 + 1.2 + k * 1.1, 0, -9.3, 0);
-      if (I.front === 'cafe') {
+      if (id === 'cafe' || id === 'lemon') for (let k = 0; k < 4; k++) prop('wall_shelf', -w / 2 + 1.2 + k * 1.1, 0, -9.3, 0);
+      if (id === 'cafe') {
         prop('coffee_cart', w / 2 - 1.4, 0, -4.2, -PI / 2, [0.7, 1.2]);
         for (const [x, z] of [[-4.2, -2.6], [-1.2, -4.4], [-4.4, -5.6]]) {
           prop('round_table', x, 0, z, r(), [0.8, 0.8]);
           for (let c = 0; c < 3; c++) { const a = c * 2.1 + r(); prop('bar_chair', x + Math.cos(a) * 0.95, 0, z + Math.sin(a) * 0.95, -a + PI / 2); }
         }
-      } else if (I.front === 'stall') {
-        for (let k = 0; k < 4; k++) { prop('display_shelves', -w / 2 + 0.3, 0, -2 - k * 1.15, 0); prop('display_shelves', w / 2 - 0.3, 0, -2 - k * 1.15, PI); } // (the model is long along z)
-        blocks.push([-w / 2, -6.5, -w / 2 + 0.8, -1.4], [w / 2 - 0.8, -6.5, w / 2, -1.4]);
-        for (const [x, z] of [[-2.5, -3.8], [-1.4, -3.8], [-2.0, -4.4]]) prop('crate2', x, 0, z, PI / 2 + r() * 0.2);
-        blocks.push([-3.1, -4.9, -0.9, -3.3]);
-      } else if (I.front === 'arcade') {
-        for (let k = 0; k < 4; k++) {
-          for (const sgn of [-1, 1]) {
-            const x = sgn * (w / 2 - 0.55), z = -1.8 - k * 1.3;
-            box(0.8, 1.0, 1.0, x, 0.5, z, 'metal_plate', '#1d1f24'); prop('tv', x, 1.0, z, -sgn * PI / 2); prop('bar_chair', x - sgn * 1.0, 0, z, 0);
-          }
-        }
-        blocks.push([-w / 2, -6.6, -w / 2 + 1.0, -1.2], [w / 2 - 1.0, -6.6, w / 2, -1.2]);
-      } else if (I.front === 'bank') {
+      } else if (id === 'lemon') {
+        for (let k = 0; k < 2; k++) prop('display_shelves', -w / 2 + 0.3, 0, -5.0 - k * 1.15, 0);
+        blocks.push([-w / 2, -6.5, -w / 2 + 0.8, -4.2]);
+      } else if (id === 'bank') {
         for (const x of [-4.2, 0.8]) { prop('desk', x, 0, -4.4, 0, [1.05, 0.55]); prop('armchair', x, 0, -3.1, PI); prop('armchair', x, 0, -5.4, 0); }
         prop('plant', -1.7, 0, -4.4); prop('tv', 2.9, 1.2, -9.1, 0);
       }
-      for (const z of [-3, -8, -13, -17.5]) for (const x of [-3.5, 3.5]) prop('fluorescent', x, h, z);
+      for (const z of [-3, -8, -13, -17.5]) for (const x of [-3.5, 3.5]) if (id !== 'cafe' || z < -8) prop('fluorescent', x, h, z);
       lights.push([-3, h - 1.1, -3.5], [3, h - 1.1, -3.5], [0, h - 1.1, -9.5], [-2.5, h - 1.1, -15], [2.5, h - 1.1, -15]);
     }
     // people: the quest giver by the way in; a worker at the first and last machine of each line and one
@@ -319,7 +441,7 @@
     for (let k = 0; k < Math.min(3, 1 + milestones); k++) walk.push({ path: rounds, speed: round2(1.1 + r() * 0.35), phase: round2(k / 3 + r() * 0.1), who: crew[(k + 1) % crew.length] });
     for (const s of stand) blocks.push([s.p[0] - 0.25, s.p[1] - 0.25, s.p[0] + 0.25, s.p[1] + 0.25].map(round2));
     blocks.push([giver.p[0] - 0.3, giver.p[1] - 0.3, giver.p[0] + 0.3, giver.p[1] + 0.3]);
-    return { kind: I.kind, w, d, h, door, parts, props, lights, lines, blocks, people: { giver, stand, walk, crew } };
+    return { kind: I.kind, w, d, h, door, parts, extra, props, lights, light: I.light, glow: I.glow, lines, blocks, people: { giver, stand, walk, crew } };
   }
   // Where someone walking a closed path is after d metres: [x, z, heading (rotation y, facing +Z)].
   function pathAt(path, d) {

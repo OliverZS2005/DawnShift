@@ -137,6 +137,31 @@
   .lvl { font-size: 12px; color: var(--blue); }
   .choice b { display: block; font-size: 15px; margin-bottom: 4px; }
   .job { padding: 6px 0; border-bottom: 1px dashed var(--line); } .job:last-child { border-bottom: 0; }
+  /* ---------- Intro screen ----------
+     Brief: cinematic, gritty, confident. Your city slowly pans full-screen behind a dark gradient; one
+     condensed title, one line of pitch, one gold action. Same ink and warm white as the fight HUD, sharp
+     2px corners. One motion: the panel rises in once (skipped with reduced motion). */
+  body.intro #cityWrap { position: fixed; inset: 0; height: 100vh !important; z-index: 40; }
+  body.intro #cityHint, body.intro #cityPrompt, body.intro #cityDot, body.intro #talk { display: none !important; }
+  #intro { position: fixed; inset: 0; z-index: 41; display: none; color: #F2EFE8; background: linear-gradient(100deg, rgba(8,9,12,.92) 0%, rgba(8,9,12,.72) 38%, rgba(8,9,12,.15) 70%, rgba(8,9,12,0) 100%), linear-gradient(0deg, rgba(8,9,12,.7), rgba(8,9,12,0) 40%); }
+  body.intro #intro { display: flex; align-items: flex-end; }
+  #intro .panel { padding: 0 clamp(20px, 6vw, 88px) clamp(28px, 9vh, 96px); max-width: 640px; animation: rise .7s ease-out both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+  #intro h2 { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; font-weight: 800; font-size: clamp(56px, 11vw, 132px); line-height: .86; letter-spacing: .01em; margin: 0 0 14px; text-transform: uppercase; }
+  #intro h2 b { color: #f5c542; }
+  #intro .pitch { font-size: 18px; line-height: 1.5; color: #d8d4cb; margin: 0 0 18px; max-width: 34em; }
+  #intro .you { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 14px; color: #B9B4AA; margin-bottom: 22px; }
+  #intro .you b { color: #F2EFE8; font-weight: 700; }
+  #intro .acts { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  #intro button { border-radius: 2px; font-size: 16px; padding: 12px 22px; background: rgba(11,13,16,.6); border: 1px solid rgba(242,239,232,.25); }
+  #intro button.primary { background: #f5c542; color: #111; border: none; font-weight: 800; font-family: 'Barlow Condensed', sans-serif; font-size: 22px; letter-spacing: .06em; text-transform: uppercase; padding: 10px 34px; }
+  #intro button:hover:not(:disabled) { border-color: #f5c542; }
+  #intro form { margin-top: 18px; max-width: 360px; display: none; }
+  #intro form.on { display: block; }
+  #intro form input { background: rgba(11,13,16,.75); border-color: rgba(242,239,232,.25); border-radius: 2px; }
+  #intro .small { font-size: 13px; color: #8a93a8; margin-top: 20px; }
+  #intro .small a { color: #B9B4AA; }
+  @media (prefers-reduced-motion: reduce) { #intro .panel { animation: none; } }
   /* ---------- Reboot goals ---------- */
   .goals { display: grid; gap: 10px; margin-top: 10px; }
   .goal { display: grid; grid-template-columns: 26px 1fr; gap: 8px; align-items: start; }
@@ -202,6 +227,7 @@
 </div>
 <div id="toast"></div>
 <div id="fps"></div>
+<div id="intro" role="dialog" aria-label="Hustlefront"><div class="panel"></div></div>
 
 <script src="shared.js"></script>
 <script src="vendor/three.bundle.js"></script>
@@ -318,6 +344,30 @@ async function syncLink(server, code) {
     if (!confirm('Replace the singleplayer game on this device with the synced one?')) return;
     adoptSave(b.save); SYNC = { server, code, base: b.updatedAt, at: Date.now() }; store.set('cc_sync', SYNC); toast('☁️ Linked! This device now syncs.'); render();
   } catch { toast('Could not reach the sync server'); }
+}
+// ---------- Accounts (sign up / log in on a Hustlefront server) ----------
+// An account keeps your game under a name and password: the server hands this device the account's sync
+// code, and the sync above keeps the game in step with your other devices. Returns an error, or null.
+const hasProgress = t => t.level > 1 || t.prestige > 0 || BUILDINGS.some(b => CC.owned(t, b.id) > 0);
+async function account(op, server, name, password) {
+  let r, b;
+  try { r = await fetch(httpBase(server) + '/api/account/' + op, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, password }) }); b = await r.json(); }
+  catch { return 'Could not reach ' + server; }
+  if (!r.ok) return b.error || 'Something went wrong';
+  if (op === 'login') {
+    const saved = await fetch(httpBase(server) + '/api/sync/' + b.code).then(x => x.ok ? x.json() : null).catch(() => null);
+    if (saved && saved.save) {
+      if (hasProgress(SP.tycoon) && !confirm(`Load ${b.name}'s saved game? It replaces the game on this device.`)) return 'Not logged in: your game here is kept.';
+      adoptSave(saved.save); SYNC = { server, code: b.code, base: saved.updatedAt, account: b.name, at: Date.now() };
+    } else { SYNC = { server, code: b.code, base: 0, account: b.name }; await syncNow(true); }
+  } else { SYNC = { server, code: b.code, base: 0, account: b.name }; await syncNow(true); } // the game on this device becomes the account's
+  store.set('cc_sync', SYNC); store.set('cc_server', server);
+  toast(op === 'signup' ? `Welcome, ${b.name}! Your game now saves to your account.` : `Logged in as ${b.name}`);
+  render(); return null;
+}
+function logout() {
+  if (!confirm('Log out? Your game stays on this device but stops saving to your account.')) return;
+  syncNow(true); SYNC = null; store.set('cc_sync', null); toast('Logged out'); render();
 }
 setInterval(() => syncNow(true), 20000);
 addEventListener('visibilitychange', () => { if (document.hidden) syncNow(true); });
@@ -458,16 +508,38 @@ function renderPlay() {
         <div class="row"><span class="muted">${NET?.connecting ? 'Connecting…' : ''}</span><button class="primary" data-connect>Join server</button></div>`}
     </div>
   </div>${choice}
-  <div class="card" style="margin-top:12px"><h3>☁️ Sync with desktop</h3>
-    ${SYNC ? `<p>Sync code <b style="font-size:18px;letter-spacing:2px">${SYNC.code}</b> on <span class="muted">${esc(SYNC.server)}</span></p>
-      <p class="muted">Enter this code in the Hustlefront desktop app (or another browser) to share your singleplayer game and multiplayer logins.
-      ${SYNC.err ? `<span class="loss">Last sync failed: ${esc(SYNC.err)}</span>` : SYNC.at ? `Last synced ${new Date(SYNC.at).toLocaleTimeString()}.` : ''} Play on one device at a time.</p>
-      <div class="row"><button data-sync-now>Sync now</button><button class="danger" data-sync-off>Stop syncing</button></div>`
-    : `<p class="muted">Keep this game and the desktop app in sync through a Hustlefront server. Create a code here, or enter the code shown in your desktop app.</p>
-      <label>Sync server</label><input id="syncSrv" value="${esc(store.get('cc_server') || defaultServer)}">
+  <div class="card" style="margin-top:12px">${accountCard()}</div>  </div>`;
+}
+
+// Your account (or a plain sync code): log in, sign up, or what this device is syncing with.
+function accountCard() {
+  if (SYNC?.account) return `<h3>👤 ${esc(SYNC.account)}</h3>
+    <p class="muted">Logged in on ${esc(SYNC.server)}. Your game saves to your account and follows you to the desktop app, the phone apps and other browsers: log in there with the same name.
+    ${SYNC.err ? `<span class="loss">Last save failed: ${esc(SYNC.err)}</span>` : SYNC.at ? `Last saved ${new Date(SYNC.at).toLocaleTimeString()}.` : ''} Play on one device at a time.</p>
+    <div class="row"><button data-sync-now>Save now</button><button class="danger" data-logout>Log out</button></div>`;
+  if (SYNC) return `<h3>☁️ Sync code</h3><p>Sync code <b style="font-size:18px;letter-spacing:2px">${SYNC.code}</b> on <span class="muted">${esc(SYNC.server)}</span></p>
+    <p class="muted">Enter this code in the desktop or phone app (or another browser) to share your singleplayer game and multiplayer logins.
+    ${SYNC.err ? `<span class="loss">Last sync failed: ${esc(SYNC.err)}</span>` : SYNC.at ? `Last synced ${new Date(SYNC.at).toLocaleTimeString()}.` : ''} Play on one device at a time.</p>
+    <div class="row"><button data-sync-now>Sync now</button><button class="danger" data-sync-off>Stop syncing</button></div>`;
+  return `<h3>👤 Log in or sign up</h3>
+    <p class="muted">An account saves your game on a Hustlefront server, so you can carry on in the desktop app, the phone apps or another browser.</p>
+    <form data-account-form onsubmit="return false">
+      <label>Server</label><input id="accSrv" value="${esc(store.get('cc_server') || defaultServer)}">
+      <label>Name</label><input id="accName" maxlength="20" autocomplete="username">
+      <label>Password</label><input id="accPw" type="password" autocomplete="current-password">
+      <div class="row"><span class="loss" id="accErr"></span><span><button data-signup>Sign up</button> <button class="primary" data-login>Log in</button></span></div>
+    </form>
+    <details style="margin-top:10px"><summary class="muted">Or use a sync code instead</summary>
       <label>Sync code (to link an existing one)</label><input id="syncCode" maxlength="10" placeholder="e.g. K7Q2M9XPLR" style="text-transform:uppercase">
-      <div class="row"><button class="primary" data-sync-create>Create new sync code</button><button data-sync-link>Link with code</button></div>`}
-  </div>`;
+      <div class="row"><button data-sync-create>Create new sync code</button><button data-sync-link>Link with code</button></div>
+    </details>`;
+}
+async function accountFromForm(op, root = document) {
+  const q = id => root.querySelector('#' + id), err = q('accErr');
+  err.textContent = op === 'signup' ? 'Signing up…' : 'Logging in…';
+  const e = await account(op, q('accSrv').value.trim(), q('accName').value.trim(), q('accPw').value);
+  if (e && err.isConnected) err.textContent = e;
+  return !e;
 }
 
 function renderBattleSP() {
@@ -504,8 +576,10 @@ $('#view').addEventListener('click', e => {
   const d = b.dataset;
   if (d.a) { act(JSON.parse(d.a)); if (mode === 'sp') render(); }
   else if ('reset' in d) resetSP();
-  else if ('syncCreate' in d) syncCreate($('#syncSrv').value);
-  else if ('syncLink' in d) syncLink($('#syncSrv').value, $('#syncCode').value);
+  else if ('syncCreate' in d) syncCreate($('#accSrv').value);
+  else if ('syncLink' in d) syncLink($('#accSrv').value, $('#syncCode').value);
+  else if ('login' in d || 'signup' in d) accountFromForm('login' in d ? 'login' : 'signup', $('#view'));
+  else if ('logout' in d) logout();
   else if ('syncNow' in d) syncNow();
   else if ('syncOff' in d) { SYNC = null; store.set('cc_sync', null); render(); }
   else if ('reboot' in d) { const t = T(); if (confirm(t.level < CC.MAX_BIZ ? `Reboot to ${CC.LEVELS[t.level]}? You lose all money, buildings and weapons.` : `Prestige for ${CC.prestigePoints(t)} Boost Points? You lose all money, buildings and weapons.`)) { act({ type: 'reboot' }); toast('🔄 Rebooted!'); if (mode === 'sp') render(); } }
@@ -875,6 +949,47 @@ applyScreen();
   });
 }
 
+// ---------- Intro screen ----------
+// Shown each time the game opens: your city pans slowly behind it (the tycoon view, full-screen), with
+// Play and, if you aren't logged in, Log in / Sign up. Add ?intro=0 to the address to skip it.
+let introOn = new URLSearchParams(location.search).get('intro') !== '0', introForm = '';
+function introView() {
+  const t = SP.tycoon, p = $('#intro .panel');
+  const you = SYNC?.account ? `Logged in as <b>${esc(SYNC.account)}</b> · ` : '';
+  const game = hasProgress(t) ? `${you}Your game: <b>${CC.LEVELS[t.level - 1]}</b> · <b>${fmt(t.money)}</b>` : `${you}A new game: <b>$50</b> and a pistol`;
+  p.innerHTML = `<h2>Hustle<b>front</b></h2>
+    <p class="pitch">Build a business empire block by block, keep the townspeople happy, and fight anyone who wants a cut of your money.</p>
+    <div class="you">${game}</div>
+    <div class="acts"><button class="primary" data-intro-play>${hasProgress(t) ? 'Continue' : 'Play'}</button>${SYNC?.account ? '' : '<button data-intro-form="login">Log in</button><button data-intro-form="signup">Sign up</button>'}</div>
+    <form class="${introForm ? 'on' : ''}" onsubmit="return false">
+      <label>Server</label><input id="accSrv" value="${esc(store.get('cc_server') || defaultServer)}">
+      <label>Name</label><input id="accName" maxlength="20" autocomplete="username">
+      <label>Password</label><input id="accPw" type="password" autocomplete="${introForm === 'signup' ? 'new-password' : 'current-password'}">
+      <div class="row"><span class="loss" id="accErr"></span><button class="primary" data-intro-go>${introForm === 'signup' ? 'Sign up' : 'Log in'}</button></div>
+    </form>
+    <p class="small">${TOUCH_ONLY ? `On a phone? <a href="${APPS_URL}" target="_blank" rel="noopener">Get the app</a> for touch controls. ` : ''}Click Play, then click the city to walk around your business.</p>`;
+}
+function showIntro(on) {
+  introOn = on; document.body.classList.toggle('intro', on);
+  if (on) { introView(); tab = 'tycoon'; render(); }
+  else { render(); }
+}
+$('#intro').addEventListener('click', async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if ('introPlay' in b.dataset) showIntro(false);
+  else if (b.dataset.introForm) { introForm = b.dataset.introForm; introView(); $('#accName').focus(); }
+  else if ('introGo' in b.dataset) { if (await accountFromForm(introForm, $('#intro'))) { introForm = ''; showIntro(false); } }
+});
+$('#intro').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('#intro input')) $('#intro [data-intro-go]').click(); });
+// the camera drifts slowly round the plaza behind the intro
+{
+  let a = 0, last = performance.now();
+  requestAnimationFrame(function drift(now) {
+    if (introOn && city) { a += Math.min(0.05, (now - last) / 1000) * 0.045; city.place(13 * Math.sin(a * 0.7), 22 + 4 * Math.cos(a), Math.PI * 0.08 * Math.sin(a * 1.3) + Math.sin(a * 0.7) * 0.5, -0.06, -1); }
+    last = now; requestAnimationFrame(drift);
+  });
+}
+
 // ---------- Main loop ----------
 function updateMoney() { const t = T(); $('#money').textContent = fmt(t.money); $('#rate').textContent = `+${fmt(CC.income(t))}/s`; }
 let lastTick = performance.now(), saveT = 0, renderT = 0, eventT = 0;
@@ -891,6 +1006,7 @@ setInterval(() => {
 }, 100);
 addEventListener('beforeunload', saveSP);
 render();
+if (introOn) showIntro(true);
 </script>
 </body>
 </html>
