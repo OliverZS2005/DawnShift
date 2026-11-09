@@ -1,13 +1,17 @@
 #!/bin/bash
-# Installs the web version of Dawnshift, plus its account/sync server, on a
-# server that already runs Nginx and Certbot for other sites. Safe to run
-# again: it only touches Dawnshift's own files, and it never leaves Nginx
-# with a broken config.
+# Installs the hosted Dawnshift server on a VPS that already runs Nginx and
+# Certbot for other sites. Safe to run again. On a new box it sets everything
+# up; on a box that was running the old sync server it migrates to the new
+# layout and keeps existing accounts.
 set -euo pipefail
 DOMAIN=${DOMAIN:-dawnshift.dawnlife.online}
-SYNC_PORT=3790
+PORT=3790
+APP_DIR=/opt/dawnshift
+DATA_DIR=/var/lib/dawnshift
+BRANCH=${BRANCH:-claude/ai-grok-bot-x5v1dx}
+REPO=OliverZS2005/ClaudeCodeIsTuff
 
-# 1. A read-only GitHub token, so the server can download from the private repo.
+# 1. A read-only GitHub token so the server can download from the private repo.
 if [ ! -s /root/.dawnshift-token ]; then
   read -rsp "Paste your GitHub token (starts with github_pat_): " T
   echo
@@ -16,122 +20,139 @@ if [ ! -s /root/.dawnshift-token ]; then
   chmod 600 /root/.dawnshift-token
 fi
 
-# 2. Node.js for the account server, and a user for it to run as.
-apt-get install -y -qq unzip curl >/dev/null
-if ! command -v node >/dev/null || [ "$(node -p 'parseInt(process.versions.node)')" -lt 18 ]; then
+# 2. Node.js 20+ and a dedicated user for the service.
+apt-get install -y -qq curl ca-certificates tar >/dev/null
+if ! command -v node >/dev/null || [ "$(node -p 'parseInt(process.versions.node)')" -lt 20 ]; then
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >/dev/null
   apt-get install -y -qq nodejs >/dev/null
 fi
-id dawnshift >/dev/null 2>&1 || useradd --system --home-dir /var/lib/dawnshift-sync --shell /usr/sbin/nologin dawnshift
-mkdir -p /opt/dawnshift-sync /var/lib/dawnshift-sync
-chown dawnshift: /var/lib/dawnshift-sync
-chmod 700 /var/lib/dawnshift-sync
+id dawnshift >/dev/null 2>&1 || useradd --system --home-dir "$DATA_DIR" --shell /usr/sbin/nologin dawnshift
+mkdir -p "$APP_DIR" "$DATA_DIR"
+chown dawnshift: "$DATA_DIR"
+chmod 700 "$DATA_DIR"
 
-# 3. The dawnshift-update command, then the first download.
-cat > /usr/local/bin/dawnshift-update <<'EOF'
+# 3. One-shot migration from the old /var/lib/dawnshift-sync layout. Keeps
+#    accounts.json (users can still log in); the per-user blobs don't carry
+#    over because the new storage shape is different.
+if [ -d /var/lib/dawnshift-sync ] && [ ! -f "$DATA_DIR/accounts.json" ]; then
+  cp /var/lib/dawnshift-sync/accounts.json "$DATA_DIR/accounts.json" 2>/dev/null || true
+  chown dawnshift: "$DATA_DIR/accounts.json" 2>/dev/null || true
+fi
+
+# 4. The dawnshift-update command, then the first fetch.
+cat > /usr/local/bin/dawnshift-update <<EOF
 #!/bin/sh
-# Downloads the latest Dawnshift (web app and account server) from GitHub.
+# Downloads the latest Dawnshift from GitHub and installs it under $APP_DIR.
 set -e
-TOKEN=$(cat /root/.dawnshift-token)
-get() {
-  curl -fsSL -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github.raw" \
-    "https://api.github.com/repos/OliverZS2005/ClaudeCodeIsTuff/contents/dawnshift/release/$1?ref=claude/ai-grok-bot-x5v1dx" \
-    -o "/tmp/$1"
-}
-get dawnshift-web.zip
-get dawnshift-sync.zip
-mkdir -p /var/www/dawnshift /opt/dawnshift-sync
-unzip -oq /tmp/dawnshift-web.zip -d /var/www/dawnshift
-unzip -oq /tmp/dawnshift-sync.zip -d /opt/dawnshift-sync
-rm -f /tmp/dawnshift-web.zip /tmp/dawnshift-sync.zip
-if [ -f /etc/systemd/system/dawnshift-sync.service ]; then systemctl restart dawnshift-sync; fi
+TOKEN=\$(cat /root/.dawnshift-token)
+tmp=\$(mktemp -d)
+trap "rm -rf \$tmp" EXIT
+curl -fsSL -H "Authorization: Bearer \$TOKEN" -H "Accept: application/vnd.github+json" \\
+  "https://api.github.com/repos/$REPO/tarball/$BRANCH" -o "\$tmp/src.tgz"
+mkdir -p "\$tmp/src"
+tar -xzf "\$tmp/src.tgz" -C "\$tmp/src"
+inner=\$(ls "\$tmp/src" | head -1)
+rm -rf "$APP_DIR.new"
+mkdir -p "$APP_DIR.new"
+cp -a "\$tmp/src/\$inner/dawnshift/." "$APP_DIR.new/"
+cd "$APP_DIR.new"
+npm ci --omit=dev --no-audit --no-fund >/dev/null
+rm -rf "$APP_DIR.old"
+[ -d "$APP_DIR" ] && mv "$APP_DIR" "$APP_DIR.old"
+mv "$APP_DIR.new" "$APP_DIR"
+rm -rf "$APP_DIR.old"
+if [ -f /etc/systemd/system/dawnshift.service ]; then systemctl restart dawnshift; fi
 echo "Dawnshift is up to date."
 EOF
 chmod +x /usr/local/bin/dawnshift-update
 if ! dawnshift-update; then
   rm -f /root/.dawnshift-token
-  echo "Download failed. Check that the token has Contents: Read-only access to ClaudeCodeIsTuff, then run this again."
+  echo "Download failed. Check the token has Contents: Read-only access to $REPO, then run this again."
   exit 1
 fi
 
-# 4. Run the account server in the background, restarting it if it stops.
-cat > /etc/systemd/system/dawnshift-sync.service <<EOF
+# 5. systemd service. The server also serves static files from public/, so
+#    nothing else has to.
+cat > /etc/systemd/system/dawnshift.service <<EOF
 [Unit]
-Description=Dawnshift account and sync server
+Description=Dawnshift (hosted app)
 After=network.target
 
 [Service]
 User=dawnshift
-Environment=PORT=$SYNC_PORT HOST=127.0.0.1 DATA_DIR=/var/lib/dawnshift-sync
-ExecStart=$(command -v node) /opt/dawnshift-sync/server.js
+WorkingDirectory=$APP_DIR
+Environment=PORT=$PORT HOST=127.0.0.1 DATA_DIR=$DATA_DIR STATIC_DIR=$APP_DIR/public NODE_ENV=production
+ExecStart=$(command -v node) $APP_DIR/sync-server/server.js
 Restart=on-failure
 NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=$DATA_DIR
 
 [Install]
 WantedBy=multi-user.target
 EOF
+# Retire the old service if it's around.
+if [ -f /etc/systemd/system/dawnshift-sync.service ]; then
+  systemctl disable --now dawnshift-sync >/dev/null 2>&1 || true
+  rm -f /etc/systemd/system/dawnshift-sync.service
+fi
 systemctl daemon-reload
-systemctl enable dawnshift-sync >/dev/null 2>&1
-systemctl restart dawnshift-sync
+systemctl enable dawnshift >/dev/null 2>&1
+systemctl restart dawnshift
 
-# 5. Nginx: the app's files, and /api/ passed on to the account server.
+# 6. Nginx: proxy everything to the server. No more /var/www/dawnshift split.
 mkdir -p /etc/nginx/snippets
-cat > /etc/nginx/snippets/dawnshift-api.conf <<EOF
-# The app's files don't change name between versions, so browsers must
-# always check for a newer copy.
-add_header Cache-Control "no-cache" always;
+cat > /etc/nginx/snippets/dawnshift-app.conf <<EOF
+# Dawnshift serves both the page and the API, so hand everything to the app.
+client_max_body_size 10m;
+proxy_http_version 1.1;
+proxy_set_header Host \$host;
+proxy_set_header X-Real-IP \$remote_addr;
+proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto \$scheme;
+# AI calls can take a while.
+proxy_read_timeout 600s;
+proxy_send_timeout 600s;
 
-location /api/ {
-    proxy_pass http://127.0.0.1:$SYNC_PORT;
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-    client_max_body_size 10m;
+location / {
+    proxy_pass http://127.0.0.1:$PORT;
 }
 EOF
 
-SITE="/etc/nginx/sites-available/$DOMAIN"
-# Only listen on IPv6 if this machine has it, or Nginx refuses the config.
+SITE=/etc/nginx/sites-available/$DOMAIN
 LISTEN6=""
 [ -e /proc/net/if_inet6 ] && LISTEN6="listen [::]:80;"
-if [ -f "$SITE" ]; then cp "$SITE" "$SITE.bak"; fi
+[ -f "$SITE" ] && cp "$SITE" "$SITE.bak"
 if ! grep -qs "managed by Certbot" "$SITE"; then
 cat > "$SITE" <<EOF
 server {
     listen 80;
     $LISTEN6
     server_name $DOMAIN;
-    root /var/www/dawnshift;
-    index index.html;
-    include snippets/dawnshift-api.conf;
-
-    location / {
-        try_files \$uri \$uri/ =404;
-    }
-
-    # Lets phones recognize Dawnshift as an installable app.
-    location = /manifest.webmanifest {
-        default_type application/manifest+json;
-    }
-
-    # Always check for a newer version of the app.
-    location = /sw.js {
-        add_header Cache-Control "no-cache";
-    }
+    include snippets/dawnshift-app.conf;
 }
 EOF
-elif ! grep -q "dawnshift-api.conf" "$SITE"; then
-  # Certbot already added HTTPS to this site: just add the /api/ part.
-  sed -i 's|^\(\s*\)root /var/www/dawnshift;|&\n\1include snippets/dawnshift-api.conf;|' "$SITE"
+else
+  # Replace the legacy split (root /var/www/dawnshift + /api/ proxy) with one
+  # include that hands every path to the app.
+  if grep -q "dawnshift-api.conf" "$SITE"; then
+    sed -i '/root \/var\/www\/dawnshift/d; /index index.html/d; /include snippets\/dawnshift-api.conf/d; /location \/ {/,/}/d; /location = \/manifest.webmanifest/,/}/d; /location = \/sw.js/,/}/d' "$SITE"
+  fi
+  if ! grep -q "dawnshift-app.conf" "$SITE"; then
+    sed -i "s|server_name $DOMAIN;|&\n    include snippets/dawnshift-app.conf;|" "$SITE"
+  fi
 fi
 ln -sf "$SITE" "/etc/nginx/sites-enabled/$DOMAIN"
 if ! nginx -t; then
-  if [ -f "$SITE.bak" ]; then mv "$SITE.bak" "$SITE"; else rm -f "/etc/nginx/sites-enabled/$DOMAIN"; fi
+  [ -f "$SITE.bak" ] && mv "$SITE.bak" "$SITE" || rm -f "/etc/nginx/sites-enabled/$DOMAIN"
   echo "Nginx didn't accept the change, so it was undone. Your other sites are untouched."
   exit 1
 fi
 rm -f "$SITE.bak"
 systemctl reload nginx
 
-# 6. HTTPS.
+# 7. HTTPS.
 if certbot --nginx -d "$DOMAIN" --redirect --non-interactive; then
   echo
   echo "All done! Open https://$DOMAIN"
