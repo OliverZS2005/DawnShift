@@ -1,8 +1,0 @@
-{
-  "name": "dawnshift-sync",
-  "private": true,
-  "type": "module",
-  "description": "Accounts and end-to-end encrypted sync for the Dawnshift web version.",
-  "scripts": { "start": "node server.js" },
-  "engines": { "node": ">=18" }
-}

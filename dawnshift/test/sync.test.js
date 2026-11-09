@@ -88,7 +88,9 @@ test('sameData ignores the order of items', () => {
 
 async function startServer() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dawnshift-sync-'));
-  const handle = createHandler(await openDb(dir));
+  const store = await openDb(dir);
+  const users = (await import('../sync-server/server.js')).createUsers(store);
+  const handle = createHandler(store, users);
   const server = http.createServer(async (req, res) => {
     if (!(await handle(req, res))) res.writeHead(404).end();
   });
@@ -100,17 +102,17 @@ async function startServer() {
       headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
       body: body ? JSON.stringify(body) : undefined,
     });
-    return { status: res.status, body: await res.json() };
+    return { status: res.status, body: await res.json().catch(() => ({})) };
   };
-  return { call, base, dir, close: () => server.close() };
+  return { call, base, dir, close: () => (users.stopAll(), server.close()) };
 }
 
 test('the Android app may call the API, other websites may not', async () => {
   const s = await startServer();
   try {
-    const preflight = (origin) => fetch(`${s.base}/api/sync`, {
+    const preflight = (origin) => fetch(`${s.base}/api/account/login`, {
       method: 'OPTIONS',
-      headers: { origin, 'access-control-request-method': 'PUT', 'access-control-request-headers': 'authorization, content-type' },
+      headers: { origin, 'access-control-request-method': 'POST', 'access-control-request-headers': 'authorization, content-type' },
     });
     const app = await preflight('https://localhost');
     assert.equal(app.status, 204);
@@ -128,32 +130,28 @@ test('the Android app may call the API, other websites may not', async () => {
   }
 });
 
-const account = (name, auth = 'YXV0aA==') => ({
-  username: name, auth, salt: 'c2FsdA==', wrappedKey: 'a2V5',
-  recoverySalt: 'cnNhbHQ=', recoveryAuth: 'cmF1dGg=', recoveryWrappedKey: 'cmtleQ==',
-});
+const signup = (name, password = 'a long enough password') => ({ username: name, password });
 
 test('sign up, log in, and wrong passwords', async () => {
   const s = await startServer();
   try {
-    assert.equal((await s.call('POST', '/api/account/register', account('Oliver'))).status, 200);
-    assert.equal((await s.call('POST', '/api/account/register', account('oliver'))).status, 409, 'usernames are case-insensitive');
-    assert.equal((await s.call('POST', '/api/account/register', account('x'))).status, 400);
+    const first = await s.call('POST', '/api/account/signup', signup('Oliver'));
+    assert.equal(first.status, 200);
+    assert.ok(first.body.token);
+    assert.match(first.body.recoveryCode, /^[A-Z0-9]{4}(-[A-Z0-9]{4}){5}$/);
+    assert.equal((await s.call('POST', '/api/account/signup', signup('oliver'))).status, 409, 'usernames are case-insensitive');
+    assert.equal((await s.call('POST', '/api/account/signup', signup('x'))).status, 400, 'short usernames rejected');
+    assert.equal((await s.call('POST', '/api/account/signup', { username: 'short', password: 'short' })).status, 400, 'short passwords rejected');
 
-    const pre = await s.call('GET', '/api/account/prelogin?username=oliver');
-    assert.equal(pre.body.salt, 'c2FsdA==');
-    const ghost1 = await s.call('GET', '/api/account/prelogin?username=nobody');
-    const ghost2 = await s.call('GET', '/api/account/prelogin?username=nobody');
-    assert.equal(ghost1.body.salt, ghost2.body.salt, "unknown names get a steady made-up salt, so they can't be told apart");
-
-    const ok = await s.call('POST', '/api/account/login', { username: 'oliver', auth: 'YXV0aA==' });
+    const ok = await s.call('POST', '/api/account/login', { username: 'oliver', password: 'a long enough password' });
     assert.equal(ok.status, 200);
-    assert.equal(ok.body.wrappedKey, 'a2V5');
-    assert.equal((await s.call('POST', '/api/account/login', { username: 'oliver', auth: 'd3Jvbmc=' })).status, 401);
-    assert.equal((await s.call('GET', '/api/sync', null, 'not-a-token')).status, 401);
+    assert.ok(ok.body.token);
+    assert.equal((await s.call('POST', '/api/account/login', { username: 'oliver', password: 'nope' })).status, 401);
+    assert.equal((await s.call('GET', '/api/state', null, 'not-a-token')).status, 401);
+    assert.equal((await s.call('GET', '/api/state', null, ok.body.token)).status, 200);
 
     const stored = fs.readFileSync(path.join(s.dir, 'accounts.json'), 'utf8');
-    assert.ok(!stored.includes('YXV0aA=='), 'the login proof is only stored hashed');
+    assert.ok(!stored.includes('a long enough password'), 'the password is only stored hashed');
   } finally {
     s.close();
   }
@@ -162,26 +160,24 @@ test('sign up, log in, and wrong passwords', async () => {
 test('too many wrong passwords are slowed down', async () => {
   const s = await startServer();
   try {
-    await s.call('POST', '/api/account/register', account('target'));
-    for (let i = 0; i < 10; i++) await s.call('POST', '/api/account/login', { username: 'target', auth: 'd3Jvbmc=' });
-    const res = await s.call('POST', '/api/account/login', { username: 'target', auth: 'YXV0aA==' });
+    await s.call('POST', '/api/account/signup', signup('target'));
+    for (let i = 0; i < 10; i++) await s.call('POST', '/api/account/login', { username: 'target', password: 'nope' });
+    const res = await s.call('POST', '/api/account/login', { username: 'target', password: 'a long enough password' });
     assert.equal(res.status, 429);
   } finally {
     s.close();
   }
 });
 
-test("devices can't overwrite each other's saves", async () => {
+test("each user's team is private to them", async () => {
   const s = await startServer();
   try {
-    const { body } = await s.call('POST', '/api/account/register', account('sam'));
-    const t = body.token;
-    assert.deepEqual((await s.call('GET', '/api/sync', null, t)).body.version, 0);
-    assert.equal((await s.call('PUT', '/api/sync', { baseVersion: 0, blob: 'djE=' }, t)).body.version, 1);
-    const stale = await s.call('PUT', '/api/sync', { baseVersion: 0, blob: 'djI=' }, t);
-    assert.equal(stale.status, 409);
-    assert.equal(stale.body.blob, 'djE=', 'the conflict answer includes the newer data to merge with');
-    assert.equal((await s.call('PUT', '/api/sync', { baseVersion: 1, blob: 'djI=' }, t)).body.version, 2);
+    const a = (await s.call('POST', '/api/account/signup', signup('alice'))).body.token;
+    const b = (await s.call('POST', '/api/account/signup', signup('bob'))).body.token;
+    const conn = await s.call('POST', '/api/connections', { preset: 'groq', name: 'A keys', apiKey: 'gsk_secret', model: 'llama-3.3-70b-versatile' }, a);
+    assert.equal(conn.status, 200);
+    assert.equal((await s.call('GET', '/api/state', null, a)).body.connections.length, 1);
+    assert.equal((await s.call('GET', '/api/state', null, b)).body.connections.length, 0, "bob can't see alice's connection");
   } finally {
     s.close();
   }
@@ -190,67 +186,28 @@ test("devices can't overwrite each other's saves", async () => {
 test('recovery login, password change and account deletion', async () => {
   const s = await startServer();
   try {
-    const first = (await s.call('POST', '/api/account/register', account('kim'))).body.token;
-    const rec = await s.call('POST', '/api/account/login-recovery', { username: 'kim', recoveryAuth: 'cmF1dGg=' });
-    assert.equal(rec.body.recoveryWrappedKey, 'cmtleQ==');
-    const changed = await s.call('POST', '/api/account/password', { salt: 'bmV3', auth: 'bmV3YXV0aA==', wrappedKey: 'bmV3a2V5' }, rec.body.token);
-    assert.equal(changed.status, 200, 'a recovery login can set a new password without the old one');
-    assert.equal((await s.call('GET', '/api/sync', null, first)).status, 401, 'other devices are logged out');
-    assert.equal((await s.call('POST', '/api/account/login', { username: 'kim', auth: 'YXV0aA==' })).status, 401);
-    const fresh = await s.call('POST', '/api/account/login', { username: 'kim', auth: 'bmV3YXV0aA==' });
-    assert.equal(fresh.status, 200);
+    const { body: { token: first, recoveryCode } } = await s.call('POST', '/api/account/signup', signup('kim'));
 
-    const noPw = await s.call('POST', '/api/account/password', { salt: 'eA==', auth: 'eA==', wrappedKey: 'eA==' }, fresh.body.token);
-    assert.equal(noPw.status, 401, 'a normal login needs the current password to change it');
+    const recovered = await s.call('POST', '/api/account/recover', { username: 'kim', recoveryCode, newPassword: 'another long password' });
+    assert.equal(recovered.status, 200, 'recovery code sets a new password');
+    assert.equal((await s.call('GET', '/api/state', null, first)).status, 401, 'other sessions are logged out');
+    assert.equal((await s.call('POST', '/api/account/login', { username: 'kim', password: 'a long enough password' })).status, 401, "old password doesn't work");
+    assert.equal((await s.call('POST', '/api/account/login', { username: 'kim', password: 'another long password' })).status, 200);
 
-    await s.call('PUT', '/api/sync', { baseVersion: 0, blob: 'ZGF0YQ==' }, fresh.body.token);
-    assert.equal((await s.call('POST', '/api/account/delete', { auth: 'bmV3YXV0aA==' }, fresh.body.token)).status, 200);
-    assert.equal((await s.call('POST', '/api/account/login', { username: 'kim', auth: 'bmV3YXV0aA==' })).status, 401);
-    assert.equal(fs.readdirSync(path.join(s.dir, 'blobs')).length, 0, 'the synced data is gone too');
+    const session = recovered.body.token;
+    const changed = await s.call('POST', '/api/account/password', { currentPassword: 'another long password', newPassword: 'third password here' }, session);
+    assert.equal(changed.status, 200);
+    const stale = await s.call('POST', '/api/account/password', { currentPassword: 'nope', newPassword: 'whatever' }, session);
+    assert.equal(stale.status, 401, 'need the real current password');
+
+    const fresh = (await s.call('POST', '/api/account/login', { username: 'kim', password: 'third password here' })).body.token;
+    await s.call('POST', '/api/connections', { preset: 'groq', name: 'Keys', apiKey: 'gsk_xyz', model: 'llama-3.3-70b-versatile' }, fresh);
+
+    assert.equal((await s.call('POST', '/api/account/delete', { password: 'third password here' }, fresh)).status, 200);
+    assert.equal((await s.call('POST', '/api/account/login', { username: 'kim', password: 'third password here' })).status, 401);
+    assert.equal(fs.existsSync(path.join(s.dir, 'users', (await openDb(s.dir)).db.users.kim?.id ?? 'none')), false, "deleting removes the user's data");
   } finally {
     s.close();
   }
 });
 
-test('the computer version syncs through an account, and stays logged in', async () => {
-  const s = await startServer();
-  const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'dawnshift-computer-'));
-  const [dirA, dirB] = [tmp(), tmp()];
-  const runner = { isRunning: () => false };
-  try {
-    const storeA = createStore(dirA);
-    const a = createSync({ store: storeA, runner, server: s.base });
-    await a.start();
-    assert.ok(a.getStatus().available, 'finds the account server');
-    storeA.state.bots.push({ id: 'bot_1', name: 'Researcher', updatedAt: new Date().toISOString() });
-    storeA.save();
-    await storeA.files.write('notes/hi.md', 'hello from computer A');
-    await a.signup('oliver', 'correct horse battery');
-    assert.equal(a.getStatus().state, 'synced', JSON.stringify(a.getStatus()));
-
-    const storeB = createStore(dirB);
-    const b = createSync({ store: storeB, runner, server: s.base });
-    await b.start();
-    await b.login('oliver', 'correct horse battery');
-    assert.equal(storeB.state.bots[0]?.name, 'Researcher', "computer A's bot arrived");
-    assert.equal(await storeB.files.read('notes/hi.md'), 'hello from computer A', 'and its file');
-    const saved = JSON.parse(fs.readFileSync(path.join(dirB, 'session.json'), 'utf8'));
-    assert.equal(saved.username, 'oliver');
-    assert.equal(fs.statSync(path.join(dirB, 'session.json')).mode & 0o077, 0, 'only this user can read the login');
-
-    // After a restart, computer B is still logged in and can sync.
-    const again = createSync({ store: createStore(dirB), runner, server: s.base });
-    await again.start();
-    assert.ok(again.getStatus().loggedIn);
-    // It syncs by itself on start; wait for that to finish.
-    for (let i = 0; i < 100 && again.getStatus().state !== 'synced'; i++) await new Promise((r) => setTimeout(r, 50));
-    assert.equal(again.getStatus().state, 'synced', JSON.stringify(again.getStatus()));
-
-    await again.logout();
-    assert.ok(!fs.existsSync(path.join(dirB, 'session.json')), 'logging out forgets the login');
-    const cleared = JSON.parse(fs.readFileSync(path.join(dirB, 'state.json'), 'utf8'));
-    assert.equal(cleared.bots.length, 0, 'and removes the data from this computer');
-  } finally {
-    s.close();
-  }
-});

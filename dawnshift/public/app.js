@@ -28,29 +28,32 @@ function fill(el, ...children) {
   el.replaceChildren(...children.flat(Infinity).filter((c) => c != null && c !== false));
 }
 
-// The web version runs Dawnshift's engine inside this page and hands us its API
-// directly (see web/main.js). Otherwise we talk to the local server.
-const local = globalThis.dawnshiftLocal;
-// The Android app (Capacitor) runs the web version inside an app.
-const inApp = Boolean(globalThis.Capacitor?.isNativePlatform?.());
-// Where this copy of Dawnshift keeps its data, for the interface's wording.
-const savedWhere = inApp ? 'in this app on this device' : local ? 'in this browser on this device' : 'on this computer';
+// Dawnshift is a hosted app. The server holds every account's team, bots and
+// files; this page is a thin client that signs in with a token and talks to
+// the server through HTTP.
+let token = (() => { try { return localStorage.getItem('dawnshift-token'); } catch { return null; } })();
+
+function setToken(t) {
+  token = t;
+  try { t ? localStorage.setItem('dawnshift-token', t) : localStorage.removeItem('dawnshift-token'); } catch {}
+}
 
 async function api(method, url, body) {
-  if (local) {
-    try {
-      // A copy, so the interface never holds the engine's live objects.
-      return JSON.parse(JSON.stringify(await local(method, url, body ?? {})));
-    } catch (err) {
-      throw new Error(err.message);
-    }
-  }
   const res = await fetch(url, {
     method,
-    headers: body === undefined ? {} : { 'content-type': 'application/json' },
+    headers: {
+      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && token && !url.startsWith('/api/account/')) {
+    // Token expired or revoked: start fresh.
+    setToken(null);
+    location.reload();
+    throw new Error('Please log in again.');
+  }
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
 }
@@ -217,12 +220,12 @@ function renderWelcome() {
   const hasConn = S.connections.length > 0;
   const page = document.getElementById('welcome');
   fill(page, 
-    h('h1', {}, local ? 'Your AI team, wherever you are' : 'Your AI team, on your computer'),
+    h('h1', {}, 'Your AI team, wherever you are'),
     h('p', { class: 'lede' },
       'Dawnshift gives you a team of AI coworkers. Each one has a job, remembers what it learns, and can hand work to the others. ',
       'You choose which AI powers each bot: Claude, ChatGPT, Grok, Gemini, or a model running on your own machine.'),
     iosInstallHint(),
-    h('p', { class: 'hint' }, `Everything, including your keys, is saved ${savedWhere}. Sign up to sync it to your other devices, encrypted. Bots work while Dawnshift is open.`),
+    h('p', { class: 'hint' }, `Your team lives on your Dawnshift account, so it follows you to every device you log in on. Bots keep running on the server even when you're offline.`),
     h('ol', { class: 'steps' },
       h('li', { class: hasConn ? 'done' : '' },
         h('div', {},
@@ -247,12 +250,6 @@ function renderWelcome() {
             }, 'Hire the starter team'),
             h('button', { disabled: !hasConn, onclick: () => editBot() }, 'Hire one bot')))),
     ),
-    sync && !syncStatus.loggedIn
-      ? h('div', { class: 'row welcome-account' },
-          h('span', { class: 'hint' }, 'Use Dawnshift on several devices?'),
-          h('button', { onclick: () => openAccount('signup') }, 'Sign up'),
-          h('button', { onclick: () => openAccount('login') }, 'Log in'))
-      : null,
     h('p', { class: 'legal-links' }, 'By using Dawnshift you agree to the ', h('a', { href: 'terms.html' }, 'Terms of Service'),
       ' and ', h('a', { href: 'privacy.html' }, 'Privacy Policy'), '.'),
   );
@@ -265,7 +262,7 @@ const isIos = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platfor
 const isInstalled = () => navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
 
 function iosInstallHint() {
-  if (!local || !isIos || isInstalled()) return null;
+  if (!isIos || isInstalled()) return null;
   try {
     if (localStorage.getItem('dawnshift-hide-ios-hint')) return null;
   } catch {
@@ -318,7 +315,7 @@ function setupGuide(presetKey, open) {
     h('div', { class: 'guide-body' },
       h('ol', {}, g.steps.map((step) => h('li', {}, step.map(guidePiece)))),
       g.note ? h('p', { class: 'hint' }, g.note) : null,
-      g.webNote && local ? h('p', { class: 'hint' }, g.webNote) : null));
+      g.webNote ? h('p', { class: 'hint' }, g.webNote) : null));
 }
 
 // ---------- team view ----------
@@ -753,7 +750,7 @@ function editConnection(conn) {
   h('div', { class: 'field' },
     h('label', { for: 'c-key' }, 'API key'),
     f.key,
-    preset.keyUrl ? h('div', { class: 'hint' }, 'Get one at ', h('a', { href: preset.keyUrl, target: '_blank', rel: 'noopener' }, new URL(preset.keyUrl).host), preset.env && !local ? `, or set ${preset.env} before starting Dawnshift.` : '.') : null,
+    preset.keyUrl ? h('div', { class: 'hint' }, 'Get one at ', h('a', { href: preset.keyUrl, target: '_blank', rel: 'noopener' }, new URL(preset.keyUrl).host), '.') : null,
     conn.keyFromEnv ? h('div', { class: 'hint' }, `Using the key from ${preset.env}.`) : null),
   preset.kind === 'openai'
     ? h('div', { class: 'field' }, h('label', { for: 'c-base' }, 'Server address'), f.base,
@@ -887,7 +884,7 @@ function mountSettings(main) {
   const add = h('button', { type: 'submit' }, 'Add key');
   main.append(h('div', { class: 'page' },
     h('h1', {}, 'Settings'),
-    h('p', { class: 'lede' }, `Everything is stored ${savedWhere}. Keys are only sent to the service they belong to, and, if you have an account, encrypted to your other devices.`),
+    h('p', { class: 'lede' }, 'Your team, API keys and files live on your Dawnshift account, so they follow you to every device. Keys are only ever sent to the AI service they belong to.'),
     h('section', { class: 'block' },
       h('h2', {}, 'AI connections'),
       h('p', { class: 'hint' }, 'Add as many as you like. Each bot picks one in its settings.'),
@@ -952,43 +949,65 @@ function renderSettings() {
       : [h('p', { class: 'hint' }, 'No app keys yet.')]));
 }
 
-// ---------- account (syncing through an account server) ----------
+// ---------- account (hosted) ----------
 
-// On a computer (the desktop app or npm start), syncing runs in Dawnshift's
-// own server; this offers the same functions as src/sync.js by asking it.
+// Talks to /api/account/*. One account powers every device the user logs in
+// on. The server holds everything; this page just carries a login token.
 function serverSync() {
   const listeners = new Set();
-  let status = { available: false, loggedIn: false };
-  let last = '';
-  const emit = (st) => {
-    const json = JSON.stringify(st);
-    if (json === last) return;
-    last = json;
-    status = st;
-    for (const fn of listeners) fn({ ...st });
+  const status = { available: true, checked: true, loggedIn: Boolean(token), username: '', state: token ? 'synced' : 'idle', message: '', lastSynced: null };
+  const emit = () => { for (const fn of listeners) fn({ ...status }); };
+  const set = (patch) => { Object.assign(status, patch); emit(); };
+
+  const after = (data) => {
+    setToken(data.token);
+    set({ loggedIn: true, username: data.username, state: 'synced', lastSynced: new Date().toISOString() });
+    return data;
   };
-  const poll = () => api('GET', '/api/account').then(emit, () => {});
-  const call = async (action, ...args) => {
-    const { result, status: st } = await api('POST', `/api/account/${action}`, { args });
-    emit(st);
-    return result;
-  };
-  poll();
-  setInterval(poll, 3000);
+
+  // Verify the saved token on load, so a revoked session doesn't look alive.
+  if (token) {
+    api('GET', '/api/account').then(
+      ({ username }) => set({ loggedIn: true, username }),
+      () => { setToken(null); set({ loggedIn: false, username: '', state: 'idle' }); },
+    );
+  }
+
   return {
-    onStatus(fn) {
-      listeners.add(fn);
-      fn({ ...status });
-      return () => listeners.delete(fn);
+    onStatus(fn) { listeners.add(fn); fn({ ...status }); return () => listeners.delete(fn); },
+    getStatus: () => ({ ...status }),
+    checkAvailable: async () => true,
+    syncNow: async () => refresh(true),
+
+    async signup(username, password) {
+      const data = await api('POST', '/api/account/signup', { username, password });
+      after(data);
+      return data.recoveryCode;
     },
-    ...Object.fromEntries(['signup', 'login', 'recover', 'changePassword', 'logout', 'deleteAccount', 'checkAvailable', 'syncNow']
-      .map((action) => [action, (...args) => call(action, ...args)])),
+    async login(username, password) {
+      after(await api('POST', '/api/account/login', { username, password }));
+    },
+    async recover(username, recoveryCode, newPassword) {
+      after(await api('POST', '/api/account/recover', { username, recoveryCode, newPassword }));
+    },
+    async changePassword(currentPassword, newPassword) {
+      await api('POST', '/api/account/password', { currentPassword, newPassword });
+    },
+    async logout() {
+      try { await api('POST', '/api/account/logout'); } catch {}
+      setToken(null);
+      location.reload();
+    },
+    async deleteAccount(password) {
+      await api('POST', '/api/account/delete', { password });
+      setToken(null);
+      location.reload();
+    },
   };
 }
 
-// The web version and the Android app run syncing in the page (web/setup.js).
-const sync = globalThis.dawnshiftSync ?? (local ? null : serverSync());
-let syncStatus = { available: false, loggedIn: false };
+const sync = serverSync();
+let syncStatus = sync.getStatus();
 
 function syncLabel(st) {
   if (st.state === 'syncing') return 'Syncing…';
@@ -1029,21 +1048,12 @@ function mountAccount(main) {
 }
 
 function accountUnavailable() {
-  if (!sync) {
-    return [h('h1', {}, 'Accounts'), h('p', { class: 'lede' }, 'Accounts are part of the web version of Dawnshift. This downloadable version keeps everything on this computer.')];
-  }
-  if (!syncStatus.checked) return [h('h1', {}, 'Accounts'), h('p', { class: 'lede' }, 'Checking the account server…')];
+  // In the hosted model /api/account always answers. If we land here it means
+  // the request failed, so send the user back through a browser reload.
   return [
-    h('h1', {}, "Accounts aren't available right now"),
-    h('p', { class: 'lede' }, `Dawnshift's account server isn't answering, so logging in and signing up don't work right now. Everything you do is still saved ${savedWhere}.`),
-    syncStatus.off
-      ? h('p', { class: 'hint' }, 'Accounts are turned off here (DAWNSHIFT_SYNC_SERVER=off).')
-      : local && !inApp
-        ? h('p', { class: 'hint' }, 'Running this site yourself? Check that the dawnshift-sync service is running and that /api/ is passed to it (see "Accounts and sync" in the README).')
-        : h('p', { class: 'hint' }, 'Check your internet connection, or try again in a little while.'),
-    h('button', { onclick: (e) => attempt(async () => {
-      if (!(await sync.checkAvailable())) toast('Still no answer from the account server.', true);
-    }, e.currentTarget) }, 'Try again'),
+    h('h1', {}, 'Accounts aren\'t reachable right now'),
+    h('p', { class: 'lede' }, 'Dawnshift\'s server isn\'t answering. Check your internet connection and try again.'),
+    h('button', { onclick: () => location.reload() }, 'Try again'),
   ];
 }
 
@@ -1258,4 +1268,27 @@ document.getElementById('needs-you').addEventListener('click', () => {
 });
 
 mountAccountButton();
-refresh(true).catch((err) => toast(err.message, true)).finally(() => setTimeout(poll, 1500));
+
+// Boot: if not logged in, show the account screen. Once logged in (now or
+// after signup/login), fetch state and start polling.
+let polling = false;
+async function boot() {
+  if (!syncStatus.loggedIn) {
+    // Stub so render() can mount the account view before /api/state is loaded.
+    S ??= { version: 0, connections: [], bots: [], tasks: [], board: [], secretNames: [], presets: {}, workspacePath: '' };
+    ui.view = 'account';
+    render();
+    return;
+  }
+  try { await refresh(true); } catch (err) { toast(err.message, true); }
+  if (polling) return;
+  polling = true;
+  setTimeout(poll, 1500);
+}
+
+sync.onStatus((st) => {
+  syncStatus = st;
+  if (st.loggedIn && !polling) boot();
+});
+
+boot();

@@ -14,11 +14,11 @@
   "main": "desktop/main.js",
   "scripts": {
     "start": "node server.js",
+    "server": "node sync-server/server.js",
     "test": "node --test",
     "notices": "node scripts/notices.mjs",
     "package": "node scripts/package.mjs",
     "build:web": "node scripts/build-web.mjs",
-    "build:app": "node scripts/build-web.mjs --app && cap sync android",
     "desktop": "electron .",
     "build:desktop": "electron-builder --publish never"
   },
