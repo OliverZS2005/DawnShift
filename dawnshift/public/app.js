@@ -764,7 +764,7 @@ function editConnection(conn) {
   preset.kind === 'openai'
     ? h('div', { class: 'field' }, h('label', { for: 'c-base' }, 'Server address'), f.base,
         preset.local ? h('div', { class: 'hint' }, conn.preset === 'ollama' ? 'Start Ollama and pull a model that supports tools (for example with "ollama pull" plus the model name).' : 'Start the local server in LM Studio and load a model.') : null,
-        preset.local && local ? localAiSteps(conn.preset) : null)
+        preset.local ? localAiSteps(conn.preset) : null)
     : null,
   h('div', { class: 'field' }, h('label', { for: 'c-model' }, 'Default model'), h('div', { class: 'row' }, h('div', { class: 'grow' }, f.model, f.models), loadModels)),
   h('div', { class: 'dialog-foot' }, h('span'), save));
