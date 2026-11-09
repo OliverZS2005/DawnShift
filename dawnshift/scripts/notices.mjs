@@ -38,6 +38,8 @@ const IN_APPS = new Set(['node_modules/@capacitor/android', 'node_modules/@capac
 
 const packages = Object.entries(lock.packages)
   .filter(([p, info]) => p.startsWith('node_modules/') && (!info.dev || IN_APPS.has(p)))
+  // Keep only what's actually installed.
+  .filter(([p]) => fs.existsSync(path.join(root, p, 'package.json')))
   .map(([p, info]) => {
     const dir = path.join(root, p);
     const meta = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
@@ -53,6 +55,15 @@ const packages = Object.entries(lock.packages)
     return { name: meta.name, version: meta.version, license, repo: repo?.replace(/^git\+/, '').replace(/\.git$/, ''), text };
   })
   .sort((a, b) => a.name.localeCompare(b.name));
+
+// On a server install (--omit=dev) the IN_APPS dirs (Capacitor, Electron) are
+// missing. Regenerating now would strip them from the shipped notices page;
+// the committed file is already correct, so just leave it alone.
+const missingAppDeps = [...IN_APPS].filter((p) => !fs.existsSync(path.join(root, p, 'package.json')));
+if (missingAppDeps.length) {
+  console.log(`Notices: keeping the committed copy (dev deps not installed: ${missingAppDeps.join(', ')}).`);
+  process.exit(0);
+}
 
 const intro = 'Dawnshift is built with the open-source software below. Thank you to everyone who made it. Each package is used under its own license, reproduced in full.';
 
