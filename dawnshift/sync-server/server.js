@@ -28,6 +28,56 @@ const MAX_UPLOAD = 2 * 1024 * 1024;
 // Where the mobile app and desktop app run from, so they can call the API.
 const APP_ORIGINS = new Set(['https://localhost', 'capacitor://localhost']);
 const SESSION_DAYS = 60;
+
+// ---------- app downloads (/api/download/<slug>) ----------
+
+// The GitHub repo the installers live in. Used when proxying download links.
+const RELEASE_REPO = process.env.DAWNSHIFT_RELEASE_REPO || 'OliverZS2005/ClaudeCodeIsTuff';
+const DOWNLOADS = {
+  android: { tag: 'android-latest', match: /\.apk$/ },
+  windows: { tag: 'desktop-latest', match: /-win-x64\.exe$/ },
+  'mac-arm': { tag: 'desktop-latest', match: /-mac-arm64\.dmg$/ },
+  'mac-intel': { tag: 'desktop-latest', match: /-mac-x64\.dmg$/ },
+  'linux-deb': { tag: 'desktop-latest', match: /-linux-amd64\.deb$/ },
+  'linux-appimage': { tag: 'desktop-latest', match: /-linux-x86_64\.AppImage$/ },
+};
+async function githubToken() {
+  if (process.env.DAWNSHIFT_GH_TOKEN) return process.env.DAWNSHIFT_GH_TOKEN.trim();
+  if (process.env.DAWNSHIFT_GH_TOKEN_FILE) {
+    try { return (await fsp.readFile(process.env.DAWNSHIFT_GH_TOKEN_FILE, 'utf8')).trim(); } catch {}
+  }
+  return null;
+}
+
+// Returns a URL the browser can follow to download the installer. With a
+// GitHub token it's a short-lived signed URL (one click, direct download);
+// without one it's the release page (works for a signed-in GitHub user
+// while the repo is private).
+async function resolveDownload(slug) {
+  const spec = DOWNLOADS[slug];
+  if (!spec) return null;
+  const page = `https://github.com/${RELEASE_REPO}/releases/tag/${spec.tag}`;
+  const token = await githubToken();
+  if (!token) return page;
+  try {
+    const relRes = await fetch(`https://api.github.com/repos/${RELEASE_REPO}/releases/tags/${spec.tag}`, {
+      headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json', 'user-agent': 'dawnshift' },
+    });
+    if (!relRes.ok) return page;
+    const rel = await relRes.json();
+    const asset = (rel.assets || []).find((a) => spec.match.test(a.name));
+    if (!asset) return page;
+    const signed = await fetch(asset.url, {
+      headers: { authorization: `Bearer ${token}`, accept: 'application/octet-stream', 'user-agent': 'dawnshift' },
+      redirect: 'manual',
+    });
+    const location = signed.headers.get('location');
+    return location || page;
+  } catch {
+    return page;
+  }
+}
+
 const LOGIN_LIMIT = { tries: 10, windowMs: 15 * 60 * 1000 };
 const USERNAME = /^[a-z0-9][a-z0-9_.-]{2,31}$/;
 // Password: 8 to 256 printable characters (no control chars). HTTPS carries it.
@@ -314,6 +364,19 @@ export function createHandler(store, users) {
       return true;
     }
     if (!url.pathname.startsWith('/api/')) return false;
+
+    // App installer downloads: open to anyone, no login needed.
+    if (req.method === 'GET' && url.pathname.startsWith('/api/download/')) {
+      const location = await resolveDownload(url.pathname.slice('/api/download/'.length));
+      if (!location) {
+        res.writeHead(404, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: "That download doesn't exist." }));
+      } else {
+        res.writeHead(302, { location, 'cache-control': 'no-store' });
+        res.end();
+      }
+      return true;
+    }
 
     const ip = req.headers['cf-connecting-ip'] || req.headers['x-real-ip'] || req.socket.remoteAddress;
     try {

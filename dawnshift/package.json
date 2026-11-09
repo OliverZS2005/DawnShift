@@ -20,7 +20,8 @@
     "package": "node scripts/package.mjs",
     "build:web": "node scripts/build-web.mjs",
     "desktop": "electron .",
-    "build:desktop": "electron-builder --publish never"
+    "build:desktop": "electron-builder --publish never",
+    "build:app": "cap sync android"
   },
   "engines": {
     "node": ">=20"

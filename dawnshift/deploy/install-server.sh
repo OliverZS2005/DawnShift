@@ -31,6 +31,11 @@ mkdir -p "$APP_DIR" "$DATA_DIR"
 chown dawnshift: "$DATA_DIR"
 chmod 700 "$DATA_DIR"
 
+# The service needs read access to the GitHub token so it can proxy app
+# downloads (/api/download/<os> on the site). Mode 640, owned by root with
+# group dawnshift, so root keeps write and the service can only read.
+install -m 640 -o root -g dawnshift /root/.dawnshift-token /etc/dawnshift-token
+
 # 3. One-shot migration from the old /var/lib/dawnshift-sync layout. Keeps
 #    accounts.json (users can still log in); the per-user blobs don't carry
 #    over because the new storage shape is different.
@@ -81,13 +86,14 @@ After=network.target
 [Service]
 User=dawnshift
 WorkingDirectory=$APP_DIR
-Environment=PORT=$PORT HOST=127.0.0.1 DATA_DIR=$DATA_DIR STATIC_DIR=$APP_DIR/public NODE_ENV=production
+Environment=PORT=$PORT HOST=127.0.0.1 DATA_DIR=$DATA_DIR STATIC_DIR=$APP_DIR/public NODE_ENV=production DAWNSHIFT_GH_TOKEN_FILE=/etc/dawnshift-token
 ExecStart=$(command -v node) $APP_DIR/sync-server/server.js
 Restart=on-failure
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=$DATA_DIR
+ReadOnlyPaths=/etc/dawnshift-token
 
 [Install]
 WantedBy=multi-user.target

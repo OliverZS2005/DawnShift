@@ -1,8 +1,9 @@
 {
   "appId": "online.dawnlife.dawnshift",
   "appName": "Dawnshift",
-  "webDir": "app-dist",
+  "webDir": "app-shell",
   "server": {
+    "url": "https://dawnshift.dawnlife.online",
     "androidScheme": "https"
   },
   "android": {

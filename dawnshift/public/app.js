@@ -902,40 +902,49 @@ function detectOs() {
   return 'unknown';
 }
 
-// The Dawnshift app downloads. Private repo for now, so these link to the
-// release page; when the repo goes public they'll download directly.
+// The Dawnshift app downloads. Points at this server's /api/download/<slug>,
+// which looks up the current GitHub release asset and 302s the browser to it,
+// so one click always lands on the newest build.
 const APP_DOWNLOADS = [
-  { os: 'android', label: 'Android (APK)', detail: 'Download and open the APK; allow "install from this source", then tap Install.',
-    page: 'https://github.com/OliverZS2005/DawnShift/releases/tag/android-latest' },
-  { os: 'windows', label: 'Windows (.exe)', detail: 'If SmartScreen warns, click "More info" → "Run anyway".',
-    page: 'https://github.com/OliverZS2005/DawnShift/releases/tag/desktop-latest' },
-  { os: 'mac', label: 'Mac (.dmg)', detail: 'Pick the Apple-chip or Intel .dmg. First launch: right-click → Open.',
-    page: 'https://github.com/OliverZS2005/DawnShift/releases/tag/desktop-latest' },
-  { os: 'linux', label: 'Linux (.deb or .AppImage)', detail: 'Ubuntu, Debian, Mint: the .deb. Everything else: the AppImage.',
-    page: 'https://github.com/OliverZS2005/DawnShift/releases/tag/desktop-latest' },
-  { os: 'ios', label: 'iPhone / iPad', detail: 'No App Store build yet. In Safari, tap Share → Add to Home Screen to install this site as an app.',
-    page: null },
+  { os: 'android', slug: 'android', label: 'Android (APK)',
+    detail: 'Download and open the APK; allow "install from this source", then tap Install.' },
+  { os: 'windows', slug: 'windows', label: 'Windows (.exe)',
+    detail: 'If SmartScreen warns, click "More info" → "Run anyway".' },
+  { os: 'mac', slug: 'mac-arm', altSlug: 'mac-intel', altLabel: 'Mac (Intel)', label: 'Mac (Apple chip)',
+    detail: 'First launch: right-click the app → Open. Intel Mac? Use the alternate below.' },
+  { os: 'linux', slug: 'linux-deb', altSlug: 'linux-appimage', altLabel: 'Linux (.AppImage)', label: 'Linux (.deb)',
+    detail: 'Ubuntu, Debian, Mint, Pop!_OS: the .deb. Everything else: the AppImage below.' },
+  { os: 'ios', slug: null, label: 'iPhone / iPad',
+    detail: 'No App Store build yet. In Safari, tap Share → Add to Home Screen to install this site as an app.' },
 ];
 
 function downloadAppBlock() {
   const you = detectOs();
   const primary = APP_DOWNLOADS.find((d) => d.os === you);
   const others = APP_DOWNLOADS.filter((d) => d.os !== you && d.os !== 'ios');
-  const link = (d, big) => d.page
-    ? h('a', { class: `button${big ? ' primary' : ''}`, href: d.page, target: '_blank', rel: 'noopener' }, big ? `Download Dawnshift for ${d.label}` : d.label)
-    : h('span', { class: 'hint' }, d.detail);
+  const link = (slug, label, big) => h('a', {
+    class: `button${big ? ' primary' : ''}`,
+    href: `/api/download/${slug}`,
+    target: '_blank',
+    rel: 'noopener',
+  }, big ? `Download Dawnshift for ${label}` : label);
   return [
     h('h2', {}, 'Get the Dawnshift app'),
-    h('p', { class: 'hint' }, 'The website updates itself (that banner at the top). The installable app is handy on phones and for a dock icon on a computer; check this page now and then for a newer build.'),
-    primary && primary.page
+    h('p', { class: 'hint' }, 'The website updates itself (that banner at the top). The installable app is handy on phones and for a dock icon on a computer; tap this any time to grab the newest build.'),
+    primary && primary.slug
       ? h('div', {},
-          link(primary, true),
+          link(primary.slug, primary.label, true),
+          primary.altSlug ? h('a', { class: 'button', style: 'margin-left:0.5rem', href: `/api/download/${primary.altSlug}`, target: '_blank', rel: 'noopener' }, primary.altLabel) : null,
           h('p', { class: 'hint', style: 'margin-top:0.5rem' }, primary.detail))
       : primary
         ? h('p', { class: 'hint' }, primary.detail)
         : null,
     h('p', { class: 'hint', style: 'margin-top:1rem' }, 'Other systems:'),
-    h('div', { class: 'row', style: 'flex-wrap:wrap' }, ...others.map((d) => link(d, false))),
+    h('div', { class: 'row', style: 'flex-wrap:wrap' },
+      ...others.flatMap((d) => [
+        link(d.slug, d.label, false),
+        d.altSlug ? link(d.altSlug, d.altLabel, false) : null,
+      ].filter(Boolean))),
   ];
 }
 
