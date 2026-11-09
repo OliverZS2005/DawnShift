@@ -5,7 +5,13 @@ const VERSION = '__VERSION__';
 const ASSETS = __ASSETS__;
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(VERSION).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // The new SW stays in "waiting" until the page asks it to take over, so the
+  // user can decide when to reload (see app.js: "A new version is available").
+  event.waitUntil(caches.open(VERSION).then((cache) => cache.addAll(ASSETS)));
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'skip-waiting') self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
@@ -35,4 +41,15 @@ self.addEventListener('fetch', (event) => {
       })
       .catch(() => caches.match(event.request, { ignoreSearch: true }).then((hit) => hit || caches.match('./'))),
   );
+});
+
+// Clicking a notification brings Dawnshift back to the front, or opens it.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil((async () => {
+    const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const mine = all.find((c) => c.url.startsWith(self.location.origin));
+    if (mine) { await mine.focus(); return; }
+    await self.clients.openWindow('/');
+  })());
 });

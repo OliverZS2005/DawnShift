@@ -1,6 +1,7 @@
 // Dawnshift's web interface. Plain JavaScript, no build step.
 import { createMascot } from './mascot.js';
 import { GUIDES, ORDER, COST_LABEL } from './guides.js';
+import * as notify from './notify.js';
 
 const buddy = createMascot();
 document.body.append(buddy.el);
@@ -141,10 +142,18 @@ function react(before) {
     const was = old.get(t.id);
     if (was === t.status) continue;
     (was ? ui.changedIds : ui.newIds).add(t.id);
-    if (t.status === 'needs_you') buddy.nod(`${t.botName} needs you${t.pending?.kind === 'approval' ? ' to approve something' : ' to answer a question'}.`);
-    else if (t.status === 'done' && !t.parentId) buddy.cheer(`${t.botName} finished "${short(t.title)}"!`);
-    else if (t.status === 'done') buddy.say(`${t.botName} handed back "${short(t.title)}".`);
-    else if (t.status === 'failed') buddy.shake(`${t.botName} ran into a problem with "${short(t.title)}".`);
+    if (t.status === 'needs_you') {
+      const what = t.pending?.kind === 'approval' ? 'to approve something' : 'to answer a question';
+      buddy.nod(`${t.botName} needs you ${what}.`);
+      notify.notify(`${t.botName} needs you`, `${t.title} — ${what}.`, { tag: `task-${t.id}`, onClick: () => openTask(t.id) });
+    } else if (t.status === 'done' && !t.parentId) {
+      buddy.cheer(`${t.botName} finished "${short(t.title)}"!`);
+      notify.notify(`${t.botName} finished`, t.title, { tag: `done-${t.id}`, onClick: () => openTask(t.id) });
+    } else if (t.status === 'done') buddy.say(`${t.botName} handed back "${short(t.title)}".`);
+    else if (t.status === 'failed') {
+      buddy.shake(`${t.botName} ran into a problem with "${short(t.title)}".`);
+      notify.notify(`${t.botName} hit a problem`, t.title, { tag: `fail-${t.id}`, onClick: () => openTask(t.id) });
+    }
     else if (!was && t.from === 'Routine') buddy.nod(`${t.botName} started a routine: ${short(t.title)}.`);
   }
 }
@@ -878,6 +887,30 @@ function mountFiles(main) {
 
 // ---------- settings ----------
 
+// Lets the user turn browser notifications on or off (only shown when the
+// browser can do them at all). Draws its own refresh on every click.
+function notifyBlock() {
+  const wrap = h('div', {});
+  function draw() {
+    const s = notify.state();
+    const turnOn = h('button', { class: 'primary', onclick: async (e) => {
+      const res = await notify.enable();
+      if (res === 'blocked') toast("Your browser is blocking notifications for this site. Allow them in the site's permissions, then try again.", true);
+      else if (res === 'ask') toast('You need to allow notifications when the browser asks.', true);
+      draw();
+    } }, 'Turn on notifications');
+    const turnOff = h('button', { onclick: () => { notify.disable(); draw(); toast('Notifications off.'); } }, 'Turn off');
+    const test = h('button', { onclick: () => notify.notify('Dawnshift', "That's what a notification will look like.", { tag: 'test' }) }, 'Send a test');
+    const body = s === 'unsupported' ? h('p', { class: 'hint' }, "This browser doesn't support notifications.")
+      : s === 'blocked' ? h('p', { class: 'hint' }, "Your browser is blocking notifications for this site. Allow them in the site's permissions, then come back here.")
+      : s === 'on' ? h('div', {}, h('p', { class: 'hint' }, 'Dawnshift will ping you when a bot needs you, or finishes something big. Only while you have the site open or installed.'), h('div', { class: 'row' }, turnOff, test))
+      : h('div', {}, h('p', { class: 'hint' }, 'Get a browser notification when a bot needs you to answer or approve something. Nothing goes outside this browser.'), turnOn);
+    fill(wrap, h('h2', {}, 'Notifications'), body);
+  }
+  draw();
+  return wrap;
+}
+
 function mountSettings(main) {
   const name = h('input', { placeholder: 'NAME, e.g. SHOPIFY_TOKEN', 'aria-label': 'Key name' });
   const value = h('input', { type: 'password', placeholder: 'Value', 'aria-label': 'Key value', autocomplete: 'off' });
@@ -903,6 +936,7 @@ function mountSettings(main) {
           attempt(async () => { await api('POST', '/api/secrets', { name: name.value, value: value.value }); name.value = ''; value.value = ''; await refresh(); }, add);
         },
       }, h('div', { class: 'grow' }, name), h('div', { class: 'grow' }, value), add)),
+    h('section', { class: 'block' }, notifyBlock()),
     h('section', { class: 'block' },
       h('h2', {}, 'About'),
       h('p', { class: 'hint' }, 'Made by OliverZS2005, built with help from Claude, an AI by Anthropic.'),
@@ -1292,3 +1326,41 @@ sync.onStatus((st) => {
 });
 
 boot();
+
+// ---------- service worker + update banner ----------
+
+// Keeps a copy of Dawnshift's own files for fast reloads and PWA installs. When
+// the server ships a new build, the new service worker sits in "waiting" until
+// the user clicks Reload in the banner below.
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('sw.js').then((reg) => {
+    const show = (sw) => showUpdateBanner(() => sw.postMessage({ type: 'skip-waiting' }));
+    if (reg.waiting && navigator.serviceWorker.controller) show(reg.waiting);
+    reg.addEventListener('updatefound', () => {
+      const sw = reg.installing;
+      sw?.addEventListener('statechange', () => {
+        if (sw.state === 'installed' && navigator.serviceWorker.controller) show(sw);
+      });
+    });
+    // Poll for new deploys every 15 minutes while the tab stays open.
+    setInterval(() => reg.update().catch(() => {}), 15 * 60 * 1000);
+  }).catch(() => {});
+
+  // When the new SW takes over, swap in its content with a reload.
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloading) return;
+    reloading = true;
+    location.reload();
+  });
+}
+
+function showUpdateBanner(onReload) {
+  let el = document.getElementById('update-banner');
+  if (el) return;
+  el = h('div', { id: 'update-banner', role: 'status' },
+    h('span', {}, 'A new version of Dawnshift is ready.'),
+    h('button', { class: 'primary', onclick: () => { el.remove(); onReload(); } }, 'Reload'),
+    h('button', { class: 'quiet', 'aria-label': 'Dismiss', onclick: () => el.remove() }, '✕'));
+  document.body.append(el);
+}
