@@ -889,6 +889,56 @@ function mountFiles(main) {
 
 // Lets the user turn browser notifications on or off (only shown when the
 // browser can do them at all). Draws its own refresh on every click.
+// Guesses which installer the user actually wants, so the "Download" button
+// takes them straight to it instead of the whole release page.
+function detectOs() {
+  const ua = navigator.userAgent;
+  const plat = navigator.userAgentData?.platform ?? navigator.platform ?? '';
+  if (/Android/i.test(ua)) return 'android';
+  if (/iPhone|iPad|iPod/.test(ua)) return 'ios';
+  if (/Windows/i.test(ua) || /Win/i.test(plat)) return 'windows';
+  if (/Mac/i.test(ua) || /Mac/i.test(plat)) return 'mac';
+  if (/Linux/i.test(ua) || /Linux/i.test(plat)) return 'linux';
+  return 'unknown';
+}
+
+// The Dawnshift app downloads. Private repo for now, so these link to the
+// release page; when the repo goes public they'll download directly.
+const APP_DOWNLOADS = [
+  { os: 'android', label: 'Android (APK)', detail: 'Download and open the APK; allow "install from this source", then tap Install.',
+    page: 'https://github.com/OliverZS2005/DawnShift/releases/tag/android-latest' },
+  { os: 'windows', label: 'Windows (.exe)', detail: 'If SmartScreen warns, click "More info" → "Run anyway".',
+    page: 'https://github.com/OliverZS2005/DawnShift/releases/tag/desktop-latest' },
+  { os: 'mac', label: 'Mac (.dmg)', detail: 'Pick the Apple-chip or Intel .dmg. First launch: right-click → Open.',
+    page: 'https://github.com/OliverZS2005/DawnShift/releases/tag/desktop-latest' },
+  { os: 'linux', label: 'Linux (.deb or .AppImage)', detail: 'Ubuntu, Debian, Mint: the .deb. Everything else: the AppImage.',
+    page: 'https://github.com/OliverZS2005/DawnShift/releases/tag/desktop-latest' },
+  { os: 'ios', label: 'iPhone / iPad', detail: 'No App Store build yet. In Safari, tap Share → Add to Home Screen to install this site as an app.',
+    page: null },
+];
+
+function downloadAppBlock() {
+  const you = detectOs();
+  const primary = APP_DOWNLOADS.find((d) => d.os === you);
+  const others = APP_DOWNLOADS.filter((d) => d.os !== you && d.os !== 'ios');
+  const link = (d, big) => d.page
+    ? h('a', { class: `button${big ? ' primary' : ''}`, href: d.page, target: '_blank', rel: 'noopener' }, big ? `Download Dawnshift for ${d.label}` : d.label)
+    : h('span', { class: 'hint' }, d.detail);
+  return [
+    h('h2', {}, 'Get the Dawnshift app'),
+    h('p', { class: 'hint' }, 'The website updates itself (that banner at the top). The installable app is handy on phones and for a dock icon on a computer; check this page now and then for a newer build.'),
+    primary && primary.page
+      ? h('div', {},
+          link(primary, true),
+          h('p', { class: 'hint', style: 'margin-top:0.5rem' }, primary.detail))
+      : primary
+        ? h('p', { class: 'hint' }, primary.detail)
+        : null,
+    h('p', { class: 'hint', style: 'margin-top:1rem' }, 'Other systems:'),
+    h('div', { class: 'row', style: 'flex-wrap:wrap' }, ...others.map((d) => link(d, false))),
+  ];
+}
+
 function notifyBlock() {
   const wrap = h('div', {});
   function draw() {
@@ -937,6 +987,7 @@ function mountSettings(main) {
         },
       }, h('div', { class: 'grow' }, name), h('div', { class: 'grow' }, value), add)),
     h('section', { class: 'block' }, notifyBlock()),
+    h('section', { class: 'block' }, ...downloadAppBlock()),
     h('section', { class: 'block' },
       h('h2', {}, 'About'),
       h('p', { class: 'hint' }, 'Made by OliverZS2005, built with help from Claude, an AI by Anthropic.'),
