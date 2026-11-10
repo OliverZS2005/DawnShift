@@ -1216,7 +1216,7 @@ function loginPanel(mode) {
     h('h1', {}, { login: 'Log in', signup: 'Create an account', recover: 'Forgot your password?' }[mode]),
     h('p', { class: 'lede' }, mode === 'recover'
       ? 'Use the recovery code you saved when you created your account to choose a new password.'
-      : 'With an account, your team, AI keys and files follow you to every phone and computer you log in on. Everything is encrypted on your device first: not even the server owner can read it.'),
+      : 'Your team, AI keys and files live on your account, so they follow you to every phone and computer you log in on, and your bots keep working while you\'re away.'),
     form,
     h('p', { class: 'account-links' },
       mode !== 'login' ? link('Log in instead', 'login') : link('Create an account', 'signup'),
@@ -1240,7 +1240,7 @@ function recoveryScreen(recoveryCode) {
   const text = `Dawnshift recovery code for ${syncStatus.username}\n\n${recoveryCode}\n\nUse it at "Forgot password?" if you forget your password. Keep it somewhere safe.\n`;
   return [
     h('h1', {}, 'Save your recovery code'),
-    h('p', { class: 'lede' }, "If you forget your password, this code is the only way back into your account. Nobody can reset it for you, because nobody else can read your data."),
+    h('p', { class: 'lede' }, "If you forget your password, this code is the only way back into your account. Dawnshift doesn't store your email, so there's no other way to reset it."),
     h('div', { class: 'recovery-code', tabindex: 0 }, recoveryCode),
     h('div', { class: 'row', style: 'margin:1rem 0' },
       h('button', { onclick: () => navigator.clipboard.writeText(recoveryCode).then(() => toast('Copied.'), () => toast("Couldn't copy. Write it down instead.", true)) }, 'Copy'),
@@ -1372,7 +1372,7 @@ let polling = false;
 // Before any of the app renders, ask the user to agree to one short waiver.
 // Stored per-device in localStorage; bumping WAIVER_VERSION makes everyone
 // agree again (change it when the text itself changes).
-const WAIVER_VERSION = 1;
+const WAIVER_VERSION = 2;
 const WAIVER_KEY = `dawnshift-waiver-v${WAIVER_VERSION}`;
 
 function waiver() {
@@ -1384,10 +1384,11 @@ function waiver() {
       h('p', {}, "Dawnshift is a one-person hobby project. It's free, it's rough around the edges, and it comes with no promises."),
       h('p', { class: 'hint' }, "By tapping I agree you're saying:"),
       h('ul', {},
-        h('li', {}, "You won't hold the maker (OliverZS2005) or anyone involved responsible for anything that goes wrong — lost data, missed deadlines, wrong answers from the bots, AI bills you rack up, legal trouble from how you use it, or anything else."),
+        h('li', {}, "As far as the law allows, you won't hold the maker (OliverZS2005) or anyone involved responsible for anything that goes wrong — lost data, missed deadlines, wrong answers from the bots, AI bills you rack up, legal trouble from how you use it, or anything else."),
         h('li', {}, "You're only using it to do things you're allowed to do."),
-        h('li', {}, "You use it as-is, at your own risk.")),
-      h('p', { class: 'hint' }, 'If you don\'t agree, just close this tab. Full ', h('a', { href: 'terms.html', target: '_blank', rel: 'noopener' }, 'Terms'), ' and ', h('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy Policy'), ' are there if you want them.'),
+        h('li', {}, "You use it as-is, at your own risk."),
+        h('li', {}, 'You agree to the ', h('a', { href: 'terms.html', target: '_blank', rel: 'noopener' }, 'Terms of Service'), ' and ', h('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy Policy'), '. Your account\'s data is stored on Dawnshift\'s server.')),
+      h('p', { class: 'hint' }, 'If you don\'t agree, just close this tab.'),
       h('div', { class: 'row' }, agree));
     const overlay = h('div', { class: 'waiver-overlay', role: 'dialog', 'aria-modal': 'true' }, card);
     agree.addEventListener('click', () => {
