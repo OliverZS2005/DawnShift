@@ -43,19 +43,31 @@ jobs:
       - run: npm test
       - run: npm run build:app
 
-      - name: Build the APK
+      - name: Build the signed APK
         working-directory: dawnshift/android
         env:
           DAWNSHIFT_VERSION_CODE: ${{ github.run_number }}
           DAWNSHIFT_VERSION_NAME: 0.1.${{ github.run_number }}
-        run: ./gradlew assembleDebug --no-daemon
+          KEYSTORE_B64: ${{ secrets.DAWNSHIFT_KEYSTORE_B64 }}
+          DAWNSHIFT_KEYSTORE_PASSWORD: ${{ secrets.DAWNSHIFT_KEYSTORE_PASSWORD }}
+          DAWNSHIFT_KEY_ALIAS: ${{ secrets.DAWNSHIFT_KEY_ALIAS }}
+          DAWNSHIFT_KEY_PASSWORD: ${{ secrets.DAWNSHIFT_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::The signing key isn't set up. Add the DAWNSHIFT_KEYSTORE_* secrets (see dawnshift/README.md)."
+            exit 1
+          fi
+          export DAWNSHIFT_KEYSTORE_FILE="$RUNNER_TEMP/dawnshift-release.keystore"
+          echo "$KEYSTORE_B64" | base64 -d > "$DAWNSHIFT_KEYSTORE_FILE"
+          ./gradlew assembleRelease --no-daemon
+          rm -f "$DAWNSHIFT_KEYSTORE_FILE"
 
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
           RUN: ${{ github.run_number }}
         run: |
-          cp android/app/build/outputs/apk/debug/app-debug.apk Dawnshift.apk
+          cp android/app/build/outputs/apk/release/app-release.apk Dawnshift.apk
           cat > notes.md <<'EOF'
           Test build of Dawnshift for Android phones.
 

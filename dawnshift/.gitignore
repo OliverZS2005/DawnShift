@@ -3,3 +3,7 @@ data/
 dist/
 web-dist/
 app-dist/
+
+# Signing keys never go in the repo.
+*.keystore
+*.jks

@@ -136,9 +136,13 @@ To build it yourself you need Android Studio (or the Android SDK) and JDK 21:
 account server, set `DAWNSHIFT_APP_SERVER=https://your.domain` first. The app's
 icon and splash screen come from `assets/` (`npx @capacitor/assets generate --android`).
 
-The APK is signed with a debug key kept in the repo, so updates install over
-each other. That's fine for direct installs, but the Play Store needs your
-own upload key.
+The APK is signed with a private release key that is never committed. The
+GitHub build reads it from four repository secrets (Settings → Secrets and
+variables → Actions): `DAWNSHIFT_KEYSTORE_B64` (the keystore file, base64),
+`DAWNSHIFT_KEYSTORE_PASSWORD`, `DAWNSHIFT_KEY_ALIAS` and
+`DAWNSHIFT_KEY_PASSWORD`. Without them the Android build stops with an error
+instead of signing with a public key. Keep a backup of the keystore: every
+future update has to be signed with the same key.
 
 ## Download (for people who just want to use it)
 
