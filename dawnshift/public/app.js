@@ -1366,7 +1366,41 @@ mountAccountButton();
 // Boot: if not logged in, show the account screen. Once logged in (now or
 // after signup/login), fetch state and start polling.
 let polling = false;
+// ---------- the one rule ----------
+
+// Before any of the app renders, ask the user to agree to one short waiver.
+// Stored per-device in localStorage; bumping WAIVER_VERSION makes everyone
+// agree again (change it when the text itself changes).
+const WAIVER_VERSION = 1;
+const WAIVER_KEY = `dawnshift-waiver-v${WAIVER_VERSION}`;
+
+function waiver() {
+  try { if (localStorage.getItem(WAIVER_KEY)) return Promise.resolve(); } catch {}
+  return new Promise((resolve) => {
+    const agree = h('button', { class: 'primary' }, 'I agree — let me in');
+    const card = h('div', { class: 'waiver-card' },
+      h('h1', {}, 'Before you start'),
+      h('p', {}, "Dawnshift is a one-person hobby project. It's free, it's rough around the edges, and it comes with no promises."),
+      h('p', { class: 'hint' }, "By tapping I agree you're saying:"),
+      h('ul', {},
+        h('li', {}, "You won't hold the maker (OliverZS2005) or anyone involved responsible for anything that goes wrong — lost data, missed deadlines, wrong answers from the bots, AI bills you rack up, legal trouble from how you use it, or anything else."),
+        h('li', {}, "You're only using it to do things you're allowed to do."),
+        h('li', {}, "You use it as-is, at your own risk.")),
+      h('p', { class: 'hint' }, 'If you don\'t agree, just close this tab. Full ', h('a', { href: 'terms.html', target: '_blank', rel: 'noopener' }, 'Terms'), ' and ', h('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy Policy'), ' are there if you want them.'),
+      h('div', { class: 'row' }, agree));
+    const overlay = h('div', { class: 'waiver-overlay', role: 'dialog', 'aria-modal': 'true' }, card);
+    agree.addEventListener('click', () => {
+      try { localStorage.setItem(WAIVER_KEY, new Date().toISOString()); } catch {}
+      overlay.remove();
+      resolve();
+    });
+    document.body.append(overlay);
+    agree.focus();
+  });
+}
+
 async function boot() {
+  await waiver();
   if (!syncStatus.loggedIn) {
     // Stub so render() can mount the account view before /api/state is loaded.
     S ??= { version: 0, connections: [], bots: [], tasks: [], board: [], secretNames: [], presets: {}, workspacePath: '' };

@@ -367,6 +367,35 @@ dialog legend { font-weight: 600; font-size: 0.875rem; margin-bottom: 0.4rem; pa
 #update-banner .primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 #update-banner .quiet { background: transparent; color: var(--paper); border-color: transparent; padding: 0.3rem 0.5rem; }
 
+/* ---------- waiver gate (shown once per device) ---------- */
+
+.waiver-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgb(10 10 12 / 0.75);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  padding-top: calc(1rem + var(--safe-top));
+  padding-bottom: calc(1rem + var(--safe-bottom));
+  overflow: auto;
+}
+.waiver-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.75rem;
+  max-width: 32rem;
+  width: 100%;
+  animation: rise 0.25s ease-out;
+}
+.waiver-card h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+.waiver-card p { margin-bottom: 0.75rem; }
+.waiver-card ul { padding-left: 1.2rem; margin: 0 0 1rem; }
+.waiver-card li { margin-bottom: 0.4rem; }
+.waiver-card .row { justify-content: flex-end; margin-top: 1rem; }
+
 /* ---------- small screens: one column at a time ---------- */
 
 @media (max-width: 1100px) {
