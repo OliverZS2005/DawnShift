@@ -74,8 +74,15 @@ echo "Dawnshift is up to date."
 EOF
 chmod +x /usr/local/bin/dawnshift-update
 if ! dawnshift-update; then
-  rm -f /root/.dawnshift-token
-  echo "Download failed. Check the token has Contents: Read-only access to $REPO, then run this again."
+  # Don't delete the token on every failure (a build or npm hiccup looks the
+  # same as a bad token at this point). Only drop it when the download itself
+  # couldn't authenticate.
+  if ! curl -fsSL -o /dev/null -H "Authorization: Bearer $(cat /root/.dawnshift-token)" "https://api.github.com/repos/$REPO" 2>/dev/null; then
+    rm -f /root/.dawnshift-token
+    echo "Download failed: the token can't reach $REPO. Make a new one (Contents: Read-only) and run this again."
+  else
+    echo "Download failed, but the token still works. Scroll up for the real error and run this again."
+  fi
   exit 1
 fi
 
