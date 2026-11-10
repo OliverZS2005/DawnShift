@@ -58,13 +58,13 @@ export const PRESETS = {
   ollama: {
     label: 'Ollama (local)',
     kind: 'openai',
-    baseUrl: 'http://localhost:11434/v1',
+    baseUrl: 'https://YOUR-SERVER/ollama/v1',
     local: true,
   },
   lmstudio: {
     label: 'LM Studio (local)',
     kind: 'openai',
-    baseUrl: 'http://localhost:1234/v1',
+    baseUrl: 'https://YOUR-SERVER/lmstudio/v1',
     local: true,
   },
   custom: {
