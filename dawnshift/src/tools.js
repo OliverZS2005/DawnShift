@@ -39,7 +39,10 @@ async function request(url, options) {
     const cause = err.cause;
     if (cause) {
       const why = [cause.code, cause.message].filter(Boolean).join(': ');
-      throw new Error(`Couldn't reach ${url.host}: ${why || err.message}`);
+      const tls = /CERT|SSL|TLS/i.test(cause.code ?? '');
+      throw new Error(`Couldn't reach ${url.host}: ${why || err.message}` + (tls
+        ? '. The HTTPS certificate could not be verified on the device running Dawnshift. The API address is probably fine: usually antivirus, a school or work network, or a proxy is intercepting HTTPS on that device. Tell the human which device this ran on; do not retry other addresses.'
+        : ''));
     }
     throw err;
   }
