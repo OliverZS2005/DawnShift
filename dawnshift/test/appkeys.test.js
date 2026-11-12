@@ -43,3 +43,12 @@ test("a bot can't use an app key it wasn't given", async () => {
     /available to this bot/,
   );
 });
+
+test('send_discord_message finds Discord webhook keys the bot may use', async () => {
+  const { discordWebhooks } = await import('../src/tools.js');
+  const secrets = { DISCORD_WEBHOOK_DAWNLIFE: 'https://discord.com/api/webhooks/1/abc', SHOP_KEY: 'x' };
+  assert.deepEqual(Object.keys(discordWebhooks({}, secrets)), ['DISCORD_WEBHOOK_DAWNLIFE']);
+  assert.deepEqual(discordWebhooks({ appKeys: ['SHOP_KEY'] }, secrets), {});
+  const r = await TOOLS_BY_NAME.send_discord_message.run({ message: 'hi' }, { store: { state: { secrets: { SHOP_KEY: 'x' } } }, bot: {} });
+  assert.equal(r.isError, true);
+});

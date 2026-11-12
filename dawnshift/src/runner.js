@@ -8,7 +8,7 @@
 // Everything is saved after each step, so a task picks up where it left off
 // even if Dawnshift is restarted.
 import { newId } from './store-common.js';
-import { TOOLS_BY_NAME, toolsFor, needsApproval, describeCall, allowedSecrets } from './tools.js';
+import { TOOLS_BY_NAME, toolsFor, needsApproval, describeCall, allowedSecrets, discordWebhooks } from './tools.js';
 
 const MAX_STEPS = 40;
 const ACTIVE = new Set(['queued', 'running', 'needs_you', 'waiting']);
@@ -37,6 +37,9 @@ export function buildSystemPrompt(store, bot) {
 - Read the team board for context and post updates your coworkers would need.`,
     canDelegate
       ? `You lead the team. Split big jobs into pieces, hand each piece to the coworker whose job fits with delegate_task, then combine their results. Do small jobs yourself.`
+      : '',
+    (bot.abilities ?? []).includes('http_request') && Object.keys(discordWebhooks(bot, store.state.secrets)).length
+      ? `To post to Discord, call the send_discord_message tool with the message text. Never just write the message in your reply — actually call the tool.`
       : '',
     keyNames.length ? `App keys you can use in web API calls (write {{NAME}}): ${keyNames.join(', ')}.` : '',
     `The team:\n${team}`,

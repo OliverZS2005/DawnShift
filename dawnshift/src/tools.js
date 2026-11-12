@@ -45,6 +45,13 @@ export function allowedSecrets(bot, secrets) {
 }
 
 // Replaces {{NAME}} with a saved app key. The bot only ever sees the name.
+// App keys this bot may use whose value is a Discord webhook URL.
+export function discordWebhooks(bot, secrets) {
+  return Object.fromEntries(
+    Object.entries(allowedSecrets(bot, secrets ?? {})).filter(([, v]) => /^https:\/\/(\w+\.)?discord(app)?\.com\/api\/webhooks\//.test(String(v).trim())),
+  );
+}
+
 export function fillSecrets(text, secrets) {
   return String(text ?? '').replace(/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g, (match, name) => {
     if (!(name in secrets)) throw new Error(`No app key named ${name} is available to this bot. Add it in Settings → App keys, then tick it in this bot's settings.`);
@@ -241,6 +248,39 @@ export const TOOLS = [
     },
   },
   {
+    name: 'send_discord_message',
+    label: 'Use web APIs (your apps)',
+    description:
+      'Post a message to a Discord channel through a saved Discord webhook app key. Just give the message text. This is the easy way to post to Discord.',
+    parameters: schema(
+      {
+        message: str('The message to post (up to 2000 characters).'),
+        webhook: str('Optional: name of the Discord webhook app key. Leave out to use the first one.'),
+      },
+      ['message'],
+    ),
+    group: 'http_request',
+    risky: () => true,
+    async run({ message, webhook }, { store, bot }) {
+      const hooks = discordWebhooks(bot, store.state.secrets);
+      const names = Object.keys(hooks);
+      if (!names.length) return { content: 'No Discord webhook app key is available to this bot. Ask the human to add one in Settings → App keys.', isError: true };
+      const name = webhook && hooks[webhook] ? webhook : names[0];
+      const text = String(message ?? '').trim().slice(0, 2000);
+      if (!text) return { content: 'The message is empty.', isError: true };
+      const u = new URL(hooks[name]);
+      checkUrl(u);
+      const res = await request(u, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ content: text }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (res.ok) return { content: `Posted to Discord (${name}).` };
+      return { content: `Discord said HTTP ${res.status}: ${hideSecrets(await res.text(), store.state.secrets).slice(0, 500)}`, isError: true };
+    },
+  },
+  {
     name: 'list_files',
     label: 'Read workspace files',
     description: 'List the files in a folder of the shared workspace.',
@@ -306,6 +346,8 @@ export function describeCall(name, args) {
       return `Write the file "${args.path}" (${String(args.content ?? '').length} characters)`;
     case 'http_request':
       return `${String(args.method || 'GET').toUpperCase()} ${args.url}`;
+    case 'send_discord_message':
+      return `Post to Discord: "${String(args.message ?? '').slice(0, 120)}"`;
     case 'web_fetch':
       return `Open ${args.url}`;
     case 'delegate_task':
