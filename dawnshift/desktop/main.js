@@ -1,16 +1,16 @@
-// The desktop app: runs Dawnshift (the same server as `npm start`) inside
-// Electron and shows it in its own window, so nobody needs Node.js or a
-// terminal. Build installers with `npm run build:desktop`.
+// The desktop app: shows the hosted Dawnshift (same accounts as the website
+// and the Android app) in its own window. Build installers with
+// `npm run build:desktop`. Older versions ran a local copy; its data folder
+// is left untouched.
 import { app, BrowserWindow, Menu, dialog, nativeTheme, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { startDawnshift } from '../server.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ICON = path.join(here, 'icon.png');
 const WEBSITE = 'https://dawnshift.dawnlife.online';
 
-let dawnshift = null;
+const dawnshift = { url: WEBSITE, dataDir: null };
 let win = null;
 
 // Only one copy runs at a time; opening it again brings back the window.
@@ -26,15 +26,7 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 async function start() {
-  try {
-    // Saved in the usual place for apps' data, e.g. ~/.config/Dawnshift on
-    // Linux or %APPDATA%\Dawnshift on Windows. Any free port will do.
-    dawnshift = await startDawnshift({ dataDir: path.join(app.getPath('userData'), 'data'), port: 0, host: '127.0.0.1' });
-  } catch (err) {
-    dialog.showErrorBox('Dawnshift could not start', String(err?.message ?? err));
-    app.quit();
-    return;
-  }
+  dawnshift.dataDir = path.join(app.getPath('userData'), 'data');
   Menu.setApplicationMenu(buildMenu());
   openWindow();
   app.on('activate', () => {
@@ -83,6 +75,10 @@ function openWindow() {
     if (/^https?:\/\//.test(url)) shell.openExternal(url);
   });
 
+  win.webContents.on('did-fail-load', (_e, code, desc, url, isMain) => {
+    if (!isMain || code === -3) return;
+    dialog.showErrorBox('Dawnshift could not connect', `Couldn't reach ${WEBSITE} (${desc}). Check your internet connection, then use View → Reload.`);
+  });
   win.loadURL(dawnshift.url);
 }
 
@@ -124,6 +120,5 @@ function buildMenu() {
   ]);
 }
 
-// Bots only work while the app is open, so closing the window quits.
+// Bots run on the server, so closing the window just quits the app.
 app.on('window-all-closed', () => app.quit());
-app.on('before-quit', () => dawnshift?.stop());
