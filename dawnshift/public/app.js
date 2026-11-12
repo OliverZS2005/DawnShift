@@ -1036,7 +1036,7 @@ function mountSettings(main) {
     h('section', { class: 'block' },
       h('h2', {}, 'About'),
       h('p', { class: 'hint' }, 'Made by OliverZS2005, built with help from Claude, an AI by Anthropic.'),
-      h('p', { class: 'hint' }, 'Version 0.1.1 (update banner test build).'),
+      h('p', { class: 'hint' }, 'Version 0.1.2'),
       h('p', { class: 'hint' }, 'Dawnshift works with AI services from Anthropic and other companies but isn\'t made, endorsed or sponsored by any of them.'),
       h('div', { class: 'row' },
         h('a', { class: 'button', href: 'terms.html' }, 'Terms of Service'),
