@@ -32,7 +32,7 @@ const SESSION_DAYS = 60;
 // ---------- app downloads (/api/download/<slug>) ----------
 
 // The GitHub repo the installers live in. Used when proxying download links.
-const RELEASE_REPO = process.env.DAWNSHIFT_RELEASE_REPO || 'OliverZS2005/ClaudeCodeIsTuff';
+const RELEASE_REPO = process.env.DAWNSHIFT_RELEASE_REPO || 'OliverZS2005/DawnShift';
 const DOWNLOADS = {
   android: { tag: 'android-latest', match: /\.apk$/ },
   windows: { tag: 'desktop-latest', match: /-win-x64\.exe$/ },

@@ -4,7 +4,7 @@ set -e
 TOKEN=$(cat /root/.dawnshift-token)
 get() {
   curl -fsSL -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github.raw" \
-    "https://api.github.com/repos/OliverZS2005/ClaudeCodeIsTuff/contents/dawnshift/release/$1?ref=claude/ai-grok-bot-x5v1dx" \
+    "https://api.github.com/repos/OliverZS2005/DawnShift/contents/dawnshift/release/$1?ref=claude/ai-grok-bot-x5v1dx" \
     -o "/tmp/$1"
 }
 get dawnshift-web.zip
