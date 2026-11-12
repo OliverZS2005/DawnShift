@@ -56,3 +56,29 @@ test('network failures pass on the real reason instead of just "fetch failed"', 
   assert.ok(!/^fetch failed$/.test(message), message);
   assert.match(message, /ENOTFOUND|EAI_AGAIN|does-not-exist/);
 });
+
+test('Dawnshift flags a status report from a bot that checked nothing', async () => {
+  const { evidenceNote } = await import('../src/runner.js');
+  const task = { messages: [{ role: 'user', content: 'status?' }, { role: 'assistant', text: 'Proxmox nodes are healthy, no issues.', toolCalls: [] }] };
+  assert.match(evidenceNote(task), /no successful web or API calls/);
+});
+
+test('Dawnshift lists the calls a bot made, and does not warn when one succeeded', async () => {
+  const { evidenceNote } = await import('../src/runner.js');
+  const task = { messages: [
+    { role: 'user', content: 'status?' },
+    { role: 'assistant', text: '', toolCalls: [{ id: 'a', name: 'http_request', args: { url: '{{PROXMOX_BASE_URL}}/api2/json/nodes' } }, { id: 'b', name: 'web_fetch', args: { url: 'https://www.googleapis.com/youtube/v3/channels' } }] },
+    { role: 'tool', callId: 'a', name: 'http_request', content: '{"data":[]}', isError: false },
+    { role: 'tool', callId: 'b', name: 'web_fetch', content: 'Error: Couldn\'t reach www.googleapis.com', isError: true },
+    { role: 'assistant', text: 'Proxmox is healthy. YouTube call failed.', toolCalls: [] },
+  ] };
+  const note = evidenceNote(task);
+  assert.ok(!/no successful/.test(note));
+  assert.match(note, /✓ PROXMOX_BASE_URL/);
+  assert.match(note, /✗ www\.googleapis\.com/);
+});
+
+test('plain replies with no status claims and no calls get no note', async () => {
+  const { evidenceNote } = await import('../src/runner.js');
+  assert.equal(evidenceNote({ messages: [{ role: 'assistant', text: 'Here is your email draft.', toolCalls: [] }] }), '');
+});

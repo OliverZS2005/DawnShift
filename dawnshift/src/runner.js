@@ -52,6 +52,31 @@ export function buildSystemPrompt(store, bot) {
     .join('\n\n');
 }
 
+// What a bot actually checked in a task, written by Dawnshift (not the bot),
+// so a small model can't claim "all healthy" without having looked.
+const DATA_TOOLS = new Set(['http_request', 'web_fetch']);
+const STATUS_WORDS = /\b(healthy|online|offline|running|up and running|is up|are up|is down|are down|no (specific )?issues|all good|working fine|operational)\b/i;
+
+export function evidenceNote(task) {
+  const args = new Map();
+  for (const m of task.messages) if (m.role === 'assistant') for (const c of m.toolCalls ?? []) args.set(c.id, c.args ?? {});
+  const checks = task.messages
+    .filter((m) => m.role === 'tool' && DATA_TOOLS.has(m.name))
+    .map((m) => {
+      let where = String(args.get(m.callId)?.url ?? '');
+      try { where = new URL(where.replace(/\{\{\w+\}\}/g, 'x')).host || where; } catch {}
+      return { where: where.replace(/\{\{(\w+)\}\}/g, '$1') || m.name, ok: !m.isError && !/^Error:/.test(m.content) };
+    });
+  const lines = checks.map((c) => `${c.ok ? '✓' : '✗'} ${c.where}`);
+  const reply = task.messages.at(-1)?.text ?? '';
+  const delegated = task.messages.some((m) => m.role === 'tool' && m.name === 'delegate_task');
+  const warn = STATUS_WORDS.test(reply) && !checks.some((c) => c.ok) && !delegated
+    ? '⚠️ Dawnshift check: this bot made no successful web or API calls in this task, so any status above is unverified.'
+    : '';
+  if (!lines.length && !warn) return '';
+  return `\n\n---\n${warn}${warn && lines.length ? '\n' : ''}${lines.length ? `Calls made in this task (checked by Dawnshift):\n${lines.join('\n')}` : ''}`;
+}
+
 function unresolvedCalls(task) {
   let i = task.messages.length - 1;
   while (i >= 0 && task.messages[i].role === 'tool') i--;
@@ -211,7 +236,7 @@ export function createRunner({ store, callModel, maxConcurrent = 3, onChange = (
 
       const last = task.messages.at(-1);
       if (last.role === 'assistant') {
-        return finish(task, 'done', { result: last.text || '(The bot finished without writing a reply.)' });
+        return finish(task, 'done', { result: (last.text || '(The bot finished without writing a reply.)') + evidenceNote(task) });
       }
       if (task.steps >= MAX_STEPS) {
         throw new Error(`Stopped after ${MAX_STEPS} steps. Reply to the task to let the bot keep going.`);
