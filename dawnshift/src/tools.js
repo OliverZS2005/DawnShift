@@ -37,10 +37,17 @@ async function request(url, options) {
   }
 }
 
+// The app keys a bot may use: the ones picked in its settings, or all of
+// them for bots that never had that setting.
+export function allowedSecrets(bot, secrets) {
+  if (!Array.isArray(bot?.appKeys)) return secrets;
+  return Object.fromEntries(Object.entries(secrets).filter(([name]) => bot.appKeys.includes(name)));
+}
+
 // Replaces {{NAME}} with a saved app key. The bot only ever sees the name.
 export function fillSecrets(text, secrets) {
   return String(text ?? '').replace(/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g, (match, name) => {
-    if (!(name in secrets)) throw new Error(`No app key named ${name}. Add it in Settings → App keys.`);
+    if (!(name in secrets)) throw new Error(`No app key named ${name} is available to this bot. Add it in Settings → App keys, then tick it in this bot's settings.`);
     return secrets[name];
   });
 }
@@ -216,8 +223,9 @@ export const TOOLS = [
     ),
     // Reading is harmless; anything that changes data needs a human's OK.
     risky: (args) => String(args.method || 'GET').toUpperCase() !== 'GET',
-    async run({ method = 'GET', url, headers = {}, body }, { store }) {
-      const secrets = store.state.secrets;
+    async run({ method = 'GET', url, headers = {}, body }, { store, bot }) {
+      const all = store.state.secrets;
+      const secrets = allowedSecrets(bot, all);
       const u = new URL(fillSecrets(url, secrets));
       checkUrl(u);
       const h = {};
@@ -228,7 +236,7 @@ export const TOOLS = [
         body: body == null || method === 'GET' ? undefined : fillSecrets(body, secrets),
         signal: AbortSignal.timeout(30000),
       });
-      const text = hideSecrets(await res.text(), secrets);
+      const text = hideSecrets(await res.text(), all);
       return { content: clip(`HTTP ${res.status}\n\n${text}`, MAX_FETCH_CHARS), isError: !res.ok };
     },
   },

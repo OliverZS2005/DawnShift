@@ -8,7 +8,7 @@
 // Everything is saved after each step, so a task picks up where it left off
 // even if Dawnshift is restarted.
 import { newId } from './store-common.js';
-import { TOOLS_BY_NAME, toolsFor, needsApproval, describeCall } from './tools.js';
+import { TOOLS_BY_NAME, toolsFor, needsApproval, describeCall, allowedSecrets } from './tools.js';
 
 const MAX_STEPS = 40;
 const ACTIVE = new Set(['queued', 'running', 'needs_you', 'waiting']);
@@ -26,6 +26,7 @@ export function buildSystemPrompt(store, bot) {
     .join('\n');
   const memory = (bot.memory ?? []).map((m, i) => `${i + 1}. ${m}`).join('\n');
   const canDelegate = (bot.abilities ?? []).includes('delegate_task');
+  const keyNames = (bot.abilities ?? []).includes('http_request') ? Object.keys(allowedSecrets(bot, store.state.secrets ?? {})) : [];
   return [
     `You are ${bot.name}, an AI coworker on a small team that works for one human (your manager).`,
     `Your job:\n${bot.job}`,
@@ -37,6 +38,7 @@ export function buildSystemPrompt(store, bot) {
     canDelegate
       ? `You lead the team. Split big jobs into pieces, hand each piece to the coworker whose job fits with delegate_task, then combine their results. Do small jobs yourself.`
       : '',
+    keyNames.length ? `App keys you can use in web API calls (write {{NAME}}): ${keyNames.join(', ')}.` : '',
     `The team:\n${team}`,
     memory ? `Your memory:\n${memory}` : 'Your memory is empty so far.',
     `Today is ${new Date().toDateString()}.`,

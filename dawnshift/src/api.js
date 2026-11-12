@@ -107,6 +107,11 @@ function cleanBot(body, store, existing = {}) {
     connectionId,
     model: String(body.model ?? existing.model ?? '').trim(),
     abilities: (body.abilities ?? existing.abilities ?? []).filter((a) => known.has(a)),
+    // Which app keys this bot may use. Missing means all keys (how bots worked
+    // before this setting existed), so nothing changes until the user picks.
+    ...(Array.isArray(body.appKeys)
+      ? { appKeys: [...new Set(body.appKeys.map(String).filter((n) => /^[A-Z0-9_]{1,40}$/.test(n)))] }
+      : {}),
     approvals,
     routines,
     memory: existing.memory ?? [],

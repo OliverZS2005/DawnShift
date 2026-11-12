@@ -610,6 +610,10 @@ function editBot(bot) {
   f.conn.value = draft.connectionId;
 
   const abilities = S.abilities.map((a) => h('label', { class: 'check' }, h('input', { type: 'checkbox', value: a.id, checked: draft.abilities.includes(a.id) }), a.label));
+  // Which app keys this bot may use. A bot that never had this set can use
+  // all of them, so they all start ticked.
+  const appKeys = S.secretNames.map((n) => h('label', { class: 'check' },
+    h('input', { type: 'checkbox', value: n, checked: !Array.isArray(draft.appKeys) || draft.appKeys.includes(n) }), h('code', {}, n)));
   const approvals = [
     ['risky', 'Ask me before it writes files or changes data in an app'],
     ['always', 'Ask me before every action'],
@@ -662,6 +666,7 @@ function editBot(bot) {
         connectionId: f.conn.value,
         model: f.model.value,
         abilities: abilities.map((l) => l.querySelector('input')).filter((i) => i.checked).map((i) => i.value),
+        ...(appKeys.length ? { appKeys: appKeys.map((l) => l.querySelector('input')).filter((i) => i.checked).map((i) => i.value) } : {}),
         approvals: approvals.map((l) => l.querySelector('input')).find((i) => i.checked)?.value ?? 'risky',
         routines: draft.routines.filter((r) => r.title.trim() || r.instructions.trim()),
       };
@@ -694,6 +699,10 @@ function editBot(bot) {
     h('div', { class: 'row' }, h('div', { class: 'grow' }, f.conn), h('div', { class: 'grow' }, f.model, f.models), loadModels),
     h('div', { class: 'hint' }, 'Leave the model empty to use the connection\'s default. Different bots can use different AIs.')),
   h('fieldset', {}, h('legend', {}, 'Abilities'), abilities),
+  h('fieldset', {}, h('legend', {}, 'Apps this bot can use'),
+    appKeys.length
+      ? [h('p', { class: 'hint', style: 'margin-top:0' }, 'App keys from Settings. Needs the "Use web APIs" ability above. Untick an app to keep this bot away from it.'), appKeys]
+      : h('p', { class: 'hint', style: 'margin-top:0' }, 'No app keys yet. Add them in Settings → App keys, then pick them here.')),
   h('fieldset', {}, h('legend', {}, 'Approvals'), approvals),
   h('fieldset', {}, h('legend', {}, 'Routines'), h('p', { class: 'hint', style: 'margin-top:0' }, 'Recurring jobs the bot does on its own while Dawnshift is running.'), routineBox),
   memoryBox,
@@ -1039,8 +1048,16 @@ function renderSettings() {
       : [h('p', { class: 'empty' }, 'No AI connected yet. Pick a provider below.')]));
   fill(document.getElementById('secret-list'), 
     ...(S.secretNames.length
-      ? S.secretNames.map((n) => h('div', { class: 'list-item' }, h('code', { class: 'grow' }, `{{${n}}}`),
-          h('button', { class: 'danger', onclick: (e) => attempt(async () => { await api('DELETE', `/api/secrets/${encodeURIComponent(n)}`); await refresh(); }, e.currentTarget) }, 'Remove')))
+      ? S.secretNames.map((n) => {
+          // Bots with web API access that may use this key.
+          const users = S.bots.filter((b) => b.abilities.includes('http_request') && (!Array.isArray(b.appKeys) || b.appKeys.includes(n))).map((b) => b.name);
+          return h('div', { class: 'list-item' },
+            h('div', { class: 'grow' }, h('code', {}, `{{${n}}}`), h('div', { class: 'meta' }, users.length ? `Used by ${users.join(', ')}` : 'No bot can use this yet. Tick it in a bot\'s settings.')),
+            h('button', { class: 'danger', onclick: (e) => {
+              if (!confirm(`Remove the app key ${n}? Bots that use it will stop working with that app.`)) return;
+              attempt(async () => { await api('DELETE', `/api/secrets/${encodeURIComponent(n)}`); await refresh(); }, e.currentTarget);
+            } }, 'Remove'));
+        })
       : [h('p', { class: 'hint' }, 'No app keys yet.')]));
 }
 
