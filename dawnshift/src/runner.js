@@ -8,6 +8,7 @@
 // Everything is saved after each step, so a task picks up where it left off
 // even if Dawnshift is restarted.
 import { newId } from './store-common.js';
+import { coreRulesText, hasCoreRules } from './core-rules.js';
 import { TOOLS_BY_NAME, toolsFor, needsApproval, describeCall, allowedSecrets, discordWebhooks } from './tools.js';
 
 const MAX_STEPS = 40;
@@ -29,6 +30,7 @@ export function buildSystemPrompt(store, bot) {
   const keyNames = (bot.abilities ?? []).includes('http_request') ? Object.keys(allowedSecrets(bot, store.state.secrets ?? {})) : [];
   return [
     `You are ${bot.name}, an AI coworker on a small team that works for one human (your manager).`,
+    hasCoreRules(bot) ? coreRulesText() : '',
     `Your job:\n${bot.job}`,
     `How you work:
 - Tasks come from the human or from coworkers. Do the work with your tools, then finish with a reply that contains the finished result. That final reply is what gets delivered, so make it complete and easy to act on.

@@ -4,6 +4,7 @@ import { newId, nowIso, markDeleted } from './store-common.js';
 import { PRESETS, callModel, listModels, apiKeyFor } from './providers.js';
 import { ABILITIES } from './tools.js';
 import { TEMPLATES, STARTER_TEAM } from './templates.js';
+import { CORE_RULES } from './core-rules.js';
 
 export class HttpError extends Error {
   constructor(status, message) {
@@ -113,6 +114,8 @@ function cleanBot(body, store, existing = {}) {
       ? { appKeys: [...new Set(body.appKeys.map(String).filter((n) => /^[A-Z0-9_]{1,40}$/.test(n)))] }
       : {}),
     approvals,
+    // Core rules (src/core-rules.js) stay on unless explicitly turned off.
+    coreRules: typeof body.coreRules === 'boolean' ? body.coreRules : existing.coreRules !== false,
     routines,
     memory: existing.memory ?? [],
   };
@@ -144,6 +147,7 @@ export function createApi(store, runner) {
       presets: PRESETS,
       abilities: ABILITIES,
       templates: TEMPLATES,
+      coreRules: CORE_RULES,
     };
   });
 
