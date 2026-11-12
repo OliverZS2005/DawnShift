@@ -22,6 +22,7 @@ fi
 
 # 2. Node.js 20+ and a dedicated user for the service.
 apt-get install -y -qq curl ca-certificates tar zip >/dev/null
+update-ca-certificates >/dev/null 2>&1 || true
 if ! command -v node >/dev/null || [ "$(node -p 'parseInt(process.versions.node)')" -lt 20 ]; then
   curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >/dev/null
   apt-get install -y -qq nodejs >/dev/null
@@ -96,7 +97,7 @@ After=network.target
 [Service]
 User=dawnshift
 WorkingDirectory=$APP_DIR
-Environment=PORT=$PORT HOST=127.0.0.1 DATA_DIR=$DATA_DIR STATIC_DIR=$APP_DIR/web-dist NODE_ENV=production DAWNSHIFT_GH_TOKEN_FILE=/etc/dawnshift-token
+Environment=PORT=$PORT HOST=127.0.0.1 DATA_DIR=$DATA_DIR STATIC_DIR=$APP_DIR/web-dist NODE_ENV=production DAWNSHIFT_GH_TOKEN_FILE=/etc/dawnshift-token NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 ExecStart=$(command -v node) $APP_DIR/sync-server/server.js
 Restart=on-failure
 NoNewPrivileges=true
