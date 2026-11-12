@@ -8,6 +8,7 @@
 // Everything is saved after each step, so a task picks up where it left off
 // even if Dawnshift is restarted.
 import { newId } from './store-common.js';
+import { coreRulesText, hasCoreRules } from './core-rules.js';
 import { TOOLS_BY_NAME, toolsFor, needsApproval, describeCall, allowedSecrets, discordWebhooks } from './tools.js';
 
 const MAX_STEPS = 40;
@@ -29,6 +30,7 @@ export function buildSystemPrompt(store, bot) {
   const keyNames = (bot.abilities ?? []).includes('http_request') ? Object.keys(allowedSecrets(bot, store.state.secrets ?? {})) : [];
   return [
     `You are ${bot.name}, an AI coworker on a small team that works for one human (your manager).`,
+    hasCoreRules(bot) ? coreRulesText() : '',
     `Your job:\n${bot.job}`,
     `How you work:
 - Tasks come from the human or from coworkers. Do the work with your tools, then finish with a reply that contains the finished result. That final reply is what gets delivered, so make it complete and easy to act on.
@@ -48,6 +50,49 @@ export function buildSystemPrompt(store, bot) {
   ]
     .filter(Boolean)
     .join('\n\n');
+}
+
+// What a bot actually checked in a task, written by Dawnshift (not the bot),
+// so a small model can't claim "all healthy" without having looked.
+const DATA_TOOLS = new Set(['http_request', 'web_fetch']);
+const STATUS_WORDS = /\b(healthy|online|offline|running|up and running|is up|are up|is down|are down|no (specific )?issues|all good|working fine|operational)\b/i;
+
+// The data calls one task made: [{ where, ok }].
+function checksIn(task) {
+  const args = new Map();
+  for (const m of task.messages) if (m.role === 'assistant') for (const c of m.toolCalls ?? []) args.set(c.id, c.args ?? {});
+  return task.messages
+    .filter((m) => m.role === 'tool' && DATA_TOOLS.has(m.name))
+    .map((m) => {
+      let where = String(args.get(m.callId)?.url ?? '');
+      try { where = new URL(where.replace(/\{\{\w+\}\}/g, 'x')).host || where; } catch {}
+      return { where: where.replace(/\{\{(\w+)\}\}/g, '$1') || m.name, ok: !m.isError && !/^Error:/.test(m.content) };
+    });
+}
+
+// tasks: every task, so a lead's note can include what its coworkers checked.
+export function evidenceNote(task, tasks = []) {
+  const groups = [];
+  const walk = (t, depth) => {
+    const checks = checksIn(t);
+    if (depth === 0 || checks.length || STATUS_WORDS.test(t.result ?? '')) groups.push({ t, depth, checks });
+    for (const sub of tasks.filter((x) => x.parentId === t.id)) walk(sub, depth + 1);
+  };
+  walk(task, 0);
+  const all = groups.flatMap((g) => g.checks);
+  const reply = task.messages.at(-1)?.text ?? '';
+  const warn = STATUS_WORDS.test(reply) && !all.some((c) => c.ok)
+    ? `⚠️ Dawnshift check: ${groups.length > 1 ? 'neither this bot nor the coworkers it asked' : 'this bot'} made any successful web or API calls, so any status above is unverified.`
+    : '';
+  const lines = [];
+  for (const g of groups) {
+    if (!g.checks.length && g.depth === 0) continue;
+    const who = g.depth === 0 ? '' : `${g.t.botName ?? 'Coworker'}: `;
+    if (!g.checks.length) lines.push(`${who}no calls made`);
+    else for (const c of g.checks) lines.push(`${who}${c.ok ? '✓' : '✗'} ${c.where}`);
+  }
+  if (!lines.length && !warn) return '';
+  return `\n\n---\n${warn}${warn && lines.length ? '\n' : ''}${lines.length ? `Calls made in this task (checked by Dawnshift):\n${lines.join('\n')}` : ''}`;
 }
 
 function unresolvedCalls(task) {
@@ -209,7 +254,7 @@ export function createRunner({ store, callModel, maxConcurrent = 3, onChange = (
 
       const last = task.messages.at(-1);
       if (last.role === 'assistant') {
-        return finish(task, 'done', { result: last.text || '(The bot finished without writing a reply.)' });
+        return finish(task, 'done', { result: (last.text || '(The bot finished without writing a reply.)') + evidenceNote(task, store.state.tasks) });
       }
       if (task.steps >= MAX_STEPS) {
         throw new Error(`Stopped after ${MAX_STEPS} steps. Reply to the task to let the bot keep going.`);

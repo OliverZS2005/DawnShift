@@ -33,6 +33,17 @@ async function request(url, options) {
     if (typeof window !== 'undefined' && err instanceof TypeError) {
       throw new Error(`Couldn't read ${url.host} from the web version. Many websites block that for browser security. The downloadable version of Dawnshift can read them.`);
     }
+    // Node reports every network failure as just "fetch failed" and keeps the
+    // real reason (DNS, refused, bad certificate, timeout) in err.cause.
+    // Pass that on so the bot can say what actually went wrong.
+    const cause = err.cause;
+    if (cause) {
+      const why = [cause.code, cause.message].filter(Boolean).join(': ');
+      const tls = /CERT|SSL|TLS/i.test(cause.code ?? '');
+      throw new Error(`Couldn't reach ${url.host}: ${why || err.message}` + (tls
+        ? '. The HTTPS certificate could not be verified on the device running Dawnshift. The API address is probably fine: usually antivirus, a school or work network, or a proxy is intercepting HTTPS on that device. Tell the human which device this ran on; do not retry other addresses.'
+        : ''));
+    }
     throw err;
   }
 }

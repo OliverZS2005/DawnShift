@@ -9,7 +9,7 @@ PORT=3790
 APP_DIR=/opt/dawnshift
 DATA_DIR=/var/lib/dawnshift
 BRANCH=${BRANCH:-claude/ai-grok-bot-x5v1dx}
-REPO=OliverZS2005/ClaudeCodeIsTuff
+REPO=OliverZS2005/DawnShift
 
 # 1. A read-only GitHub token so the server can download from the private repo.
 if [ ! -s /root/.dawnshift-token ]; then

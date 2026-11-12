@@ -620,6 +620,31 @@ function editBot(bot) {
     ['never', 'Never ask (fully autonomous)'],
   ].map(([v, text]) => h('label', { class: 'check' }, h('input', { type: 'radio', name: 'approvals', value: v, checked: draft.approvals === v }), text));
 
+  // Core rules: on for every bot unless the owner removes them (with a warning).
+  draft.coreRules = draft.coreRules !== false;
+  const coreBox = h('fieldset', { class: 'core-rules' });
+  const drawCore = () => fill(coreBox,
+    h('legend', {}, '⚠️ Core rules'),
+    draft.coreRules
+      ? [
+          h('p', { class: 'hint', style: 'margin-top:0' }, 'Every bot follows these before its job. They stop it from making things up when something fails.'),
+          h('ol', {}, (S.coreRules ?? []).map((r) => h('li', {}, r))),
+          h('button', {
+            type: 'button',
+            class: 'quiet',
+            onclick: () => {
+              if (!confirm('Remove the core rules from this bot?\n\nThey stop the bot from making up data when an API call or tool fails. Without them it may invent results, like player counts when a server API is down, or say a message was sent when it wasn\'t. Made-up answers usually sound confident, so you may not notice until something breaks.\n\nRemove them anyway?')) return;
+              draft.coreRules = false;
+              drawCore();
+            },
+          }, 'Remove core rules'),
+        ]
+      : [
+          h('p', { class: 'hint warn', style: 'margin-top:0' }, 'This bot has no core rules. It may make up results when an API call or tool fails.'),
+          h('button', { type: 'button', onclick: () => { draft.coreRules = true; drawCore(); } }, 'Restore core rules'),
+        ]);
+  drawCore();
+
   const routineBox = h('div');
   const drawRoutines = () => fill(routineBox, 
     draft.routines.map((r, i) => {
@@ -668,6 +693,7 @@ function editBot(bot) {
         abilities: abilities.map((l) => l.querySelector('input')).filter((i) => i.checked).map((i) => i.value),
         ...(appKeys.length ? { appKeys: appKeys.map((l) => l.querySelector('input')).filter((i) => i.checked).map((i) => i.value) } : {}),
         approvals: approvals.map((l) => l.querySelector('input')).find((i) => i.checked)?.value ?? 'risky',
+        coreRules: draft.coreRules,
         routines: draft.routines.filter((r) => r.title.trim() || r.instructions.trim()),
       };
       attempt(async () => {
@@ -693,6 +719,7 @@ function editBot(bot) {
       },
     }, t.name))),
   h('div', { class: 'field' }, h('label', { for: 'bot-name' }, 'Name'), f.name),
+  coreBox,
   h('div', { class: 'field' }, h('label', { for: 'bot-job' }, 'Job'), f.job, h('div', { class: 'hint' }, 'Describe the role like you would to a new hire: what they own, how you like things done.')),
   h('div', { class: 'field' },
     h('label', { for: 'bot-conn' }, 'AI'),

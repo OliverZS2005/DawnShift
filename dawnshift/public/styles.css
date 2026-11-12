@@ -661,3 +661,8 @@ button:active:not(:disabled) { transform: scale(0.97); }
 .local-steps li { margin-bottom: 0.4rem; }
 .local-steps .warn { color: var(--bad); font-weight: 500; }
 code.copy { cursor: pointer; background: var(--sunk); padding: 0.05rem 0.3rem; border-radius: var(--radius); overflow-wrap: anywhere; }
+
+/* Core rules box in the hire/settings dialog */
+fieldset.core-rules { border-color: var(--accent); background: var(--accent-soft); }
+fieldset.core-rules ol { margin: 0.25rem 0 0.75rem; padding-left: 1.25rem; font-size: 0.9rem; }
+fieldset.core-rules .warn { color: var(--accent); font-weight: 600; }
