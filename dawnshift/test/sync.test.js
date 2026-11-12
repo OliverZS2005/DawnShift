@@ -211,3 +211,18 @@ test('recovery login, password change and account deletion', async () => {
   }
 });
 
+
+test('opening a task works (its status field is not an HTTP status)', async () => {
+  const s = await startServer();
+  try {
+    const t = (await s.call('POST', '/api/account/signup', signup('tasker'))).body.token;
+    const bot = (await s.call('POST', '/api/bots', { name: 'Helper', job: 'Helps' }, t)).body;
+    const task = await s.call('POST', '/api/tasks', { botId: bot.id, instructions: 'Say hi' }, t);
+    assert.equal(task.status, 200);
+    const full = await s.call('GET', `/api/tasks/${task.body.id}`, null, t);
+    assert.equal(full.status, 200);
+    assert.equal(typeof full.body.status, 'string');
+  } finally {
+    s.close();
+  }
+});

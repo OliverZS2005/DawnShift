@@ -391,9 +391,13 @@ export function createHandler(store, users) {
         const app = users.load(s.user.id);
         out = await app.api(req.method, req.url, body);
       }
-      const status = out?.status ?? 200;
+      // Only an explicit { status: <number>, body } reply sets the HTTP status.
+      // Ordinary answers can have their own "status" field (tasks do: "done",
+      // "running"...), which must not be mistaken for one.
+      const custom = out && typeof out.status === 'number' && 'body' in out;
+      const status = custom ? out.status : 200;
       res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', ...cors });
-      res.end(JSON.stringify(out?.status ? out.body : out));
+      res.end(JSON.stringify(custom ? out.body : out));
     } catch (err) {
       const status = err.status ?? 500;
       if (status === 500) console.error(err);
