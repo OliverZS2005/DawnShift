@@ -17,6 +17,10 @@ import { fileURLToPath } from 'node:url';
 import { createStore } from '../src/store.js';
 import { createRunner } from '../src/runner.js';
 import { createApi } from '../src/api.js';
+
+const APP_VERSION = (() => {
+  try { return JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version; } catch { return null; }
+})();
 import { callModel } from '../src/providers.js';
 import { setOwnPort } from '../src/tools.js';
 import { newRecoveryCode, normalizeRecoveryCode } from '../src/sync-crypto.js';
@@ -248,7 +252,7 @@ export function createHandler(store, users) {
   };
 
   const accounts = {
-    'GET /api/health': () => ({ ok: true, service: 'dawnshift' }),
+    'GET /api/health': () => ({ ok: true, service: 'dawnshift', version: APP_VERSION }),
 
     'POST /api/account/signup': async ({ body }) => {
       const u = checkUsername(body.username);

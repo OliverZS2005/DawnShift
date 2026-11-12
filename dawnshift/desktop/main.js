@@ -29,6 +29,8 @@ async function start() {
   dawnshift.dataDir = path.join(app.getPath('userData'), 'data');
   Menu.setApplicationMenu(buildMenu());
   openWindow();
+  setTimeout(checkForDesktopUpdate, 5000);
+  setInterval(checkForDesktopUpdate, 6 * 60 * 60 * 1000);
   app.on('activate', () => {
     if (!win) openWindow();
   });
@@ -118,6 +120,36 @@ function buildMenu() {
       ],
     },
   ]);
+}
+
+// The window shows the live site (which has its own update banner), but the
+// app around it is installed. Tell people when a newer installer exists.
+const DOWNLOAD_SLUG = process.platform === 'win32' ? 'windows'
+  : process.platform === 'darwin' ? (process.arch === 'arm64' ? 'mac-arm' : 'mac-intel')
+  : process.env.APPIMAGE ? 'linux-appimage' : 'linux-deb';
+let toldAbout = null;
+function newer(a, b) {
+  const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  return false;
+}
+async function checkForDesktopUpdate() {
+  try {
+    const res = await fetch(`${WEBSITE}/api/health`, { signal: AbortSignal.timeout(10000) });
+    const { version } = await res.json();
+    if (!version || !newer(version, app.getVersion()) || toldAbout === version || !win) return;
+    toldAbout = version;
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'info',
+      buttons: ['Download update', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'Update available',
+      message: `A new version of the Dawnshift desktop app is ready (${version}).`,
+      detail: `You have ${app.getVersion()}. Download it and install it over this one. Your account and bots stay the same.`,
+    });
+    if (response === 0) shell.openExternal(`${WEBSITE}/api/download/${DOWNLOAD_SLUG}`);
+  } catch {}
 }
 
 // Bots run on the server, so closing the window just quits the app.
