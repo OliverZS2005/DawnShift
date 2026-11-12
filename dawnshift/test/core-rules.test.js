@@ -60,7 +60,7 @@ test('network failures pass on the real reason instead of just "fetch failed"', 
 test('Dawnshift flags a status report from a bot that checked nothing', async () => {
   const { evidenceNote } = await import('../src/runner.js');
   const task = { messages: [{ role: 'user', content: 'status?' }, { role: 'assistant', text: 'Proxmox nodes are healthy, no issues.', toolCalls: [] }] };
-  assert.match(evidenceNote(task), /no successful web or API calls/);
+  assert.match(evidenceNote(task), /made any successful web or API calls/);
 });
 
 test('Dawnshift lists the calls a bot made, and does not warn when one succeeded', async () => {
@@ -73,7 +73,7 @@ test('Dawnshift lists the calls a bot made, and does not warn when one succeeded
     { role: 'assistant', text: 'Proxmox is healthy. YouTube call failed.', toolCalls: [] },
   ] };
   const note = evidenceNote(task);
-  assert.ok(!/no successful/.test(note));
+  assert.ok(!/unverified/.test(note));
   assert.match(note, /✓ PROXMOX_BASE_URL/);
   assert.match(note, /✗ www\.googleapis\.com/);
 });
@@ -81,4 +81,26 @@ test('Dawnshift lists the calls a bot made, and does not warn when one succeeded
 test('plain replies with no status claims and no calls get no note', async () => {
   const { evidenceNote } = await import('../src/runner.js');
   assert.equal(evidenceNote({ messages: [{ role: 'assistant', text: 'Here is your email draft.', toolCalls: [] }] }), '');
+});
+
+test("a lead's report includes its coworkers' checks and is flagged when nobody checked", async () => {
+  const { evidenceNote } = await import('../src/runner.js');
+  const lead = { id: 't1', messages: [
+    { role: 'assistant', text: '', toolCalls: [{ id: 'd', name: 'delegate_task', args: {} }] },
+    { role: 'tool', callId: 'd', name: 'delegate_task', content: 'Watchdog: all healthy' },
+    { role: 'assistant', text: 'Proxmox is healthy, no issues.', toolCalls: [] },
+  ] };
+  const watchdog = { id: 't2', parentId: 't1', botName: 'Homelab Watchdog', result: 'All healthy.', messages: [{ role: 'assistant', text: 'All healthy.', toolCalls: [] }] };
+  const note = evidenceNote(lead, [lead, watchdog]);
+  assert.match(note, /neither this bot nor the coworkers/);
+  assert.match(note, /Homelab Watchdog: no calls made/);
+
+  watchdog.messages = [
+    { role: 'assistant', text: '', toolCalls: [{ id: 'h', name: 'http_request', args: { url: '{{PROXMOX_BASE_URL}}/api2/json/nodes' } }] },
+    { role: 'tool', callId: 'h', name: 'http_request', content: '{"data":[]}' },
+    { role: 'assistant', text: 'All healthy.', toolCalls: [] },
+  ];
+  const ok = evidenceNote(lead, [lead, watchdog]);
+  assert.ok(!/unverified/.test(ok));
+  assert.match(ok, /Homelab Watchdog: ✓ PROXMOX_BASE_URL/);
 });
