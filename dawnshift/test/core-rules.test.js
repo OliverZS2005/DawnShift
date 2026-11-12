@@ -38,3 +38,21 @@ test('hiring keeps core rules on unless explicitly turned off, and edits keep th
   const renamed = await call('PUT', `/api/bots/${hired.id}`, { name: 'B' });
   assert.equal(renamed.coreRules, false);
 });
+
+test('network failures pass on the real reason instead of just "fetch failed"', async () => {
+  const { TOOLS_BY_NAME } = await import('../src/tools.js');
+  const tool = TOOLS_BY_NAME.web_fetch;
+  const store = makeStore();
+  const b = bot({ abilities: ['http_request', 'web_fetch'] });
+  store.state.bots.push(b);
+  const args = { url: 'http://does-not-exist.invalid/', method: 'GET' };
+  let message = '';
+  try {
+    const out = await tool.run(args, { store, bot: b });
+    message = out?.content ?? String(out);
+  } catch (err) {
+    message = err.message;
+  }
+  assert.ok(!/^fetch failed$/.test(message), message);
+  assert.match(message, /ENOTFOUND|EAI_AGAIN|does-not-exist/);
+});

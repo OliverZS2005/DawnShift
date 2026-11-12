@@ -33,6 +33,14 @@ async function request(url, options) {
     if (typeof window !== 'undefined' && err instanceof TypeError) {
       throw new Error(`Couldn't read ${url.host} from the web version. Many websites block that for browser security. The downloadable version of Dawnshift can read them.`);
     }
+    // Node reports every network failure as just "fetch failed" and keeps the
+    // real reason (DNS, refused, bad certificate, timeout) in err.cause.
+    // Pass that on so the bot can say what actually went wrong.
+    const cause = err.cause;
+    if (cause) {
+      const why = [cause.code, cause.message].filter(Boolean).join(': ');
+      throw new Error(`Couldn't reach ${url.host}: ${why || err.message}`);
+    }
     throw err;
   }
 }
