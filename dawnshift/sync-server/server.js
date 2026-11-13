@@ -192,8 +192,7 @@ function createLimiter() {
 export function createUsers(store) {
   const cache = new Map();
 
-  // The owner: usernames in DAWNSHIFT_ADMINS or DATA_DIR/owners.txt, or else
-  // the first account ever made on this server.
+  // The owner: usernames in DAWNSHIFT_ADMINS or DATA_DIR/owners.txt.
   function isOwner(userId) {
     const entries = Object.entries(store.db.users);
     // Also read DATA_DIR/owners.txt (one username per line), so the owner
@@ -201,9 +200,9 @@ export function createUsers(store) {
     let fromFile = '';
     try { if (store.dir) fromFile = fs.readFileSync(path.join(store.dir, 'owners.txt'), 'utf8'); } catch {}
     const admins = `${process.env.DAWNSHIFT_ADMINS ?? ''},${fromFile}`.split(/[\s,]+/).map((x) => x.trim().toLowerCase()).filter(Boolean);
-    if (admins.length) return entries.some(([name, u]) => u.id === userId && admins.includes(name.toLowerCase()));
-    const first = entries.sort(([, a], [, b]) => String(a.createdAt).localeCompare(String(b.createdAt)))[0];
-    return Boolean(first && first[1].id === userId);
+    // Nobody is the owner until one is named: guessing (say, the oldest
+    // account) could hand a stranger the keys to the home network.
+    return entries.some(([name, u]) => u.id === userId && admins.includes(name.toLowerCase()));
   }
 
   function load(userId) {

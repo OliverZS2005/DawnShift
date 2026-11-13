@@ -1137,7 +1137,7 @@ function renderTrustedHosts() {
   const hosts = S.trustedHosts ?? [];
   const note = document.getElementById('home-network-note');
   if (note) note.textContent = S.homeNetwork === false
-    ? 'Your account\'s bots can only reach the public internet on this server. Home network addresses (like 192.168.x.x) are reserved for the server\'s owner.'
+    ? 'Your account\'s bots can only reach the public internet on this server. Home network addresses (like 192.168.x.x) are only for the server\'s owner, set in owners.txt on the server.'
     : 'Your bots can reach your home network from this server.';
   fill(list, ...(hosts.length
     ? hosts.map((n) => h('div', { class: 'list-item' },
