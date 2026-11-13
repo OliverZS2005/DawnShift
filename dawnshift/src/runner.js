@@ -9,7 +9,7 @@
 // even if Dawnshift is restarted.
 import { newId } from './store-common.js';
 import { coreRulesText, hasCoreRules } from './core-rules.js';
-import { TOOLS_BY_NAME, toolsFor, needsApproval, describeCall, allowedSecrets, discordWebhooks } from './tools.js';
+import { TOOLS_BY_NAME, toolsFor, needsApproval, describeCall, allowedSecrets, discordWebhooks, publicAddress } from './tools.js';
 
 const MAX_STEPS = 40;
 const ACTIVE = new Set(['queued', 'running', 'needs_you', 'waiting']);
@@ -23,7 +23,11 @@ function requestError(message) {
 
 export function buildSystemPrompt(store, bot) {
   const team = store.state.bots
-    .map((b) => `- ${b.name}${b.id === bot.id ? ' (you)' : ''}: ${b.job.split('\n')[0]}`)
+    .map((b) => {
+      const keys = (b.abilities ?? []).includes('http_request') ? Object.keys(allowedSecrets(b, store.state.secrets ?? {})) : [];
+      const can = keys.length ? ` [can call web APIs with: ${keys.join(', ')}]` : '';
+      return `- ${b.name}${b.id === bot.id ? ' (you)' : ''}: ${b.job.split('\n')[0]}${can}`;
+    })
     .join('\n');
   const memory = (bot.memory ?? []).map((m, i) => `${i + 1}. ${m}`).join('\n');
   const canDelegate = (bot.abilities ?? []).includes('delegate_task');
@@ -36,9 +40,11 @@ export function buildSystemPrompt(store, bot) {
 - Tasks come from the human or from coworkers. Do the work with your tools, then finish with a reply that contains the finished result. That final reply is what gets delivered, so make it complete and easy to act on.
 - Use ask_human only when you truly need something only the human can give: a decision, missing information, or access. Actions that need approval are held for the human automatically, so don't ask permission separately.
 - Use remember to save lasting facts (preferences, contacts, decisions, how things are done) so you know them next time.
-- Read the team board for context and post updates your coworkers would need.`,
+- Read the team board for context and post updates your coworkers would need. To post, call post_to_team_board yourself; never ask the human whether to post.`,
     canDelegate
-      ? `You lead the team. Split big jobs into pieces, hand each piece to the coworker whose job fits with delegate_task, then combine their results. Do small jobs yourself.`
+      ? `You lead the team. Split big jobs into pieces, hand each piece to the coworker whose job fits with delegate_task, then combine their results. Do small jobs yourself.
+- Only coworkers marked [can call web APIs] can check real systems. You can't, so never report a status they didn't actually check.
+- When the human replies with more information or says "try again", call delegate_task again for each coworker that needs to redo its part, and include the new information in the instructions. Don't just rewrite your summary.`
       : '',
     (bot.abilities ?? []).includes('http_request') && Object.keys(discordWebhooks(bot, store.state.secrets)).length
       ? `To post to Discord, call the send_discord_message tool with the message text. Never just write the message in your reply — actually call the tool.`
@@ -46,6 +52,8 @@ export function buildSystemPrompt(store, bot) {
     keyNames.length
       ? `App keys you can use in web API calls (write {{NAME}}; you never see the value). Use the exact address given; never guess or invent API addresses:\n${keyNames.map((n) => {
           const info = store.state.secretInfo?.[n] ?? {};
+          const address = publicAddress(store.state.secrets[n]);
+          if (address) return `- {{${n}}} = ${address} (a web address, not a secret: start your URLs with it, e.g. ${address}/...)${info.note ? `\n  How to use: ${info.note}` : ''}`;
           return `- {{${n}}}${info.url ? ` — only works with ${info.url}` : ''}${info.note ? `\n  How to use: ${info.note}` : ''}`;
         }).join('\n')}`
       : '',

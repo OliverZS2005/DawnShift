@@ -132,6 +132,18 @@ export function allowedSecrets(bot, secrets) {
 }
 
 // Replaces {{NAME}} with a saved app key. The bot only ever sees the name.
+// A key whose value is just a website address (like prox.example.com or
+// https://prox.example.com:8006) isn't secret, so bots may see it. Returns
+// that address, or null for anything that might hold a token.
+export function publicAddress(value) {
+  const v = String(value ?? '').trim().replace(/\/+$/, '');
+  if (!/^(https?:\/\/)?[a-z0-9.-]+(:\d{1,5})?$/i.test(v) || !/[a-z0-9]\.[a-z0-9]/i.test(v)) return null;
+  try {
+    const u = new URL(/^https?:\/\//i.test(v) ? v : `https://${v}`);
+    return u.origin;
+  } catch { return null; }
+}
+
 // Which saved keys a request mentions as {{NAME}}.
 function keysUsed(parts, secrets) {
   const names = new Set();
@@ -353,7 +365,11 @@ export const TOOLS = [
     async run({ method = 'GET', url, headers = {}, body }, { store, bot }) {
       const all = store.state.secrets;
       const secrets = allowedSecrets(bot, all);
-      const u = new URL(fillSecrets(url, secrets));
+      let filled = fillSecrets(url, secrets).trim();
+      // {{BASE_URL}}/api where the saved address has no https:// in front.
+      if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(filled)) filled = `https://${filled.replace(/^\/+/, '')}`;
+      let u;
+      try { u = new URL(filled); } catch { throw new Error(`That isn't a valid web address: ${url}`); }
       checkUrl(u);
       const used = keysUsed([url, body, ...Object.values(headers ?? {})], secrets);
       checkKeyAddresses(used, u, store);

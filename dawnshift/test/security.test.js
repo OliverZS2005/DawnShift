@@ -84,3 +84,32 @@ test('bots are told each key\'s website and how to use it', async () => {
   assert.match(prompt, /How to use: GET \/api\/v2\/servers/);
   assert.ok(!prompt.includes("'v'"));
 });
+
+test('a key that is just a website address is shown to bots and works without https://', async () => {
+  const { publicAddress } = await import('../src/tools.js');
+  assert.equal(publicAddress('prox.dawnlife.online'), 'https://prox.dawnlife.online');
+  assert.equal(publicAddress('https://prox.example.com:8006/'), 'https://prox.example.com:8006');
+  for (const secretish of ['https://discord.com/api/webhooks/1/abc', 'sk-abc123', 'root@pam!x=1234', 'https://u:p@host.com']) assert.equal(publicAddress(secretish), null, secretish);
+
+  const { buildSystemPrompt } = await import('../src/runner.js');
+  const { store } = setup();
+  store.state.secrets = { PROXMOX_BASE_URL: 'prox.dawnlife.online', PROXMOX_TOKEN: 'root@pam!ds=secret' };
+  store.state.bots = [
+    { id: 'lead', name: 'Chief of Staff', job: 'Leads', abilities: ['delegate_task'] },
+    { id: 'w', name: 'Homelab Watchdog', job: 'Watches', abilities: ['http_request'] },
+  ];
+  const watch = buildSystemPrompt(store, store.state.bots[1]);
+  assert.match(watch, /\{\{PROXMOX_BASE_URL\}\} = https:\/\/prox\.dawnlife\.online/);
+  assert.ok(!watch.includes('ds=secret'), 'real secrets stay hidden');
+  const lead = buildSystemPrompt(store, store.state.bots[0]);
+  assert.match(lead, /Homelab Watchdog: Watches \[can call web APIs with: PROXMOX_BASE_URL, PROXMOX_TOKEN\]/);
+  assert.match(lead, /try again/);
+
+  const site = await listen((req, res) => res.end('nodes'));
+  try {
+    store.state.secrets.LOCAL = site.base.replace('http://', '');
+    // No scheme in the saved value: https:// is added, so this local http test
+    // server can't answer, but the address is accepted rather than rejected.
+    await assert.rejects(call(store, { url: '{{LOCAL}}/api2/json/nodes' }), /Couldn't reach 127\.0\.0\.1/);
+  } finally { site.server.close(); }
+});
