@@ -260,14 +260,23 @@ async function callOpenAI(conn, { model, system, messages, tools }) {
     }));
   }
   let res;
-  try {
-    res = await client.chat.completions.create(params);
-  } catch (err) {
-    // Some local models can't use tools at all. Rather than failing, let the
-    // bot work as a plain chat model.
-    if (!(err instanceof OpenAI.BadRequestError) || !params.tools || !/tool/i.test(err.message)) throw err;
-    delete params.tools;
-    res = await client.chat.completions.create(params);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      res = await client.chat.completions.create(params);
+      break;
+    } catch (err) {
+      if (!(err instanceof OpenAI.BadRequestError) || !params.tools) throw err;
+      // The model wrote a broken tool call (Groq: "tool_use_failed", "Tool
+      // call validation failed"). That's a one-off slip, so ask again.
+      if (/tool_use_failed|tool call validation|failed to call a function|parse tool call/i.test(err.message) && attempt < 2) continue;
+      // Some local models can't use tools at all. Rather than failing, let
+      // the bot work as a plain chat model.
+      if (/(does not|doesn't|do not) support tools|tools? (are|is) not supported|unsupported.*tool|tool.*unsupported/i.test(err.message)) {
+        delete params.tools;
+        continue;
+      }
+      throw err;
+    }
   }
   const choice = res.choices?.[0];
   if (!choice) throw new Error('The AI returned an empty response.');

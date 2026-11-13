@@ -12,6 +12,8 @@ import { coreRulesText, hasCoreRules } from './core-rules.js';
 import { TOOLS_BY_NAME, toolsFor, needsApproval, describeCall, allowedSecrets, discordWebhooks, publicAddress } from './tools.js';
 
 const MAX_STEPS = 40;
+// Reads that give the same answer every time, so repeating them is a loop.
+const READ_ONLY_REPEATABLE = new Set(['list_files', 'read_file', 'list_team', 'read_team_board']);
 const ACTIVE = new Set(['queued', 'running', 'needs_you', 'waiting']);
 
 // A mistake in what was asked (as opposed to a crash).
@@ -44,6 +46,7 @@ export function buildSystemPrompt(store, bot) {
     canDelegate
       ? `You lead the team. Split big jobs into pieces, hand each piece to the coworker whose job fits with delegate_task, then combine their results. Do small jobs yourself.
 - Only coworkers marked [can call web APIs] can check real systems. You can't, so never report a status they didn't actually check.
+- Those coworkers already have the addresses and keys they need. Never ask the human for API addresses, base URLs or keys: hand the job to the coworker and let them do it.
 - When the human replies with more information or says "try again", call delegate_task again for each coworker that needs to redo its part, and include the new information in the instructions. Don't just rewrite your summary.`
       : '',
     (bot.abilities ?? []).includes('http_request') && Object.keys(discordWebhooks(bot, store.state.secrets)).length
@@ -203,6 +206,13 @@ export function createRunner({ store, callModel, maxConcurrent = 3, onChange = (
   }
 
   // Runs one tool call. Returns false if the task has to pause.
+  function timesCalled(task, call) {
+    const key = `${call.name} ${JSON.stringify(call.args ?? {})}`;
+    let n = 0;
+    for (const m of task.messages) for (const c of m.toolCalls ?? []) if (`${c.name} ${JSON.stringify(c.args ?? {})}` === key) n++;
+    return n;
+  }
+
   async function resolveCall(task, bot, call) {
     const tool = TOOLS_BY_NAME[call.name];
     const allowed = tool && toolsFor(bot).includes(tool);
@@ -215,6 +225,12 @@ export function createRunner({ store, callModel, maxConcurrent = 3, onChange = (
       return true;
     }
     const pending = task.pending?.callId === call.id ? task.pending : null;
+    // A bot stuck repeating the exact same read (list_files over and over)
+    // gets told to use what it already has instead of burning steps.
+    if (!pending && READ_ONLY_REPEATABLE.has(call.name) && timesCalled(task, call) >= 3) {
+      addResult(task, call, `You already ran ${call.name} with these exact arguments ${timesCalled(task, call) - 1} times and got the same result. Don't run it again: use that result, try something different, or finish with your answer.`, true);
+      return true;
+    }
     if (pending?.kind === 'approval' && pending.denied) {
       task.pending = null;
       addResult(task, call, `The human said no to this action.${pending.note ? ` Their note: ${pending.note}` : ''}`, true);

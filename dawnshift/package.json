@@ -1,7 +1,7 @@
 {
   "name": "dawnshift",
   "productName": "Dawnshift",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "A team of AI coworkers you run yourself. Each bot can use Claude, ChatGPT, Grok, Gemini, or a local model.",
   "author": {
     "name": "OliverZS2005",

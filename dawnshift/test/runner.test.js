@@ -175,3 +175,13 @@ test('routines create a task when due, and not twice while one is running', asyn
   runner.runDueRoutines(Date.now() + 2 * 3600000);
   assert.equal(store.state.tasks.length, 1);
 });
+
+test('a bot stuck repeating the same read is told to stop', async () => {
+  const again = (n) => ({ toolCalls: [call(`t${n}`, 'list_team', {})] });
+  const { store, runner } = setup({ Boss: [again(1), again(2), again(3), again(4), { text: 'Done.' }] });
+  const task = runner.createTask({ botId: 'b1', title: 'x', instructions: 'Loop' });
+  const done = await settled(store, task.id);
+  assert.equal(done.status, 'done');
+  const results = done.messages.filter((m) => m.role === 'tool').flatMap((m) => m.results ?? [m]).map((r) => JSON.stringify(r));
+  assert.ok(results.some((r) => r.includes("Don't run it again")), 'the repeat was stopped');
+});
