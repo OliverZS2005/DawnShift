@@ -144,6 +144,7 @@ export function createApi(store, runner) {
       tasks: s.tasks.map(taskSummary),
       board: s.board.slice(-200),
       secretNames: Object.keys(s.secrets).sort(),
+      trustedHosts: s.trustedHosts ?? [],
       presets: PRESETS,
       abilities: ABILITIES,
       templates: TEMPLATES,
@@ -280,6 +281,23 @@ export function createApi(store, runner) {
     const name = decodeURIComponent(params.name);
     delete store.state.secrets[name];
     markDeleted(store.state, `secret:${name}`);
+    store.save();
+    return { ok: true };
+  });
+
+  // The user's own servers with self-signed certificates.
+  on('POST', '/api/trusted-hosts', ({ body }) => {
+    let host = String(body.host ?? '').trim().toLowerCase();
+    try { if (/^https?:\/\//.test(host)) host = new URL(host).hostname; } catch {}
+    host = host.replace(/^\[|\]$/g, '').replace(/:\d+$/, '').replace(/\/.*$/, '');
+    if (!/^[a-z0-9.-]{1,253}$/.test(host) && !/^[0-9a-f:]+$/.test(host)) throw bad('Enter a server name or IP address, like 192.168.1.20 or proxmox.home.');
+    store.state.trustedHosts = [...new Set([...(store.state.trustedHosts ?? []), host])].slice(0, 50);
+    store.save();
+    return { ok: true, host };
+  });
+  on('DELETE', '/api/trusted-hosts/:host', ({ params }) => {
+    const host = decodeURIComponent(params.host);
+    store.state.trustedHosts = (store.state.trustedHosts ?? []).filter((h) => h !== host);
     store.save();
     return { ok: true };
   });

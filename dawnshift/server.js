@@ -1,5 +1,6 @@
 // Dawnshift: a team of AI coworkers that runs on your own computer.
 // Start it with `npm start`, then open http://localhost:3777
+import { useSystemCertificates } from './src/system-ca.js';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
@@ -11,6 +12,8 @@ import { createApi, HttpError } from './src/api.js';
 import { callModel } from './src/providers.js';
 import { setOwnPort } from './src/tools.js';
 import { createSync } from './src/sync.js';
+
+useSystemCertificates();
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3777);

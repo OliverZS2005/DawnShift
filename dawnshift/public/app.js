@@ -1031,6 +1031,7 @@ function mountSettings(main) {
           attempt(async () => { await api('POST', '/api/secrets', { name: name.value, value: value.value }); name.value = ''; value.value = ''; await refresh(); }, add);
         },
       }, h('div', { class: 'grow' }, name), h('div', { class: 'grow' }, value), add)),
+    trustedHostsBlock(),
     h('section', { class: 'block' }, notifyBlock()),
     h('section', { class: 'block' }, ...downloadAppBlock()),
     h('section', { class: 'block' },
@@ -1086,6 +1087,40 @@ function renderSettings() {
             } }, 'Remove'));
         })
       : [h('p', { class: 'hint' }, 'No app keys yet.')]));
+  renderTrustedHosts();
+}
+
+// The user's own servers (Proxmox, Crafty, a NAS) use self-signed HTTPS
+// certificates, which bots would otherwise refuse.
+function trustedHostsBlock() {
+  const host = h('input', { placeholder: 'e.g. 192.168.1.20 or proxmox.home', 'aria-label': 'Server name or IP address' });
+  const add = h('button', { class: 'primary', type: 'submit' }, 'Add');
+  return h('section', { class: 'block' },
+    h('h2', {}, 'Your own servers'),
+    h('p', { class: 'hint' }, 'Home servers like Proxmox, Crafty or a NAS often use a self-signed certificate, so bots can\'t verify them and fail with a certificate error. Add the server here and bots will accept its certificate. Only add servers you own.'),
+    h('div', { class: 'list', id: 'trusted-list' }),
+    h('form', {
+      class: 'row',
+      style: 'margin-top:1rem',
+      onsubmit: (e) => {
+        e.preventDefault();
+        attempt(async () => { await api('POST', '/api/trusted-hosts', { host: host.value }); host.value = ''; await refresh(); }, add);
+      },
+    }, h('div', { class: 'grow' }, host), add));
+}
+
+function renderTrustedHosts() {
+  const list = document.getElementById('trusted-list');
+  if (!list) return;
+  const hosts = S.trustedHosts ?? [];
+  fill(list, ...(hosts.length
+    ? hosts.map((n) => h('div', { class: 'list-item' },
+        h('div', { class: 'grow' }, h('code', {}, n)),
+        h('button', { class: 'danger', onclick: (e) => {
+          if (!confirm(`Stop trusting ${n}'s own certificate?`)) return;
+          attempt(async () => { await api('DELETE', `/api/trusted-hosts/${encodeURIComponent(n)}`); await refresh(); }, e.currentTarget);
+        } }, 'Remove')))
+    : [h('p', { class: 'hint' }, 'None yet.')]));
 }
 
 // ---------- account (hosted) ----------

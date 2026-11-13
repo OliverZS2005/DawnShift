@@ -7,6 +7,7 @@
 //
 // Run: node sync-server/server.js
 // Env: PORT (default 3790), HOST, DATA_DIR, STATIC_DIR, TRUST_PROXY.
+import { useSystemCertificates } from '../src/system-ca.js';
 import http from 'node:http';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
@@ -24,6 +25,8 @@ const APP_VERSION = (() => {
 import { callModel } from '../src/providers.js';
 import { setOwnPort } from '../src/tools.js';
 import { newRecoveryCode, normalizeRecoveryCode } from '../src/sync-crypto.js';
+
+const TRUSTS_SYSTEM_CAS = useSystemCertificates();
 
 const scrypt = promisify(crypto.scrypt);
 
@@ -442,7 +445,16 @@ async function serveStatic(root, req, res) {
 
 // ---------- start ----------
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+const IS_MAIN = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const SYSTEM_BUNDLE = '/etc/ssl/certs/ca-certificates.crt';
+if (IS_MAIN && !TRUSTS_SYSTEM_CAS && !process.env.NODE_EXTRA_CA_CERTS && fs.existsSync(SYSTEM_BUNDLE)) {
+  // Older Node can't change its trusted certificates while running, so start
+  // again with the system's list added (see src/system-ca.js).
+  const { spawn } = await import('node:child_process');
+  const child = spawn(process.execPath, process.argv.slice(1), { stdio: 'inherit', env: { ...process.env, NODE_EXTRA_CA_CERTS: SYSTEM_BUNDLE } });
+  for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => child.kill(sig));
+  child.on('exit', (code) => process.exit(code ?? 1));
+} else if (IS_MAIN) {
   const PORT = Number(process.env.PORT || 3790);
   const HOST = process.env.HOST || '127.0.0.1';
   const DATA_DIR = path.resolve(process.env.DATA_DIR || './sync-data');

@@ -8,6 +8,9 @@ export const emptyState = () => ({
   tasks: [],
   board: [],
   secrets: {},
+  // Hostnames of the user's own servers (Proxmox, Crafty, a NAS...) whose
+  // self-signed HTTPS certificate bots should accept.
+  trustedHosts: [],
   // id -> when it was deleted, so syncing devices don't bring it back.
   deleted: {},
 });

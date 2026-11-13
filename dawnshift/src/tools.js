@@ -26,8 +26,38 @@ function checkUrl(u) {
 
 // Like fetch, but explains the most common failure in the web version:
 // browsers only let a page read other websites that explicitly allow it.
-async function request(url, options) {
+// Fetch for one of the user's own servers with a self-signed certificate:
+// encrypted as normal, but the certificate isn't checked against a known
+// authority. Only used for hostnames the user listed in Settings.
+async function fetchSelfSigned(url, { method = 'GET', headers = {}, body, signal } = {}) {
+  const https = await import('node:https');
+  return new Promise((resolve, reject) => {
+    const req = https.request(url, { method, headers, rejectUnauthorized: false, signal }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => {
+        const text = Buffer.concat(chunks).toString('utf8');
+        resolve({
+          ok: res.statusCode >= 200 && res.statusCode < 300,
+          status: res.statusCode,
+          headers: { get: (k) => res.headers[String(k).toLowerCase()] ?? null },
+          text: async () => text,
+          json: async () => JSON.parse(text),
+        });
+      });
+      res.on('error', reject);
+    });
+    req.on('error', (e) => { const err = new Error('fetch failed'); err.cause = e; reject(err); });
+    if (body != null) req.write(body);
+    req.end();
+  });
+}
+
+async function request(url, options, trustedHosts = []) {
   try {
+    if (url.protocol === 'https:' && typeof window === 'undefined' && trustedHosts.includes(url.hostname.replace(/^\[|\]$/g, ''))) {
+      return await fetchSelfSigned(url, options);
+    }
     return await fetch(url, options);
   } catch (err) {
     if (typeof window !== 'undefined' && err instanceof TypeError) {
@@ -41,7 +71,7 @@ async function request(url, options) {
       const why = [cause.code, cause.message].filter(Boolean).join(': ');
       const tls = /CERT|SSL|TLS/i.test(cause.code ?? '');
       throw new Error(`Couldn't reach ${url.host}: ${why || err.message}` + (tls
-        ? '. The HTTPS certificate could not be verified on the device running Dawnshift. The API address is probably fine: usually antivirus, a school or work network, or a proxy is intercepting HTTPS on that device. Tell the human which device this ran on; do not retry other addresses.'
+        ? `. The HTTPS certificate of ${url.hostname} could not be verified. If ${url.hostname} is one of the human's own servers (Proxmox, Crafty, a NAS, a router), tell them to add ${url.hostname} under Settings → Your own servers. Otherwise something on the network is intercepting HTTPS. Do not retry other addresses.`
         : ''));
     }
     throw err;
@@ -215,10 +245,10 @@ export const TOOLS = [
     label: 'Read web pages',
     description: 'Download a web page (or any URL) and return its text.',
     parameters: schema({ url: str('The full http(s) URL.') }),
-    async run({ url }) {
+    async run({ url }, { store } = {}) {
       const u = new URL(String(url));
       checkUrl(u);
-      const res = await request(u, { redirect: 'follow', signal: AbortSignal.timeout(20000), headers: { 'user-agent': 'Dawnshift/0.1' } });
+      const res = await request(u, { redirect: 'follow', signal: AbortSignal.timeout(20000), headers: { 'user-agent': 'Dawnshift/0.1' } }, store?.state?.trustedHosts);
       const type = res.headers.get('content-type') || '';
       let body = await res.text();
       if (type.includes('html')) body = htmlToText(body);
@@ -253,7 +283,7 @@ export const TOOLS = [
         headers: h,
         body: body == null || method === 'GET' ? undefined : fillSecrets(body, secrets),
         signal: AbortSignal.timeout(30000),
-      });
+      }, store?.state?.trustedHosts);
       const text = hideSecrets(await res.text(), all);
       return { content: clip(`HTTP ${res.status}\n\n${text}`, MAX_FETCH_CHARS), isError: !res.ok };
     },
@@ -286,7 +316,7 @@ export const TOOLS = [
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ content: text }),
         signal: AbortSignal.timeout(30000),
-      });
+      }, store?.state?.trustedHosts);
       if (res.ok) return { content: `Posted to Discord (${name}).` };
       return { content: `Discord said HTTP ${res.status}: ${hideSecrets(await res.text(), store.state.secrets).slice(0, 500)}`, isError: true };
     },
