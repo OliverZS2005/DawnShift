@@ -31,6 +31,7 @@ const TRUSTS_SYSTEM_CAS = useSystemCertificates();
 const scrypt = promisify(crypto.scrypt);
 
 const MAX_JSON = 32 * 1024;
+const SIGNUPS_PER_HOUR = Number(process.env.DAWNSHIFT_SIGNUPS_PER_HOUR || 5);
 const MAX_UPLOAD = 2 * 1024 * 1024;
 // Where the mobile app and desktop app run from, so they can call the API.
 const APP_ORIGINS = new Set(['https://localhost', 'capacitor://localhost']);
@@ -119,6 +120,7 @@ export async function openDb(dir) {
   const serial = (fn) => (queue = queue.then(fn, fn));
   return {
     db,
+    dir,
     userDir: (id) => path.join(dir, 'users', id),
     save: () => serial(() => writeAtomic(file, JSON.stringify(db))),
     removeUser: (id) => serial(() => fsp.rm(path.join(dir, 'users', id), { recursive: true, force: true })),
@@ -190,10 +192,28 @@ function createLimiter() {
 export function createUsers(store) {
   const cache = new Map();
 
+  // The owner: usernames in DAWNSHIFT_ADMINS or DATA_DIR/owners.txt, or else
+  // the first account ever made on this server.
+  function isOwner(userId) {
+    const entries = Object.entries(store.db.users);
+    // Also read DATA_DIR/owners.txt (one username per line), so the owner
+    // can be set without editing the service.
+    let fromFile = '';
+    try { if (store.dir) fromFile = fs.readFileSync(path.join(store.dir, 'owners.txt'), 'utf8'); } catch {}
+    const admins = `${process.env.DAWNSHIFT_ADMINS ?? ''},${fromFile}`.split(/[\s,]+/).map((x) => x.trim().toLowerCase()).filter(Boolean);
+    if (admins.length) return entries.some(([name, u]) => u.id === userId && admins.includes(name.toLowerCase()));
+    const first = entries.sort(([, a], [, b]) => String(a.createdAt).localeCompare(String(b.createdAt)))[0];
+    return Boolean(first && first[1].id === userId);
+  }
+
   function load(userId) {
     if (cache.has(userId)) return cache.get(userId);
     const dataDir = store.userDir(userId);
     const s = createStore(dataDir);
+    // Only the server's owner may let bots reach the home network (Proxmox,
+    // Crafty, the router...). Everyone else's bots can only reach the public
+    // internet, so a stranger's account can't poke around the LAN.
+    s.allowPrivateNetwork = isOwner(userId);
     const runner = createRunner({ store: s, callModel });
     runner.start();
     const entry = { store: s, runner, api: createApi(s, runner) };
@@ -230,6 +250,7 @@ export function createUsers(store) {
 export function createHandler(store, users) {
   const { db } = store;
   const limiter = createLimiter();
+  const signups = new Map();
 
   function newSession(username, { recovery = false } = {}) {
     const token = crypto.randomBytes(32).toString('base64url');
@@ -257,7 +278,11 @@ export function createHandler(store, users) {
   const accounts = {
     'GET /api/health': () => ({ ok: true, service: 'dawnshift', version: APP_VERSION }),
 
-    'POST /api/account/signup': async ({ body }) => {
+    'POST /api/account/signup': async ({ body, ip }) => {
+      // At most a few new accounts per address per hour, so nobody can fill
+      // the server with throwaway accounts.
+      const recent = (signups.get(ip) ?? []).filter((t) => Date.now() - t < 3600000);
+      if (recent.length >= SIGNUPS_PER_HOUR) fail(429, 'Too many new accounts from your network. Try again in an hour.');
       const u = checkUsername(body.username);
       if (db.users[u]) fail(409, 'That username is taken. Try another one.');
       const password = str(body.password, 'password', { max: 256, pattern: PASSWORD });
@@ -274,6 +299,7 @@ export function createHandler(store, users) {
         recoveryHashSalt: recovery.salt,
         createdAt: new Date().toISOString(),
       };
+      signups.set(ip, [...recent, Date.now()]);
       users.load(db.users[u].id);
       const token = newSession(u);
       await store.save();

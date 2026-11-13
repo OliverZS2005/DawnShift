@@ -1009,6 +1009,8 @@ function notifyBlock() {
 function mountSettings(main) {
   const name = h('input', { placeholder: 'NAME, e.g. SHOPIFY_TOKEN', 'aria-label': 'Key name' });
   const value = h('input', { type: 'password', placeholder: 'Value', 'aria-label': 'Key value', autocomplete: 'off' });
+  const keyUrl = h('input', { placeholder: 'Website it\'s for, e.g. https://crafty.example.com', 'aria-label': 'Website the key is for' });
+  const keyNote = h('input', { placeholder: 'How bots should use it (optional), e.g. GET /api/v2/servers with header Authorization: Bearer {{NAME}}', 'aria-label': 'How bots should use the key' });
   const add = h('button', { type: 'submit' }, 'Add key');
   main.append(h('div', { class: 'page' },
     h('h1', {}, 'Settings'),
@@ -1028,16 +1030,21 @@ function mountSettings(main) {
         style: 'margin-top:1rem',
         onsubmit: (e) => {
           e.preventDefault();
-          attempt(async () => { await api('POST', '/api/secrets', { name: name.value, value: value.value }); name.value = ''; value.value = ''; await refresh(); }, add);
+          attempt(async () => {
+            await api('POST', '/api/secrets', { name: name.value, value: value.value, url: keyUrl.value, note: keyNote.value });
+            name.value = ''; value.value = ''; keyUrl.value = ''; keyNote.value = '';
+            await refresh();
+          }, add);
         },
-      }, h('div', { class: 'grow' }, name), h('div', { class: 'grow' }, value), add)),
+      }, h('div', { class: 'grow' }, name), h('div', { class: 'grow' }, value),
+        h('div', { style: 'flex-basis:100%' }, keyUrl), h('div', { style: 'flex-basis:100%' }, keyNote), add)),
     trustedHostsBlock(),
     h('section', { class: 'block' }, notifyBlock()),
     h('section', { class: 'block' }, ...downloadAppBlock()),
     h('section', { class: 'block' },
       h('h2', {}, 'About'),
       h('p', { class: 'hint' }, 'Made by OliverZS2005, built with help from Claude, an AI by Anthropic.'),
-      h('p', { class: 'hint' }, 'Version 0.1.3'),
+      h('p', { class: 'hint' }, 'Version 0.1.4'),
       h('p', { class: 'hint' }, 'Dawnshift works with AI services from Anthropic and other companies but isn\'t made, endorsed or sponsored by any of them.'),
       h('div', { class: 'row' },
         h('a', { class: 'button', href: 'terms.html' }, 'Terms of Service'),
@@ -1079,8 +1086,22 @@ function renderSettings() {
       ? S.secretNames.map((n) => {
           // Bots with web API access that may use this key.
           const users = S.bots.filter((b) => b.abilities.includes('http_request') && (!Array.isArray(b.appKeys) || b.appKeys.includes(n))).map((b) => b.name);
+          const info = S.secretInfo?.[n] ?? {};
+          const where = info.url
+            ? `Only sent to ${info.url}${info.learned ? ' (locked to the first website it worked with)' : ''}`
+            : 'Not locked to a website yet: it locks to the first one it works with. Set it now to be safe.';
           return h('div', { class: 'list-item' },
-            h('div', { class: 'grow' }, h('code', {}, `{{${n}}}`), h('div', { class: 'meta' }, users.length ? `Used by ${users.join(', ')}` : 'No bot can use this yet. Tick it in a bot\'s settings.')),
+            h('div', { class: 'grow' }, h('code', {}, `{{${n}}}`),
+              h('div', { class: 'meta' }, users.length ? `Used by ${users.join(', ')}` : 'No bot can use this yet. Tick it in a bot\'s settings.'),
+              h('div', { class: 'meta' }, where),
+              info.note ? h('div', { class: 'meta' }, `How to use: ${info.note}`) : null),
+            h('button', { onclick: (e) => {
+              const url = prompt(`Website ${n} may be sent to (leave empty to unlock):`, info.url ?? '');
+              if (url === null) return;
+              const note = prompt(`How bots should use ${n} (optional):`, info.note ?? '');
+              if (note === null) return;
+              attempt(async () => { await api('PUT', `/api/secrets/${encodeURIComponent(n)}`, { url, note }); await refresh(); }, e.currentTarget);
+            } }, 'Edit'),
             h('button', { class: 'danger', onclick: (e) => {
               if (!confirm(`Remove the app key ${n}? Bots that use it will stop working with that app.`)) return;
               attempt(async () => { await api('DELETE', `/api/secrets/${encodeURIComponent(n)}`); await refresh(); }, e.currentTarget);
@@ -1098,6 +1119,7 @@ function trustedHostsBlock() {
   return h('section', { class: 'block' },
     h('h2', {}, 'Your own servers'),
     h('p', { class: 'hint' }, 'Home servers like Proxmox, Crafty or a NAS often use a self-signed certificate, so bots can\'t verify them and fail with a certificate error. Add the server here and bots will accept its certificate. Only add servers you own.'),
+    h('p', { class: 'hint', id: 'home-network-note' }),
     h('div', { class: 'list', id: 'trusted-list' }),
     h('form', {
       class: 'row',
@@ -1113,6 +1135,10 @@ function renderTrustedHosts() {
   const list = document.getElementById('trusted-list');
   if (!list) return;
   const hosts = S.trustedHosts ?? [];
+  const note = document.getElementById('home-network-note');
+  if (note) note.textContent = S.homeNetwork === false
+    ? 'Your account\'s bots can only reach the public internet on this server. Home network addresses (like 192.168.x.x) are reserved for the server\'s owner.'
+    : 'Your bots can reach your home network from this server.';
   fill(list, ...(hosts.length
     ? hosts.map((n) => h('div', { class: 'list-item' },
         h('div', { class: 'grow' }, h('code', {}, n)),

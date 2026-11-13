@@ -43,7 +43,12 @@ export function buildSystemPrompt(store, bot) {
     (bot.abilities ?? []).includes('http_request') && Object.keys(discordWebhooks(bot, store.state.secrets)).length
       ? `To post to Discord, call the send_discord_message tool with the message text. Never just write the message in your reply — actually call the tool.`
       : '',
-    keyNames.length ? `App keys you can use in web API calls (write {{NAME}}): ${keyNames.join(', ')}.` : '',
+    keyNames.length
+      ? `App keys you can use in web API calls (write {{NAME}}; you never see the value). Use the exact address given; never guess or invent API addresses:\n${keyNames.map((n) => {
+          const info = store.state.secretInfo?.[n] ?? {};
+          return `- {{${n}}}${info.url ? ` — only works with ${info.url}` : ''}${info.note ? `\n  How to use: ${info.note}` : ''}`;
+        }).join('\n')}`
+      : '',
     `The team:\n${team}`,
     memory ? `Your memory:\n${memory}` : 'Your memory is empty so far.',
     `Today is ${new Date().toDateString()}.`,

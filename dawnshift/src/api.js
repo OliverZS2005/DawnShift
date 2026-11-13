@@ -145,6 +145,8 @@ export function createApi(store, runner) {
       board: s.board.slice(-200),
       secretNames: Object.keys(s.secrets).sort(),
       trustedHosts: s.trustedHosts ?? [],
+      secretInfo: s.secretInfo ?? {},
+      homeNetwork: store.allowPrivateNetwork !== false,
       presets: PRESETS,
       abilities: ABILITIES,
       templates: TEMPLATES,
@@ -274,12 +276,43 @@ export function createApi(store, runner) {
     if (!/^[A-Z0-9_]{1,40}$/.test(name)) throw bad('Key names can only use letters, numbers and _ (like STRIPE_KEY).');
     store.state.secrets[name] = cleanText(body.value, 4000, 'Value');
     if (store.state.deleted) delete store.state.deleted[`secret:${name}`];
+    if (body.url !== undefined || body.note !== undefined) setKeyInfo(name, body);
+    store.save();
+    return { ok: true };
+  });
+  // Where a key may be sent, and a note telling bots how to use it. Changing
+  // these never touches the key's value.
+  function setKeyInfo(name, body) {
+    store.state.secretInfo ??= {};
+    const info = { ...(store.state.secretInfo[name] ?? {}) };
+    if (body.url !== undefined) {
+      const raw = String(body.url ?? '').trim();
+      if (!raw) delete info.url;
+      else {
+        let u;
+        try { u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`); } catch { throw bad('That address doesn\'t look right. Use something like https://crafty.example.com'); }
+        if (!/^https?:$/.test(u.protocol)) throw bad('Use an http or https address.');
+        info.url = u.origin;
+      }
+      delete info.learned;
+    }
+    if (body.note !== undefined) {
+      const note = String(body.note ?? '').trim().slice(0, 1000);
+      if (note) info.note = note; else delete info.note;
+    }
+    store.state.secretInfo[name] = info;
+  }
+  on('PUT', '/api/secrets/:name', ({ params, body }) => {
+    const name = decodeURIComponent(params.name);
+    if (!(name in store.state.secrets)) throw bad('There is no app key with that name.');
+    setKeyInfo(name, body);
     store.save();
     return { ok: true };
   });
   on('DELETE', '/api/secrets/:name', ({ params }) => {
     const name = decodeURIComponent(params.name);
     delete store.state.secrets[name];
+    if (store.state.secretInfo) delete store.state.secretInfo[name];
     markDeleted(store.state, `secret:${name}`);
     store.save();
     return { ok: true };

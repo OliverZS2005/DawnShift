@@ -226,3 +226,16 @@ test('opening a task works (its status field is not an HTTP status)', async () =
     s.close();
   }
 });
+
+test("only the server's owner gets home-network access", async () => {
+  const s = await startServer();
+  try {
+    const owner = (await s.call('POST', '/api/account/signup', signup('owner1'))).body.token;
+    await new Promise((r) => setTimeout(r, 5));
+    const guest = (await s.call('POST', '/api/account/signup', signup('guest1'))).body.token;
+    assert.equal((await s.call('GET', '/api/state', null, owner)).body.homeNetwork, true);
+    assert.equal((await s.call('GET', '/api/state', null, guest)).body.homeNetwork, false);
+  } finally {
+    s.close();
+  }
+});

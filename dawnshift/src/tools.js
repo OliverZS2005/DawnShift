@@ -16,6 +16,32 @@ export function setOwnPort(port) {
   ownPort = String(port);
 }
 
+// Private, loopback and link-local addresses: the home network, the server
+// itself, and cloud metadata services (169.254.169.254).
+export function isPrivateAddress(ip) {
+  ip = String(ip).toLowerCase().replace(/^\[|\]$/g, '');
+  const v4 = ip.startsWith('::ffff:') ? ip.slice(7) : ip;
+  const m = v4.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (m) {
+    const [a, b] = [Number(m[1]), Number(m[2])];
+    return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254)
+      || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 198 && (b === 18 || b === 19)) || a >= 224;
+  }
+  return ip === '::' || ip === '::1' || /^f[cd]/.test(ip) || /^fe[89ab]/.test(ip);
+}
+
+// On the hosted server, accounts other than the owner's can't reach private
+// addresses. Checks what the name actually points to, not just how it looks.
+async function checkNetwork(u, store) {
+  if (store?.allowPrivateNetwork !== false) return;
+  const { lookup } = await import('node:dns/promises');
+  const host = u.hostname.replace(/^\[|\]$/g, '');
+  const addrs = await lookup(host, { all: true }).catch(() => []);
+  if (addrs.some((a) => isPrivateAddress(a.address)) || isPrivateAddress(host)) {
+    throw new Error(`${u.hostname} is on a private network. On this server only the owner's bots can reach private addresses.`);
+  }
+}
+
 function checkUrl(u) {
   if (!/^https?:$/.test(u.protocol)) throw new Error('Only http and https URLs are allowed.');
   const local = ['localhost', '127.0.0.1', '[::1]', '0.0.0.0'].includes(u.hostname);
@@ -53,7 +79,27 @@ async function fetchSelfSigned(url, { method = 'GET', headers = {}, body, signal
   });
 }
 
-async function request(url, options, trustedHosts = []) {
+async function request(url, options, trustedHosts = [], store) {
+  // Follow redirects ourselves so every hop is checked, and so app keys in
+  // headers or the body are never carried along to a different website.
+  const restricted = store?.allowPrivateNetwork === false;
+  let current = url;
+  let opts = { ...options };
+  for (let hop = 0; hop < 6; hop++) {
+    checkUrl(current);
+    if (restricted) await checkNetwork(current, store);
+    const res = await requestOnce(current, { ...opts, redirect: 'manual' }, trustedHosts);
+    const loc = res.status >= 300 && res.status < 400 && res.headers.get('location');
+    if (!loc || options?.redirect === 'manual') return res;
+    const next = new URL(loc, current);
+    if (next.origin !== current.origin) opts = { ...opts, headers: { 'user-agent': 'Dawnshift/0.1' }, body: undefined, method: 'GET' };
+    else if (res.status === 303 || ((res.status === 301 || res.status === 302) && opts.method === 'POST')) opts = { ...opts, method: 'GET', body: undefined };
+    current = next;
+  }
+  throw new Error('Too many redirects.');
+}
+
+async function requestOnce(url, options, trustedHosts = []) {
   try {
     if (url.protocol === 'https:' && typeof window === 'undefined' && trustedHosts.includes(url.hostname.replace(/^\[|\]$/g, ''))) {
       return await fetchSelfSigned(url, options);
@@ -86,6 +132,39 @@ export function allowedSecrets(bot, secrets) {
 }
 
 // Replaces {{NAME}} with a saved app key. The bot only ever sees the name.
+// Which saved keys a request mentions as {{NAME}}.
+function keysUsed(parts, secrets) {
+  const names = new Set();
+  for (const p of parts) for (const m of String(p ?? '').matchAll(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g)) if (m[1] in secrets) names.add(m[1]);
+  return [...names];
+}
+
+// Each app key belongs to one website. Once it has one (set in Settings, or
+// learned from its first successful use), it's never sent anywhere else, so
+// a bot tricked by a web page can't hand the key to a stranger.
+export function keyOrigin(store, name) {
+  const at = store?.state?.secretInfo?.[name]?.url;
+  try { return at ? new URL(at).origin : null; } catch { return null; }
+}
+export function checkKeyAddresses(names, u, store) {
+  for (const n of names) {
+    const origin = keyOrigin(store, n);
+    if (origin && origin !== u.origin) {
+      throw new Error(`The app key ${n} can only be sent to ${origin}, not ${u.origin}. Use ${origin}, or ask the human to change the key's address in Settings → App keys.`);
+    }
+  }
+}
+function rememberKeyAddresses(names, u, store) {
+  let changed = false;
+  for (const n of names) {
+    if (keyOrigin(store, n)) continue;
+    store.state.secretInfo ??= {};
+    store.state.secretInfo[n] = { ...(store.state.secretInfo[n] ?? {}), url: u.origin, learned: true };
+    changed = true;
+  }
+  if (changed) store.save?.();
+}
+
 // App keys this bot may use whose value is a Discord webhook URL.
 export function discordWebhooks(bot, secrets) {
   return Object.fromEntries(
@@ -248,7 +327,7 @@ export const TOOLS = [
     async run({ url }, { store } = {}) {
       const u = new URL(String(url));
       checkUrl(u);
-      const res = await request(u, { redirect: 'follow', signal: AbortSignal.timeout(20000), headers: { 'user-agent': 'Dawnshift/0.1' } }, store?.state?.trustedHosts);
+      const res = await request(u, { redirect: 'follow', signal: AbortSignal.timeout(20000), headers: { 'user-agent': 'Dawnshift/0.1' } }, store?.state?.trustedHosts, store);
       const type = res.headers.get('content-type') || '';
       let body = await res.text();
       if (type.includes('html')) body = htmlToText(body);
@@ -276,6 +355,8 @@ export const TOOLS = [
       const secrets = allowedSecrets(bot, all);
       const u = new URL(fillSecrets(url, secrets));
       checkUrl(u);
+      const used = keysUsed([url, body, ...Object.values(headers ?? {})], secrets);
+      checkKeyAddresses(used, u, store);
       const h = {};
       for (const [k, v] of Object.entries(headers ?? {})) h[k] = fillSecrets(v, secrets);
       const res = await request(u, {
@@ -283,8 +364,9 @@ export const TOOLS = [
         headers: h,
         body: body == null || method === 'GET' ? undefined : fillSecrets(body, secrets),
         signal: AbortSignal.timeout(30000),
-      }, store?.state?.trustedHosts);
+      }, store?.state?.trustedHosts, store);
       const text = hideSecrets(await res.text(), all);
+      if (res.ok) rememberKeyAddresses(used, u, store);
       return { content: clip(`HTTP ${res.status}\n\n${text}`, MAX_FETCH_CHARS), isError: !res.ok };
     },
   },
@@ -316,7 +398,7 @@ export const TOOLS = [
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ content: text }),
         signal: AbortSignal.timeout(30000),
-      }, store?.state?.trustedHosts);
+      }, store?.state?.trustedHosts, store);
       if (res.ok) return { content: `Posted to Discord (${name}).` };
       return { content: `Discord said HTTP ${res.status}: ${hideSecrets(await res.text(), store.state.secrets).slice(0, 500)}`, isError: true };
     },
